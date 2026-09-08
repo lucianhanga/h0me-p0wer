@@ -1,10 +1,40 @@
 # h0me-p0wer
 
-Proof-of-concept dashboard for the Anker SOLIX Smart Meter Gen 2.
+Dashboard for the **Anker SOLIX Smart Meter Gen 2 (AE1X0)** — live power
+monitoring and historical energy visualization, built as a proof of concept.
 
-- **Live data**: local Modbus TCP directly from the meter (no cloud, ~5 s updates)
-- **Cloud data**: Anker EU cloud API (sites, scene info, devices, energy history)
-- **Frontend**: React dashboard (live power cards, history chart, site/device info)
+![dashboard](docs/screenshot.png)
+
+## Features
+
+- **Live data, no cloud**: 5-second power readings (grid total, per-phase
+  power/current/voltage, secondary CT) pulled directly from the meter over
+  local **Modbus TCP** — Anker's officially supported local interface
+- **Cloud history**: daily/weekly/monthly/yearly energy data from the Anker EU
+  cloud, using the reverse-engineered app login (ECDH P-256 + AES-256-CBC)
+- **One unified chart** (Apache ECharts, stock-chart style):
+  - pan / zoom / range-slider, span shortcuts (1h–30d)
+  - resolution follows zoom — down to raw 5 s samples where local data exists
+  - min/max **envelope** per bucket so spikes survive aggregation
+  - cloud 20-min averages fill the past, interpolated into a continuous line;
+    local data always wins where both exist
+- **Local persistence** in SQLite (`node:sqlite`, no native deps): 5 s samples
+  (48 h retention) + cached cloud history with startup backfill (30 days) and
+  a 15-minute background sync that respects Anker's rate limits
+- Failure-tolerant: live-only mode without credentials, cloud-only mode when
+  the meter is unreachable — each panel degrades gracefully
+
+## Architecture
+
+```
+                ┌─────────────┐   Modbus TCP :502 (5 s)   ┌──────────────┐
+                │   Browser   │ ◄── WebSocket / REST ──── │  Node backend│
+                │  (React +   │                           │  (Express)   │
+                │   ECharts)  │                           │      │       │
+                └─────────────┘                           │  SQLite DB   │
+                                                          └──────┼───────┘
+                              Anker EU cloud (REST, 15 min sync) ▲
+```
 
 ## Setup
 
@@ -22,14 +52,13 @@ cd server && npm install && npm start     # backend on http://localhost:3001
 cd web && npm install && npm run dev      # frontend on http://localhost:5173
 ```
 
-The Vite dev server proxies `/api` and `/ws` to the backend.
+The Vite dev server proxies `/api` to the backend; the dashboard's WebSocket
+connects directly to the backend port.
 
 ## Notes
 
-- The backend talks Modbus TCP (port 502, input registers / FC04) to the meter
-  using the register map from Anker's official Home Assistant integration.
+- The register map comes from Anker's official Home Assistant integration
+  (input registers / FC04, big-endian, value = raw ÷ gain).
 - Cloud endpoints are unofficial (reverse-engineered from the Android app),
   rate-limited (~10–12 req/min/endpoint/IP) and may change without notice.
-- The app works in "live-only" mode if cloud credentials are missing or wrong,
-  and in "cloud-only" mode if the meter is unreachable — each panel shows a
-  readable error instead of breaking the whole dashboard.
+- `.env`, `node_modules`, build output and the local database are git-ignored.
