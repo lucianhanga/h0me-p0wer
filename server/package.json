@@ -1,0 +1,17 @@
+{
+  "name": "h0me-p0wer-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "modbus-serial": "^8.0.17",
+    "ws": "^8.18.0"
+  }
+}

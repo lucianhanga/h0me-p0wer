@@ -1,0 +1,120 @@
+import { useEffect, useRef, useState } from "react";
+
+// In dev (Vite on :5173) connect straight to the backend; in a served build
+// use same-origin.
+const WS_URL =
+  location.port === "5173"
+    ? "ws://localhost:3001/ws"
+    : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+
+// Live meter snapshot pushed by the backend over /ws.
+export default function LivePower() {
+  const [state, setState] = useState(null);
+  const [wsOpen, setWsOpen] = useState(false);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    let ws;
+    let retry;
+    function connect() {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => mounted.current && setWsOpen(true);
+      ws.onmessage = (ev) => {
+        if (mounted.current) setState(JSON.parse(ev.data));
+      };
+      ws.onclose = () => {
+        if (!mounted.current) return;
+        setWsOpen(false);
+        retry = setTimeout(connect, 3000);
+      };
+    }
+    connect();
+    return () => {
+      mounted.current = false;
+      clearTimeout(retry);
+      ws?.close();
+    };
+  }, []);
+
+  if (!state) return <p className="muted">connecting…</p>;
+
+  const { connected, error, hint, snapshot } = state;
+  const grid = snapshot?.primary?.totalPower;
+  const solar = snapshot?.secondary?.totalPower;
+
+  return (
+    <div>
+      <p>
+        <span className={`badge ${connected ? "ok" : "bad"}`}>
+          {connected ? "meter connected" : "meter offline"}
+        </span>{" "}
+        <span className={`badge ${wsOpen ? "ok" : "bad"}`}>
+          {wsOpen ? "live feed" : "feed disconnected"}
+        </span>
+      </p>
+
+      {!connected && (
+        <div className="error-box">
+          <p>{error ?? "waiting for first reading…"}</p>
+          {hint && <p className="muted">{hint}</p>}
+        </div>
+      )}
+
+      {snapshot && (
+        <>
+          <div className="cards">
+            <div className="card">
+              <div className="card-label">
+                Grid {grid != null && (grid >= 0 ? "(import)" : "(export)")}
+              </div>
+              <div className={`card-value ${grid >= 0 ? "import" : "export"}`}>
+                {grid != null ? `${Math.abs(grid)} W` : "—"}
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-label">Secondary CT (solar)</div>
+              <div className="card-value">
+                {solar != null ? `${Math.abs(solar)} W` : "—"}
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-label">Meter</div>
+              <div className="card-value small">
+                {snapshot.meter.model}
+                <br />
+                <span className="muted">
+                  {snapshot.meter.type} · SW {snapshot.meter.swVersion}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Phase</th>
+                <th>Grid power</th>
+                <th>Current</th>
+                <th>Voltage</th>
+                <th>Solar power</th>
+              </tr>
+            </thead>
+            <tbody>
+              {snapshot.primary.phases.map((p, i) => (
+                <tr key={i}>
+                  <td>L{i + 1}</td>
+                  <td>{p.power} W</td>
+                  <td>{p.current} A</td>
+                  <td>{p.voltage} V</td>
+                  <td>{snapshot.secondary.phases[i].power} W</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted">last update: {new Date(snapshot.timestamp).toLocaleTimeString()}</p>
+        </>
+      )}
+    </div>
+  );
+}

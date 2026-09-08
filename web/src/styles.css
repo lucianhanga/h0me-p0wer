@@ -1,0 +1,177 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: #101418;
+  color: #e8ecef;
+}
+
+.app {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.5rem;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  border-bottom: 1px solid #2a3238;
+  margin-bottom: 1.5rem;
+}
+
+h1 {
+  font-size: 1.4rem;
+  margin: 0.5rem 0;
+}
+
+.subtitle {
+  color: #8b98a5;
+  font-size: 0.85rem;
+}
+
+h2 {
+  font-size: 1.05rem;
+  color: #8b98a5;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+h3 {
+  font-size: 0.95rem;
+  margin: 1.2rem 0 0.4rem;
+}
+
+section {
+  margin-bottom: 2.5rem;
+}
+
+.cards {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin: 1rem 0;
+}
+
+.card {
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  min-width: 180px;
+}
+
+.card-label {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  margin-bottom: 0.4rem;
+}
+
+.card-value {
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.card-value.small {
+  font-size: 0.95rem;
+  font-weight: 400;
+}
+
+.card-value.import {
+  color: #f7a44f;
+}
+
+.card-value.export {
+  color: #5fce80;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+}
+
+.badge.ok {
+  background: #17351f;
+  color: #5fce80;
+}
+
+.badge.bad {
+  background: #3a1d1d;
+  color: #e05c5c;
+}
+
+.error-box {
+  background: #3a1d1d;
+  border: 1px solid #e05c5c44;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.5rem 0;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid #2a3238;
+  font-size: 0.9rem;
+}
+
+th {
+  color: #8b98a5;
+  font-weight: 500;
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+}
+
+.muted {
+  color: #8b98a5;
+  font-size: 0.85rem;
+}
+
+.controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+select,
+button {
+  background: #1a2128;
+  color: #e8ecef;
+  border: 1px solid #2a3238;
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+pre {
+  background: #1a2128;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+}
