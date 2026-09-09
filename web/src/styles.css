@@ -185,3 +185,37 @@ pre {
   overflow-x: auto;
   font-size: 0.8rem;
 }
+
+// --- Dashboard tiles -------------------------------------------------------
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
+.tile {
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+}
+
+.tile-title {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.tile-main {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.tile-sub {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  margin-top: 0.35rem;
+}
