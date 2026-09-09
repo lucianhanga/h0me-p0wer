@@ -79,6 +79,15 @@ export default function Dashboard() {
             "exportKwh",
           )} kWh this week`}
         />
+        <KwhBarsTile
+          title="Month overview"
+          rows={stats.month}
+          formatLabel={(l) => l.slice(8)}
+          sub={`import ${sum(stats.month, "importKwh")} kWh · export ${sum(
+            stats.month,
+            "exportKwh",
+          )} kWh this month`}
+        />
       </div>
     </div>
   );
