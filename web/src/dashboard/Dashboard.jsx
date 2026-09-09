@@ -88,6 +88,17 @@ export default function Dashboard() {
             "exportKwh",
           )} kWh this month`}
         />
+        <KwhBarsTile
+          title="Year overview"
+          rows={stats.year}
+          formatLabel={(l) =>
+            new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })
+          }
+          sub={`import ${sum(stats.year, "importKwh")} kWh · export ${sum(
+            stats.year,
+            "exportKwh",
+          )} kWh this year`}
+        />
       </div>
     </div>
   );
