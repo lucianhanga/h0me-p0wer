@@ -10,7 +10,14 @@ const PAGES = [
 ];
 
 export default function App() {
-  const [page, setPage] = useState("live");
+  const [page, setPage] = useState(() =>
+    location.hash === "#dashboard" ? "dashboard" : "live",
+  );
+
+  function switchPage(key) {
+    setPage(key);
+    location.hash = key === "dashboard" ? "#dashboard" : "#live";
+  }
 
   return (
     <div className="app">
@@ -21,7 +28,7 @@ export default function App() {
             <button
               key={p.key}
               className={page === p.key ? "nav-active" : ""}
-              onClick={() => setPage(p.key)}
+              onClick={() => switchPage(p.key)}
             >
               {p.label}
             </button>
