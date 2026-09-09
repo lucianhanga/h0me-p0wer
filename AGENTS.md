@@ -112,3 +112,18 @@ proxy it through Vite — proxying caused EPIPE noise on every client disconnect
 - kWh integration from local 5 s samples; cost estimation with tariff config.
 - Per-phase toggle in the chart (phases are already in `/api/timeseries`).
 - Docker packaging.
+
+## Second page: overview dashboard (epic #8, done 2026-09-09)
+
+- Two pages via state-based nav in `App.jsx` (no router): **Live** (original
+  content) and **Dashboard** (`web/src/dashboard/`).
+- `GET /api/stats/overview` — single aggregate call for all tiles: today's
+  kWh (30-min buckets, local samples + cloud anchors merged like
+  `/api/timeseries`), day profile, week (from month rows), month, year
+  (cloud_history). Never calls the cloud directly.
+- Tiles: totals row (Now/Today/Week/Month/Year kWh) + period tiles
+  (`DayTile`, `KwhBarsTile` shared for week/month/year, `MiniChart` shared
+  ECharts wrapper).
+- **Anker week queries must start on Monday** (calendar week Mon→Sun);
+  arbitrary 7-day spans fail with `-1 Failed to request`.
+- GitHub Project #18 + epic #8 track this; stories #1–#7 each got one commit.

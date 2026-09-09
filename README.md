@@ -18,6 +18,9 @@ monitoring and historical energy visualization, built as a proof of concept.
   - min/max **envelope** per bucket so spikes survive aggregation
   - cloud 20-min averages fill the past, interpolated into a continuous line;
     local data always wins where both exist
+- **Overview dashboard** (second page): totals tiles (now/today/week/month/
+  year kWh), day profile, and week/month/year kWh bar overviews — all from a
+  single local aggregate endpoint
 - **Local persistence** in SQLite (`node:sqlite`, no native deps): 5 s samples
   (48 h retention) + cached cloud history with startup backfill (30 days) and
   a 15-minute background sync that respects Anker's rate limits
