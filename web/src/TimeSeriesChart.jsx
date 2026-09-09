@@ -13,11 +13,17 @@ import * as echarts from "echarts";
 const SERIES = [
   // Envelope first so the main lines draw on top. Where the window is covered
   // by local 5 s samples, gridLo/gridHi show the real per-bucket fluctuation;
-  // cloud-only history stays a flat line.
+  // cloud-only history stays a flat line. Not in the legend, always on.
   { key: "gridHi", color: "#f7a44f44", width: 1, silent: true },
   { key: "gridLo", color: "#f7a44f44", width: 1, silent: true },
-  { key: "grid", color: "#f7a44f", width: 2, area: true },
-  { key: "solar", color: "#5fce80", width: 1 },
+  // Phases as a stacked area: the top of the stack IS the cumulative total
+  // (stacked areas are the standard for part-to-whole power views). Toggled
+  // via the ECharts legend, hidden by default.
+  { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "ph" },
+  { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "ph" },
+  { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "ph" },
+  { key: "grid", name: "Grid total", color: "#f7a44f", width: 2, area: true },
+  { key: "solar", name: "Solar", color: "#5fce80", width: 1 },
 ];
 
 const SHORTCUTS = [
@@ -45,7 +51,7 @@ export default function TimeSeriesChart() {
     chart.setOption({
       animation: false,
       backgroundColor: "transparent",
-      grid: { top: 10, right: 60, bottom: 40, left: 10, containLabel: true },
+      grid: { top: 28, right: 60, bottom: 40, left: 10, containLabel: true },
       tooltip: {
         trigger: "axis",
         valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
@@ -85,17 +91,31 @@ export default function TimeSeriesChart() {
         },
       ],
       series: SERIES.map((s) => ({
-        name: s.key,
+        name: s.name ?? s.key,
         type: "line",
         showSymbol: false,
         connectNulls: false,
         silent: !!s.silent,
+        stack: s.stack,
         lineStyle: { color: s.color, width: s.width },
         itemStyle: { color: s.color },
-        areaStyle: s.area ? { color: `${s.color}22` } : undefined,
+        areaStyle: s.area || s.stack ? { color: `${s.color}${s.stack ? "44" : "22"}` } : undefined,
         emphasis: { disabled: true },
         data: [],
       })),
+      legend: {
+        top: 0,
+        left: 0,
+        textStyle: { color: "#8b98a5", fontSize: 11 },
+        icon: "roundRect",
+        itemWidth: 12,
+        itemHeight: 8,
+        inactiveColor: "#5a6672",
+        data: ["L1", "L2", "L3", "Grid total", "Solar"],
+        // Phases off by default; clicking legend entries toggles them, and
+        // the phase stack always sums to the cumulative total.
+        selected: { L1: false, L2: false, L3: false, "Grid total": true, Solar: true },
+      },
     });
 
     let fetchTimer = null;
@@ -128,7 +148,7 @@ export default function TimeSeriesChart() {
     function applyRows(rows) {
       chart.setOption({
         series: SERIES.map((s) => ({
-          name: s.key,
+          name: s.name ?? s.key,
           data: rows.map((r) => [r.t, r[s.key]]),
         })),
       });
