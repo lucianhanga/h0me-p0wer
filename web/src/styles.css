@@ -23,6 +23,16 @@ header {
   margin-bottom: 1.5rem;
 }
 
+nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+nav button.nav-active {
+  border-color: #f7a44f;
+  color: #f7a44f;
+}
+
 h1 {
   font-size: 1.4rem;
   margin: 0.5rem 0;
