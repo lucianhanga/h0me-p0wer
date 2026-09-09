@@ -26,17 +26,21 @@ const selectSince = db.prepare(`
 
 const prune = db.prepare(`DELETE FROM snapshots WHERE ts < ?`);
 
+// Guard against register garbage (sentinel/overflow reads): anything beyond
+// ±1 MW is not a plausible household power value.
+const sane = (v) => (typeof v === "number" && Math.abs(v) > 1e6 ? null : v);
+
 export function saveSnapshot(s) {
   insert.run(
     new Date(s.timestamp).getTime(),
-    s.primary.totalPower,
-    s.primary.phases[0].power,
-    s.primary.phases[1].power,
-    s.primary.phases[2].power,
-    s.secondary.totalPower,
-    s.secondary.phases[0].power,
-    s.secondary.phases[1].power,
-    s.secondary.phases[2].power,
+    sane(s.primary.totalPower),
+    sane(s.primary.phases[0].power),
+    sane(s.primary.phases[1].power),
+    sane(s.primary.phases[2].power),
+    sane(s.secondary.totalPower),
+    sane(s.secondary.phases[0].power),
+    sane(s.secondary.phases[1].power),
+    sane(s.secondary.phases[2].power),
   );
 }
 

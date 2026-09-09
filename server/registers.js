@@ -54,12 +54,14 @@ export function decodeValue(type, regs) {
       const raw = regs[0] & 0xffff;
       return raw < 0x8000 ? raw : raw - 0x10000;
     }
-    case "INT32": {
-      const unsigned = ((regs[0] & 0xffff) << 16) | (regs[1] & 0xffff);
-      return unsigned & 0x80000000 ? unsigned - 0x100000000 : unsigned;
-    }
+    case "INT32":
+      // JS bitwise ops yield a signed 32-bit result directly — no manual
+      // two's-complement step (applying it again double-offsets negatives
+      // into -4.29e9 garbage).
+      return (regs[0] << 16) | regs[1];
     case "UINT32":
-      return ((regs[0] & 0xffff) << 16) | (regs[1] & 0xffff);
+      // Avoid bitwise ops here: they would reinterpret as signed.
+      return regs[0] * 0x10000 + regs[1];
     case "VERSION": {
       const bytes = [];
       for (const reg of regs.slice(0, 2)) {
