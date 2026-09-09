@@ -133,6 +133,18 @@ export function getStoredPeriodStarts(sn, type) {
   return new Set(selectPeriodStarts.all(sn, type).map((r) => r.period_start));
 }
 
+// Raw 5 s samples in a range (for energy integration in stats endpoints).
+export function getSnapshotRows(fromMs, toMs) {
+  return selectSnapshotRows.all(fromMs, toMs);
+}
+
+// Any meter SN seen in cloud history (fallback when the meter is offline).
+const selectAnySn = db.prepare(`SELECT DISTINCT device_sn AS sn FROM cloud_history LIMIT 1`);
+
+export function getAnyDeviceSn() {
+  return selectAnySn.get()?.sn ?? null;
+}
+
 // --- Unified time series (for the stock-chart style visualization) ---------
 
 // 5-second Modbus samples averaged into buckets of bucketMs.

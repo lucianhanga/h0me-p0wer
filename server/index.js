@@ -20,6 +20,8 @@ import {
   getStoredPeriodStarts,
   getSnapshotBuckets,
   getCloudDayPower,
+  getSnapshotRows,
+  getAnyDeviceSn,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -163,6 +165,113 @@ app.get("/api/timeseries", (req, res) => {
   res.json({ ok: true, bucketMs, data });
 });
 
+// Aggregate stats for the dashboard tiles: one call, local DB only.
+app.get("/api/stats/overview", (req, res) => {
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  const now = Date.now();
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const dayStartMs = todayStart.getTime();
+
+  // --- Today: 30-min buckets, local samples where present, cloud 20-min
+  // trend elsewhere (anchors), interpolation between anchors. Same merge
+  // spirit as /api/timeseries.
+  const BUCKET = 30 * 60 * 1000;
+  const anchors = new Map(); // bt -> {s, c}
+  const put = (bt, v) => {
+    const cell = (anchors.get(bt) ?? anchors.set(bt, { s: 0, c: 0 }).get(bt));
+    cell.s += v;
+    cell.c++;
+  };
+  let peak = null;
+  let localCount = 0;
+  for (const r of getSnapshotRows(dayStartMs, now)) {
+    if (r.grid_total == null) continue;
+    put(Math.floor(r.ts / BUCKET) * BUCKET, r.grid_total);
+    localCount++;
+    if (peak == null || r.grid_total > peak) peak = r.grid_total;
+  }
+  if (sn) {
+    const today = dayStartMs && new Date(dayStartMs).toISOString().slice(0, 10);
+    for (const r of getCloudDayPower(sn, today, today)) {
+      if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
+      if (r.ts + 20 * 60 * 1000 > now) continue; // skip open interval
+      const bt = Math.floor(r.ts / BUCKET) * BUCKET;
+      if (!anchors.has(bt)) put(bt, r.power);
+    }
+  }
+  const sorted = [...anchors.entries()].sort(([a], [b]) => a - b);
+  const profile = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const [bt, cell] = sorted[i];
+    profile.push({ t: bt, power: Math.round(cell.s / cell.c) });
+    const next = sorted[i + 1];
+    if (next) {
+      const [nbt] = next;
+      const nv = next[1].s / next[1].c;
+      for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
+        const frac = (t - bt) / (nbt - bt);
+        profile.push({ t, power: Math.round(cell.s / cell.c + (nv - cell.s / cell.c) * frac) });
+      }
+    }
+  }
+  // Energy for today = sum over profile buckets (W * 0.5 h), split by sign.
+  let importKwh = 0;
+  let exportKwh = 0;
+  for (const p of profile) {
+    if (p.power >= 0) importKwh += (p.power * 0.5) / 1000;
+    else exportKwh += (-p.power * 0.5) / 1000;
+  }
+  const avgW = profile.length
+    ? Math.round(profile.reduce((a, p) => a + p.power, 0) / profile.length)
+    : null;
+  const elapsedBuckets = Math.max(1, Math.floor((now - dayStartMs) / BUCKET));
+  const coverage = Math.min(100, Math.round((profile.length / elapsedBuckets) * 100));
+
+  // --- Week (last 7 days) & month: daily kWh from cloud_history month rows.
+  function monthKwh(yearMonth) {
+    if (!sn) return [];
+    return getCloudTrend(sn, "month", yearMonth).rows.map((r) => ({
+      label: r.time,
+      importKwh: r.import_energy ?? 0,
+      exportKwh: r.export_energy ?? 0,
+    }));
+  }
+  const ym = new Date().toISOString().slice(0, 7);
+  const prevYm = new Date(dayStartMs - 7 * 86400000).toISOString().slice(0, 7);
+  const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
+  const weekRows = monthRows.filter((r) => {
+    const t = new Date(`${r.label}T12:00:00`).getTime();
+    return t > now - 7 * 86400000 && t <= now;
+  });
+
+  // --- Year: monthly kWh from cloud_history year rows.
+  const yearRows = sn
+    ? getCloudTrend(sn, "year", String(new Date().getFullYear())).rows.map((r) => ({
+        label: r.time,
+        importKwh: r.import_energy ?? 0,
+        exportKwh: r.export_energy ?? 0,
+      }))
+    : [];
+
+  res.json({
+    ok: true,
+    data: {
+      today: {
+        importKwh: Math.round(importKwh * 100) / 100,
+        exportKwh: Math.round(exportKwh * 100) / 100,
+        avgW,
+        peakW: peak,
+        coverage,
+      },
+      profile,
+      week: weekRows,
+      month: monthRows.filter((r) => r.label.startsWith(ym)),
+      year: yearRows,
+    },
+  });
+});
+
 // Wrap cloud calls: 503 when credentials are missing, 502 for Anker errors.
 function cloudRoute(handler) {
   return async (req, res) => {
@@ -255,11 +364,14 @@ async function syncCloudHistory() {
   if (!sn || !anker.configured) return;
   const now = new Date();
   const iso = (d) => d.toISOString().slice(0, 10);
-  const weekEnd = new Date(now);
-  weekEnd.setDate(weekEnd.getDate() + 6);
+  // Anker expects the week range to be the calendar week (Monday..Sunday) —
+  // arbitrary 7-day spans fail with "-1 Failed to request".
+  const monday = new Date(now);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  const sunday = new Date(monday.getTime() + 6 * 86400000);
   const jobs = [
     { type: "day", startTime: iso(now), endTime: "" },
-    { type: "week", startTime: iso(now), endTime: iso(weekEnd) },
+    { type: "week", startTime: iso(monday), endTime: iso(sunday) },
     { type: "month", startTime: iso(now).slice(0, 7), endTime: "" },
     { type: "year", startTime: iso(now).slice(0, 4), endTime: "" },
   ];
