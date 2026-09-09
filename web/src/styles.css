@@ -194,6 +194,13 @@ pre {
   margin: 1rem 0;
 }
 
+.tiles-period {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  margin: 1rem 0;
+}
+
 .tile {
   background: #1a2128;
   border: 1px solid #2a3238;

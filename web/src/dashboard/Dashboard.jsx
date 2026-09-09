@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import DayTile from "./DayTile.jsx";
 
 // Overview dashboard: totals tiles + period overviews, all from a single
 // /api/stats/overview call (plus /api/live for the current power tile).
@@ -62,6 +63,10 @@ export default function Dashboard() {
           main={`${sum(stats.year, "importKwh")} kWh`}
           sub={`export ${sum(stats.year, "exportKwh")} kWh`}
         />
+      </div>
+
+      <div className="tiles-period">
+        <DayTile stats={stats} />
       </div>
     </div>
   );
