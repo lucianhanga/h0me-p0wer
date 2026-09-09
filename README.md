@@ -50,9 +50,24 @@ Three-Party Control Settings → Modbus TCP. The app shows the meter's local IP.
 
 ## Run
 
+Single port (production style — backend serves the built frontend):
+
 ```sh
-cd server && npm install && npm start     # backend on http://localhost:3001
-cd web && npm install && npm run dev      # frontend on http://localhost:5173
+npm run setup   # once: install all dependencies
+npm start       # builds the frontend, serves everything on http://localhost:3001
+```
+
+Dev mode (hot reload, two processes on :3001 + :5173):
+
+```sh
+npm run dev
+```
+
+Auto-start on login (macOS launchd — adjust paths in the plist first):
+
+```sh
+cp scripts/com.h0mep0wer.server.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.h0mep0wer.server.plist
 ```
 
 The Vite dev server proxies `/api` to the backend; the dashboard's WebSocket

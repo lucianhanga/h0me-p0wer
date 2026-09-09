@@ -7,12 +7,18 @@ sources merged into one stock-chart-style visualization.
 
 ```sh
 cp .env.example .env                      # ANKER_EMAIL/ANKER_PASSWORD, METER_IP
-cd server && npm install && npm start     # backend :3001 (API + WebSocket /ws)
-cd web && npm install && npm run dev      # frontend :5173, proxies /api to 3001
+npm run setup                             # install server + web deps
+npm start                                 # single port :3001 (builds web, serves UI+API+WS)
+npm run dev                               # dev mode: backend :3001 + Vite :5173 (hot reload)
 ```
 
-The browser WebSocket connects **directly** to `ws://localhost:3001/ws` (do NOT
-proxy it through Vite — proxying caused EPIPE noise on every client disconnect).
+Auto-start on login: `scripts/com.h0mep0wer.server.plist` →
+`~/Library/LaunchAgents/` + `launchctl load` (adjust paths first).
+
+Single-port mode: Express serves `web/dist` + SPA fallback for non-`/api`
+GETs. In dev the browser WebSocket connects **directly** to
+`ws://localhost:3001/ws` (do NOT proxy it through Vite — proxying caused
+EPIPE noise on every client disconnect).
 
 ## Architecture
 

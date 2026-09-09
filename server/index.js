@@ -28,6 +28,9 @@ const PORT = Number(process.env.PORT ?? 3001);
 const METER_IP = process.env.METER_IP ?? "192.168.1.102";
 const METER_PORT = Number(process.env.METER_PORT ?? 502);
 
+const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
+const WEB_DIST = path.join(SERVER_DIR, "..", "web", "dist");
+
 const poller = new MeterPoller(METER_IP, METER_PORT);
 const anker = new AnkerClient(
   process.env.ANKER_EMAIL,
@@ -440,10 +443,17 @@ const syncStarter = setInterval(() => {
 }, 10000);
 syncStarter.unref();
 
+// Single-port mode: serve the built frontend (web/dist) and fall back to
+// index.html for non-API GETs (SPA). In dev, Vite on :5173 is used instead.
+app.use(express.static(WEB_DIST));
+app.get("*", (req, res, next) => {
+  if (req.path.startsWith("/api") || req.path.startsWith("/ws")) return next();
+  res.sendFile(path.join(WEB_DIST, "index.html"), (err) => err && next());
+});
+
 const server = app.listen(PORT, () => {
   console.log(`[server] API on http://localhost:${PORT}`);
-});
-server.on("error", (err) => {
+});server.on("error", (err) => {
   if (err.code === "EADDRINUSE") {
     console.error(
       `[server] port ${PORT} is already in use — another instance running? ` +
