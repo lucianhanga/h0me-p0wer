@@ -70,6 +70,20 @@ export default function Dashboard() {
           main={`${sum(stats.year, "importKwh")} kWh`}
           sub={`export ${sum(stats.year, "exportKwh")} kWh`}
         />
+        <Tile
+          title="Home today"
+          main={`${stats.flows.homeKwh} kWh`}
+          sub={`grid ${stats.flows.gridImportKwh} · battery ${stats.flows.battDischargedKwh} kWh`}
+        />
+        <Tile
+          title="PV today"
+          main={`${stats.flows.pvKwh} kWh`}
+          sub={
+            stats.flows.pvKwh > 0
+              ? `battery ${stats.flows.battChargedKwh} kWh charged`
+              : "no panels connected"
+          }
+        />
       </div>
 
       <div className="tiles-period">
