@@ -119,6 +119,24 @@ EPIPE noise on every client disconnect).
 - Per-phase toggle in the chart (phases are already in `/api/timeseries`).
 - Docker packaging.
 
+## Battery: Solarbank 2 E1600 Plus (epic #25, done 2026-09-10)
+
+- The battery (A17C3) created a **site** in the account — site-scoped
+  endpoints (`get_scen_info`, v1 `energy_analysis`) now work.
+- Live: `get_scen_info` → `solarbank_info.solarbank_list[0]`:
+  `battery_power` = SOC %, `output_power` = discharge W, `bat_charge_power` =
+  charge W, `photovoltaic_power` = PV W. Polled every 5 min into
+  `battery_snapshots`; `/api/battery/live` (memory + DB fallback, camelCase).
+- History: v1 `site/energy_analysis` with `device_type: "solarbank"` works
+  (day: `{power:[{time:"HH:MM", value}]}` — note HH:MM, not HH:MM:SS); the
+  **v2 device endpoint rejects solarbank**. Synced into `cloud_history`
+  under the battery SN, period_type "day".
+- Chart: `batt` series in `/api/timeseries` (signed: discharge +, charge −),
+  cloud anchors as fallback where live 5-min snapshots are missing.
+- Dashboard/Live tiles: SOC gauge bar + discharge/charge/PV status; today's
+  discharged/charged kWh = trapezoid over `battery_snapshots` (gaps > 30 min
+  skipped).
+
 ## Production / Docker (epic #19, done 2026-09-10)
 
 - `Dockerfile` multi-stage: web build → `node:22-alpine` runtime, prod deps,
