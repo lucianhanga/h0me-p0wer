@@ -2,7 +2,9 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-const DB_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "data.db");
+const DB_PATH =
+  process.env.DB_PATH ??
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "data.db");
 const RETENTION_MS = 48 * 3600 * 1000; // keep 48 h of live-resolution samples
 
 const db = new DatabaseSync(DB_PATH);

@@ -1,0 +1,24 @@
+services:
+  h0me-p0wer:
+    image: ghcr.io/lucianhanga/h0me-p0wer:latest
+    build: . # `docker compose build` for a local build without GHCR
+    container_name: h0me-p0wer
+    ports:
+      - "3001:3001"
+    environment:
+      TZ: Europe/Berlin # day buckets and cloud day-trend labels are meter-local
+      DB_PATH: /data/data.db
+    env_file:
+      - .env # lives ONLY on this machine (git-ignored) — chmod 600
+    volumes:
+      - h0me-p0wer-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  h0me-p0wer-data:

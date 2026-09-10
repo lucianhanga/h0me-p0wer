@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-and-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            web/package-lock.json
+
+      - name: Install server deps
+        run: npm ci --prefix server --no-audit --no-fund
+
+      - name: Install web deps
+        run: npm ci --prefix web --no-audit --no-fund
+
+      - name: Check backend syntax
+        run: |
+          for f in server/*.js; do node --check "$f"; done
+
+      - name: Build frontend
+        run: npm run build --prefix web
+
+      - name: Smoke test (offline mode — no meter, no credentials)
+        run: |
+          PORT=3100 node server/index.js &
+          SERVER_PID=$!
+          sleep 4
+          curl -sf http://localhost:3100/api/live | grep -q '"connected"'
+          curl -sf http://localhost:3100/ | grep -q "<title>h0me-p0wer</title>"
+          curl -sf http://localhost:3100/api/stats/overview | grep -q '"ok":true'
+          kill -INT $SERVER_PID
