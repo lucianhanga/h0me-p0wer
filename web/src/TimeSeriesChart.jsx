@@ -12,24 +12,19 @@ import echarts from "./echarts.js";
 // window; refetched (debounced) on every zoom/pan so resolution follows zoom.
 const SERIES = [
   // Envelope first so the main lines draw on top. Where the window is covered
-  // by local 5 s samples, gridLo/gridHi show the real per-bucket fluctuation;
-  // cloud-only history stays a flat line. Not in the legend, always on.
+  // by local 5 s samples, gridLo/gridHi show the real per-bucket fluctuation
+  // of the grid total (= phase sum); cloud-only history stays flat.
   { key: "gridHi", color: "#f7a44f44", width: 1, silent: true },
   { key: "gridLo", color: "#f7a44f44", width: 1, silent: true },
-  // Phases as a stacked area: the top of the stack IS the cumulative total
-  // (stacked areas are the standard for part-to-whole power views). Toggled
-  // via the ECharts legend, hidden by default.
-  { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "ph" },
-  { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "ph" },
-  { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "ph" },
-  // Home consumption stack: grid import + battery discharge + PV, so the top
-  // of the stack is the TOTAL house consumption. Battery charging (negative
-  // signed power) stacks below the baseline — power flowing INTO the battery.
-  { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "home" },
+  // ONE stack: phases at the bottom (L1+L2+L3 = grid total), then Battery
+  // and PV on top — the stack top is the TOTAL house consumption. Battery
+  // charging (negative signed power) stacks below the baseline.
+  { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "home" },
+  { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "home" },
+  { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "home" },
   { key: "batt", name: "Battery", color: "#c084fc", width: 1, stack: "home" },
   { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
-  // Explicit home-consumption line (grid + battery + PV) — the stack's top
-  // edge would otherwise take the color of the last stacked series.
+  // Explicit home-consumption line (grid + battery + PV) over everything.
   { key: "home", name: "Home", color: "#e8ecef", width: 2 },
 ];
 
@@ -135,13 +130,13 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid", "Battery", "PV", "Home"],
-        // Phases off by default; clicking legend entries toggles them.
+        data: ["L1", "L2", "L3", "Battery", "PV", "Home"],
+        // All on by default: phases at the bottom of the stack, Battery + PV
+        // on top, Home line above everything. Click legend entries to toggle.
         selected: {
-          L1: false,
-          L2: false,
-          L3: false,
-          Grid: true,
+          L1: true,
+          L2: true,
+          L3: true,
           Battery: true,
           PV: true,
           Home: true,
