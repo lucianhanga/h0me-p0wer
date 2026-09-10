@@ -14,6 +14,12 @@ export default function LivePower() {
   const [today, setToday] = useState(null); // {importKwh, exportKwh}
   const mounted = useRef(true);
 
+  function socClass(soc) {
+    if (soc > 50) return "soc-high";
+    if (soc > 20) return "soc-mid";
+    return "soc-low";
+  }
+
   // Today's energy totals (from the aggregate stats endpoint), refreshed
   // once a minute — the day total ticks up slowly, no need for 5 s updates.
   useEffect(() => {
@@ -24,6 +30,19 @@ export default function LivePower() {
         .catch(() => {});
     load();
     const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Battery (Solarbank) status, refreshed every 30 s.
+  const [battery, setBattery] = useState(null);
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/battery/live")
+        .then((r) => r.json())
+        .then((res) => res.ok && res.data && mounted.current && setBattery(res.data))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -113,6 +132,28 @@ export default function LivePower() {
                 </span>
               </div>
             </div>
+            {battery && (
+              <div className="card">
+                <div className="card-label">Battery — {battery.name ?? "Solarbank"}</div>
+                <div className="soc-row">
+                  <div className="soc-bar">
+                    <div
+                      className={`soc-fill ${socClass(battery.soc)}`}
+                      style={{ width: `${battery.soc}%` }}
+                    />
+                  </div>
+                  <span className="soc-value">{battery.soc}%</span>
+                </div>
+                <div className="card-label">
+                  {battery.outputW > 0
+                    ? `discharging ${battery.outputW} W`
+                    : battery.chargeW > 0
+                      ? `charging ${battery.chargeW} W`
+                      : "idle"}
+                  {battery.pvW > 0 ? ` · PV ${battery.pvW} W` : ""}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Mobile: stacked per-phase cards (NN/g mobile-table pattern).

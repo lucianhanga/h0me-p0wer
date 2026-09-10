@@ -182,7 +182,17 @@ export function saveBatterySnapshot(b) {
 }
 
 export function getLatestBattery() {
-  return selectLatestBattery.get() ?? null;
+  const r = selectLatestBattery.get();
+  if (!r) return null;
+  // Same camelCase shape as the live sync payload.
+  return {
+    ts: r.ts,
+    soc: r.soc,
+    outputW: r.output_w,
+    chargeW: r.charge_w,
+    pvW: r.pv_w,
+    toHomeW: r.to_home_w,
+  };
 }
 
 export function getBatteryHistory(sinceMs) {

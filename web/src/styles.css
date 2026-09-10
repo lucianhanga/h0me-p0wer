@@ -369,3 +369,42 @@ pre {
   font-size: 0.8rem;
   margin-top: 0.35rem;
 }
+
+/* Battery SOC gauge (HA battery-card pattern) */
+.soc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.3rem 0;
+}
+
+.soc-bar {
+  flex: 1;
+  height: 10px;
+  background: #2a3238;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.soc-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.5s ease;
+}
+
+.soc-fill.soc-high {
+  background: #5fce80;
+}
+
+.soc-fill.soc-mid {
+  background: #f7a44f;
+}
+
+.soc-fill.soc-low {
+  background: #e05c5c;
+}
+
+.soc-value {
+  font-weight: 600;
+  font-size: 1.1rem;
+}
