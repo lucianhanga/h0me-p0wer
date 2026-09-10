@@ -119,6 +119,15 @@ EPIPE noise on every client disconnect).
 - Per-phase toggle in the chart (phases are already in `/api/timeseries`).
 - Docker packaging.
 
+## Cost estimation (epic #33, done 2026-09-10)
+
+- `TARIFF_EUR_PER_KWH` in `.env` (default 0.30); `/api/stats/overview` →
+  `costs`: today/week/month/year € (import kWh × tariff) +
+  `batterySavingsToday` (discharged kWh × tariff).
+- Dashboard totals tiles show `≈ €X`; battery tile shows `saved ≈ €X`.
+- Caveat: battery savings assume discharge replaces grid import at the same
+  price — fine once PV exists; overstated if the battery was grid-charged.
+
 ## Energy flow visualization (epic #30, done 2026-09-10)
 
 - `GET /api/flow` — computed flows: grid import/export (meter), battery
