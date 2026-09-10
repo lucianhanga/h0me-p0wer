@@ -2,3 +2,4 @@ node_modules/
 dist/
 .env
 server/data.db
+server/.token-cache.json

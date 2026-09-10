@@ -1,4 +1,7 @@
 import { createECDH, createCipheriv, createHash } from "node:crypto";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const API = "https://ankerpower-api-eu.anker.com";
 
@@ -61,6 +64,40 @@ export class AnkerClient {
     this.authToken = null;
     this.gtoken = null;
     this.tokenExpiresAt = null;
+
+    // Reuse a persisted token across restarts: fresh logins are rate-limited
+    // and repeated ones get the account temporarily locked (error 10019).
+    this.tokenFile = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      ".token-cache.json",
+    );
+    try {
+      const cached = JSON.parse(readFileSync(this.tokenFile, "utf8"));
+      if (cached.expiresAt && Date.now() < cached.expiresAt - 3600 * 1000) {
+        this.authToken = cached.authToken;
+        this.gtoken = cached.gtoken;
+        this.tokenExpiresAt = cached.expiresAt;
+        console.log("[cloud] using cached auth token");
+      }
+    } catch {
+      /* no usable cache — will log in */
+    }
+  }
+
+  saveTokenCache() {
+    try {
+      writeFileSync(
+        this.tokenFile,
+        JSON.stringify({
+          authToken: this.authToken,
+          gtoken: this.gtoken,
+          expiresAt: this.tokenExpiresAt,
+        }),
+        { mode: 0o600 },
+      );
+    } catch {
+      /* cache write failed — non-fatal */
+    }
   }
 
   get configured() {
@@ -116,7 +153,10 @@ export class AnkerClient {
     const data = result.data;
     this.authToken = data.auth_token;
     this.gtoken = md5(data.user_id);
-    this.tokenExpiresAt = data.token_expires_at;
+    // API returns epoch seconds; normalize to ms.
+    this.tokenExpiresAt =
+      data.token_expires_at < 1e12 ? data.token_expires_at * 1000 : data.token_expires_at;
+    this.saveTokenCache();
     console.log(`[cloud] logged in as ${data.nick_name ?? this.email} (${data.country_code})`);
     return data;
   }
