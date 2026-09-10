@@ -1,5 +1,5 @@
 import { createECDH, createCipheriv, createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -67,10 +67,12 @@ export class AnkerClient {
 
     // Reuse a persisted token across restarts: fresh logins are rate-limited
     // and repeated ones get the account temporarily locked (error 10019).
-    this.tokenFile = path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      ".token-cache.json",
+    // Stored next to the database (the /data volume in Docker).
+    const dbDir = path.dirname(
+      process.env.DB_PATH ??
+        path.join(path.dirname(fileURLToPath(import.meta.url)), "data.db"),
     );
+    this.tokenFile = path.join(dbDir, ".token-cache.json");
     try {
       const cached = JSON.parse(readFileSync(this.tokenFile, "utf8"));
       if (cached.expiresAt && Date.now() < cached.expiresAt - 3600 * 1000) {
@@ -93,11 +95,36 @@ export class AnkerClient {
           gtoken: this.gtoken,
           expiresAt: this.tokenExpiresAt,
         }),
-        { mode: 0o600 },
       );
+      chmodSync(this.tokenFile, 0o600); // writeFileSync only applies mode on creation
     } catch {
       /* cache write failed — non-fatal */
     }
+  }
+
+  // Token lifecycle, centralized: reuse a valid token, dedupe concurrent
+  // logins (every fresh login counts against a heavily rate-limited endpoint),
+  // and cool down after failures so a locked account isn't hammered further.
+  async ensureToken() {
+    if (this.authToken && Date.now() < (this.tokenExpiresAt ?? 0) - 60 * 1000) {
+      return;
+    }
+    if (this.loginPromise) return this.loginPromise;
+    if (this.loginCooldownUntil && Date.now() < this.loginCooldownUntil) {
+      throw new AnkerApiError(
+        `login cooldown active until ${new Date(this.loginCooldownUntil).toLocaleTimeString()} ` +
+          `(previous failure; avoiding account lockout)`,
+      );
+    }
+    this.loginPromise = this.login()
+      .catch((err) => {
+        this.loginCooldownUntil = Date.now() + 10 * 60 * 1000;
+        throw err;
+      })
+      .finally(() => {
+        this.loginPromise = null;
+      });
+    return this.loginPromise;
   }
 
   get configured() {
@@ -161,8 +188,8 @@ export class AnkerClient {
     return data;
   }
 
-  async post(endpoint, body = {}) {
-    if (!this.authToken) await this.login();
+  async post(endpoint, body = {}, isRetry = false) {
+    await this.ensureToken();
 
     const response = await fetch(`${API}/${endpoint}`, {
       method: "POST",
@@ -175,6 +202,11 @@ export class AnkerClient {
         httpStatus: 429,
         rateLimited: true,
       });
+    }
+    // Auth failure mid-session: drop the token and retry once with a fresh one.
+    if ((response.status === 401 || response.status === 403) && !isRetry) {
+      this.authToken = null;
+      return this.post(endpoint, body, true);
     }
     if (!response.ok) {
       throw new AnkerApiError(`${endpoint} HTTP error ${response.status}`, {

@@ -12,13 +12,15 @@ import echarts from "./echarts.js";
 // window; refetched (debounced) on every zoom/pan so resolution follows zoom.
 const SERIES = [
   // Envelope first so the main lines draw on top. Where the window is covered
-  // by local 5 s samples, gridLo/gridHi show the real per-bucket fluctuation
+  // by local 5 s samples, gridMin/gridMax show the real per-bucket fluctuation
   // of the grid total (= phase sum); cloud-only history stays flat.
-  { key: "gridHi", color: "#f7a44f44", width: 1, silent: true },
-  { key: "gridLo", color: "#f7a44f44", width: 1, silent: true },
+  { key: "gridMin", color: "#f7a44f44", width: 1, silent: true },
+  { key: "gridMax", color: "#f7a44f44", width: 1, silent: true },
   // ONE stack: phases at the bottom (L1+L2+L3 = grid total), then Battery
   // and PV on top — the stack top is the TOTAL house consumption. Battery
-  // charging (negative signed power) stacks below the baseline.
+  // charging (negative signed power) stacks below the baseline. Note: when
+  // the home EXPORTS to the grid (PV surplus), negative values stack below
+  // zero separately — the Home line remains the authoritative total.
   { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "home" },
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "home" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "home" },
@@ -76,7 +78,18 @@ export default function TimeSeriesChart() {
           color: "#8b98a5",
           fontSize: 11,
           hideOverlap: true, // prevents crammed labels on narrow screens
-          formatter: (ts) => new Date(ts).toLocaleTimeString(),
+          formatter: (ts) => {
+            const d = new Date(ts);
+            // Multi-day windows need the date, not just the clock time.
+            const win = chart.getOption().dataZoom?.[0];
+            const spanMs =
+              win?.startValue != null ? Number(win.endValue) - Number(win.startValue) : 0;
+            return spanMs > 24 * 3600 * 1000
+              ? d.toLocaleDateString([], { day: "numeric", month: "short" }) +
+                  " " +
+                  d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : d.toLocaleTimeString();
+          },
         },
         splitLine: { show: false },
       },
@@ -117,7 +130,7 @@ export default function TimeSeriesChart() {
         stack: s.stack,
         lineStyle: { color: s.color, width: s.width },
         itemStyle: { color: s.color },
-        areaStyle: s.area || s.stack ? { color: `${s.color}${s.stack ? "44" : "22"}` } : undefined,
+        areaStyle: s.stack ? { color: `${s.color}44` } : undefined,
         emphasis: { disabled: true },
         data: [],
       })),
@@ -170,6 +183,7 @@ export default function TimeSeriesChart() {
     // Current rows are kept in JS so live updates can append a few points
     // instead of replacing the whole dataset (which caused visible flicker).
     const rowsRef = { rows: [], bucketMs: 5000 };
+    let fetchSeq = 0; // stale-response guard: only the newest fetch may apply
 
     function applyRows(rows) {
       chart.setOption({
@@ -215,10 +229,11 @@ export default function TimeSeriesChart() {
     async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
       // `viewMs` = the window the user actually sees (may be narrower than
       // the padded fetch range) so resolution targets the visible span.
+      const seq = ++fetchSeq;
       const payload = await fetchTimeseries(
         `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`,
       );
-      if (!payload) return;
+      if (!payload || seq !== fetchSeq) return; // a newer fetch superseded us
       rowsRef.rows = payload.data;
       rowsRef.bucketMs = payload.bucketMs;
       // Data and zoom are independent in ECharts: replacing series data does
@@ -277,15 +292,22 @@ export default function TimeSeriesChart() {
           `from=${lastT + 1}&to=${Date.now()}&bucket=${rowsRef.bucketMs}`,
         );
         if (payload && payload.data.length) {
-          // Replace any partial tail bucket, keep ~1.5 windows of history.
+          // Merge by timestamp (dedupe), keeping ~1.5 windows of history —
+          // robust against a full refetch landing while this tick was flying.
           const cutoff = Date.now() - width * 1.5;
-          rowsRef.rows = rowsRef.rows
-            .filter((r) => r.t < payload.data[0].t && r.t >= cutoff)
-            .concat(payload.data);
+          const byT = new Map();
+          for (const r of rowsRef.rows) if (r.t >= cutoff) byT.set(r.t, r);
+          for (const r of payload.data) byT.set(r.t, r);
+          rowsRef.rows = [...byT.values()].sort((a, b) => a.t - b.t);
           applyRows(rowsRef.rows);
           updateStats(rowsRef.rows, rowsRef.bucketMs);
         }
-        setWindow(Date.now() - width, Date.now());
+        // The user may have panned away while the fetch was in flight —
+        // only slide the window if the right edge is still at the live edge.
+        const win2 = visibleWindow();
+        if (win2 && win2[1] >= Date.now() - LIVE_EDGE_MS) {
+          setWindow(Date.now() - width, Date.now());
+        }
       } finally {
         liveBusy = false;
       }

@@ -36,6 +36,14 @@ const METER_PORT = Number(process.env.METER_PORT ?? 502);
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.join(SERVER_DIR, "..", "web", "dist");
 
+// Cloud period dates are interpreted by Anker as ACCOUNT-LOCAL days, so they
+// must come from local components — toISOString() is UTC and shifts the day
+// for the first 1–2 h after local midnight.
+export function localDate(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 const poller = new MeterPoller(METER_IP, METER_PORT);
 const anker = new AnkerClient(
   process.env.ANKER_EMAIL,
@@ -155,8 +163,8 @@ app.get("/api/timeseries", (req, res) => {
   const sn = poller.snapshot?.meter?.sn;
   const CLOUD_INTERVAL_MS = 20 * 60 * 1000;
   if (sn) {
-    const fromDate = new Date(from - 86400000).toISOString().slice(0, 10);
-    const toDate = new Date(to).toISOString().slice(0, 10);
+    const fromDate = localDate(new Date(from - 86400000));
+    const toDate = localDate(new Date(to));
     const cloudBuckets = new Map(); // bt -> {s, c}
     for (const r of getCloudDayPower(sn, fromDate, toDate)) {
       if (r.power == null || r.ts < from || r.ts > to) continue;
@@ -167,7 +175,7 @@ app.get("/api/timeseries", (req, res) => {
       cell.c++;
     }
     for (const [bt, cell] of cloudBuckets) {
-      if (!acc.has(bt)) add(bt, "grid", cell.s / cell.c);
+      if (!acc.get(bt)?.grid) add(bt, "grid", cell.s / cell.c);
     }
 
     // Battery cloud fallback: day-trend anchors where live 5-min battery
@@ -223,12 +231,16 @@ app.get("/api/timeseries", (req, res) => {
     const sh0 = anchorShares[i - 1] ?? nearestShares(i - 1);
     const sh1 = anchorShares[i] ?? nearestShares(i);
     for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
-      if (t < from || t > to || acc.has(t)) continue;
+      // Skip buckets that already have grid data — but a bucket holding ONLY
+      // battery/PV data must still get its grid value filled.
+      if (t < from || t > to || acc.get(t)?.grid) continue;
       const frac = (t - bt0) / (bt1 - bt0);
       const grid = v0 + (v1 - v0) * frac;
       add(t, "grid", grid);
-      if (b0 && b1) add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
-      if (p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
+      const existing = acc.get(t) ?? {};
+      if (!existing.batt && b0 && b1)
+        add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
+      if (!existing.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
       if (sh0 && sh1) {
         add(t, "l1", grid * (sh0[0] + (sh1[0] - sh0[0]) * frac));
         add(t, "l2", grid * (sh0[1] + (sh1[1] - sh0[1]) * frac));
@@ -348,7 +360,7 @@ app.get("/api/stats/overview", (req, res) => {
     if (peak == null || r.grid_total > peak) peak = r.grid_total;
   }
   if (sn) {
-    const today = dayStartMs && new Date(dayStartMs).toISOString().slice(0, 10);
+    const today = localDate(new Date(dayStartMs));
     for (const r of getCloudDayPower(sn, today, today)) {
       if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
       if (r.ts + 20 * 60 * 1000 > now) continue; // skip open interval
@@ -398,7 +410,7 @@ app.get("/api/stats/overview", (req, res) => {
     putBatt(Math.floor(r.ts / BUCKET) * BUCKET, (r.output_w ?? 0) - (r.charge_w ?? 0));
   }
   if (battSn) {
-    const todayStr = new Date(dayStartMs).toISOString().slice(0, 10);
+    const todayStr = localDate(new Date(dayStartMs));
     for (const r of getCloudDayPower(battSn, todayStr, todayStr)) {
       if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
       if (r.ts + 20 * 60 * 1000 > now) continue;
@@ -448,8 +460,8 @@ app.get("/api/stats/overview", (req, res) => {
       exportKwh: r.export_energy ?? 0,
     }));
   }
-  const ym = new Date().toISOString().slice(0, 7);
-  const prevYm = new Date(dayStartMs - 7 * 86400000).toISOString().slice(0, 7);
+  const ym = localDate().slice(0, 7);
+  const prevYm = localDate(new Date(dayStartMs - 7 * 86400000)).slice(0, 7);
   const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
   // Attach per-day battery kWh (from the battery's cloud day trends).
   for (const r of monthRows) Object.assign(r, battKwhForDay(r.label));
@@ -583,7 +595,7 @@ app.get(
       deviceSn: device_sn ?? "",
       deviceType: device_type ?? "grid",
       type: type ?? "day",
-      startTime: start ?? new Date().toISOString().slice(0, 10),
+      startTime: start ?? localDate(),
       endTime: end ?? "",
     });
   }),
@@ -598,7 +610,7 @@ app.get(
       deviceSn: device_sn,
       deviceType: device_type ?? "grid",
       type: type ?? "day",
-      startTime: start ?? new Date().toISOString().slice(0, 10),
+      startTime: start ?? localDate(),
       endTime: end ?? "",
     });
   }),
@@ -613,18 +625,25 @@ app.get(
   cloudRoute(async (req) => {
     const { device_sn, type = "day", start, end = "" } = req.query;
     if (!device_sn) throw new AnkerApiError("missing device_sn query parameter");
-    const startTime = start ?? new Date().toISOString().slice(0, 10);
+    const startTime = start ?? localDate();
 
     let cached = getCloudTrend(device_sn, type, startTime);
     if (!cached.rows.length || Date.now() - cached.fetchedAt > CLOUD_CACHE_MS) {
-      const data = await anker.getDeviceEnergyAnalysis({
-        deviceSn: device_sn,
-        type,
-        startTime,
-        endTime: end,
-      });
-      saveCloudTrend(device_sn, type, startTime, data?.data_trend ?? []);
-      cached = getCloudTrend(device_sn, type, startTime);
+      try {
+        const data = await anker.getDeviceEnergyAnalysis({
+          deviceSn: device_sn,
+          type,
+          startTime,
+          endTime: end,
+        });
+        saveCloudTrend(device_sn, type, startTime, data?.data_trend ?? []);
+        cached = getCloudTrend(device_sn, type, startTime);
+      } catch (err) {
+        // Refresh failed (rate limit, account lock) — serve the stale cache
+        // if we have one instead of hard-failing the request.
+        if (!cached.rows.length) throw err;
+        console.warn(`[cloud] device-energy refresh failed, serving stale cache: ${err.message}`);
+      }
     }
     return { data_trend: cached.rows };
   }),
@@ -637,7 +656,7 @@ async function syncCloudHistory() {
   const sn = poller.snapshot?.meter?.sn;
   if (!sn || !anker.configured) return;
   const now = new Date();
-  const iso = (d) => d.toISOString().slice(0, 10);
+  const iso = localDate;
   // Anker expects the week range to be the calendar week (Monday..Sunday) —
   // arbitrary 7-day spans fail with "-1 Failed to request".
   const monday = new Date(now);
@@ -705,7 +724,7 @@ async function catchUpCloudHistory() {
   for (let i = BACKFILL_DAYS; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
-    const start = d.toISOString().slice(0, 10);
+    const start = localDate(d);
     // Today is always refreshed — its trend grows during the day.
     if (!stored.has(start) || i === 0) missing.push(start);
   }
@@ -813,8 +832,8 @@ setInterval(syncBattery, 30 * 1000).unref();
 poller.start();
 
 let shuttingDown = false;
-process.on("SIGINT", () => {
-  // Second Ctrl+C forces an immediate exit.
+function gracefulShutdown() {
+  // Second signal forces an immediate exit.
   if (shuttingDown) process.exit(1);
   shuttingDown = true;
 
@@ -825,4 +844,7 @@ process.on("SIGINT", () => {
   server.close(() => process.exit(0));
   // Last resort if anything still refuses to close.
   setTimeout(() => process.exit(0), 1000).unref();
-});
+}
+// Docker and launchd stop services with SIGTERM; Ctrl+C sends SIGINT.
+process.on("SIGINT", gracefulShutdown);
+process.on("SIGTERM", gracefulShutdown);

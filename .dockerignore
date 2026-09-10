@@ -4,6 +4,7 @@ web/dist
 .git
 .env
 server/data.db
+server/.token-cache.json
 *.log
 docs
 scripts
