@@ -22,6 +22,12 @@ header {
   flex-wrap: wrap;
   border-bottom: 1px solid #2a3238;
   margin-bottom: 1.5rem;
+  /* Sticky, app-like top bar (mobile best practice). */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: #101418;
+  padding: 0.5rem 0;
 }
 
 nav {
@@ -108,10 +114,25 @@ section {
   overflow-x: auto;
 }
 
+/* Per-phase mini cards shown on phones instead of the table
+   (Nielsen Norman mobile-table pattern: rows become cards). */
+.phase-cards {
+  display: none;
+}
+
 @media (max-width: 600px) {
   .cards {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
+  }
+
+  /* Hero metric: the number you actually glance at, full width + bigger. */
+  .card-hero {
+    grid-column: 1 / -1;
+  }
+
+  .card-hero .card-value {
+    font-size: 2.2rem;
   }
 
   .card {
@@ -121,6 +142,43 @@ section {
 
   .card-value {
     font-size: 1.3rem;
+  }
+
+  .table-wrap {
+    display: none;
+  }
+
+  .phase-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+  }
+
+  .phase-card {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    background: #1a2128;
+    border: 1px solid #2a3238;
+    border-radius: 8px;
+    padding: 0.65rem 1rem;
+  }
+
+  .phase-name {
+    color: #8b98a5;
+    font-weight: 600;
+  }
+
+  .phase-power {
+    font-size: 1.15rem;
+    font-weight: 600;
+  }
+
+  .phase-detail {
+    color: #8b98a5;
+    font-size: 0.8rem;
+    margin-left: auto;
   }
 
   table {

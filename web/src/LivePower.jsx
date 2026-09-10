@@ -78,7 +78,7 @@ export default function LivePower() {
       {snapshot && (
         <>
           <div className="cards">
-            <div className="card">
+            <div className="card card-hero">
               <div className="card-label">
                 Grid {grid != null && (grid >= 0 ? "(import)" : "(export)")}
               </div>
@@ -99,7 +99,7 @@ export default function LivePower() {
               </div>
               {today && (
                 <div className="card-label">
-                  export {today.exportKwh} kWh · coverage {today.coverage}%
+                  export {today.exportKwh} kWh · {today.coverage}%
                 </div>
               )}
             </div>
@@ -113,6 +113,20 @@ export default function LivePower() {
                 </span>
               </div>
             </div>
+          </div>
+
+          {/* Mobile: stacked per-phase cards (NN/g mobile-table pattern).
+              Desktop: classic table. CSS switches between the two. */}
+          <div className="phase-cards">
+            {snapshot.primary.phases.map((p, i) => (
+              <div className="phase-card" key={i}>
+                <span className="phase-name">L{i + 1}</span>
+                <span className="phase-power">{p.power} W</span>
+                <span className="phase-detail">
+                  {p.current} A · {p.voltage} V · solar {snapshot.secondary.phases[i].power} W
+                </span>
+              </div>
+            ))}
           </div>
 
           <div className="table-wrap">
