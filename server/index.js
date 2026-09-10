@@ -426,6 +426,25 @@ app.get("/api/stats/overview", (req, res) => {
     homeKwh: Math.round((importKwh + dischargedKwh + pvToHomeKwh) * 100) / 100,
   };
 
+  // Costs from kWh × tariff. Battery discharge = avoided grid import, so its
+  // "savings" are discharged kWh × price (only counts once PV exists; for
+  // grid-charged batteries this overstates savings — noted in AGENTS.md).
+  const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
+  const eur = (kwh) => Math.round(kwh * tariff * 100) / 100;
+  const weekImport = weekRows.reduce((a, r) => a + r.importKwh, 0);
+  const monthImport = monthRows
+    .filter((r) => r.label.startsWith(ym))
+    .reduce((a, r) => a + r.importKwh, 0);
+  const yearImport = yearRows.reduce((a, r) => a + r.importKwh, 0);
+  const costs = {
+    tariffEurPerKwh: tariff,
+    today: eur(importKwh),
+    week: eur(weekImport),
+    month: eur(monthImport),
+    year: eur(yearImport),
+    batterySavingsToday: eur(dischargedKwh),
+  };
+
   res.json({
     ok: true,
     data: {
@@ -439,6 +458,7 @@ app.get("/api/stats/overview", (req, res) => {
       profile,
       battery,
       flows,
+      costs,
       week: weekRows,
       month: monthRows.filter((r) => r.label.startsWith(ym)),
       year: yearRows,

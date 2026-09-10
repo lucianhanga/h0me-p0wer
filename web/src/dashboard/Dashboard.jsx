@@ -51,24 +51,24 @@ export default function Dashboard() {
         <Tile
           title="Today"
           main={`${stats.today.importKwh} kWh`}
-          sub={`export ${stats.today.exportKwh} kWh · avg ${stats.today.avgW ?? "—"} W · peak ${
-            stats.today.peakW ?? "—"
+          sub={`≈ €${stats.costs.today} · export ${stats.today.exportKwh} kWh · avg ${
+            stats.today.avgW ?? "—"
           } W`}
         />
         <Tile
           title="This week"
           main={`${sum(stats.week, "importKwh")} kWh`}
-          sub={`export ${sum(stats.week, "exportKwh")} kWh · ${stats.week.length} days`}
+          sub={`≈ €${stats.costs.week} · export ${sum(stats.week, "exportKwh")} kWh`}
         />
         <Tile
           title="This month"
           main={`${sum(stats.month, "importKwh")} kWh`}
-          sub={`export ${sum(stats.month, "exportKwh")} kWh`}
+          sub={`≈ €${stats.costs.month} · export ${sum(stats.month, "exportKwh")} kWh`}
         />
         <Tile
           title="This year"
           main={`${sum(stats.year, "importKwh")} kWh`}
-          sub={`export ${sum(stats.year, "exportKwh")} kWh`}
+          sub={`≈ €${stats.costs.year} · export ${sum(stats.year, "exportKwh")} kWh`}
         />
         <Tile
           title="Home today"
@@ -107,6 +107,7 @@ export default function Dashboard() {
                   ? `charging ${stats.battery.chargeW} W`
                   : "idle"}
               {stats.battery.pvW > 0 ? ` · PV ${stats.battery.pvW} W` : ""}
+              {" · "}saved ≈ €{stats.costs.batterySavingsToday}
             </div>
           </Tile>
         )}
