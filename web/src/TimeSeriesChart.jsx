@@ -22,12 +22,15 @@ const SERIES = [
   { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "ph" },
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "ph" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "ph" },
-  { key: "grid", name: "Grid total", color: "#f7a44f", width: 2, area: true },
-  // Battery gets its own left-side y-axis: ~50 W would be invisible on the
-  // grid's 0–2000 W scale. (Solar CT removed from the chart — nothing is
-  // clamped on it; re-add here when it reports non-zero.)
-  { key: "batt", name: "Battery", color: "#c084fc", width: 2, yAxis: 1 },
-  { key: "pv", name: "PV", color: "#5fce80", width: 2, yAxis: 1 },
+  // Home consumption stack: grid import + battery discharge + PV, so the top
+  // of the stack is the TOTAL house consumption. Battery charging (negative
+  // signed power) stacks below the baseline — power flowing INTO the battery.
+  { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "home" },
+  { key: "batt", name: "Battery", color: "#c084fc", width: 1, stack: "home" },
+  { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
+  // Grid total as its own unstacked line on top — the stack's top edge takes
+  // the color of the last stacked series, which would hide the grid outline.
+  { key: "grid", name: "Grid total", color: "#f7a44f", width: 2 },
 ];
 
 const SHORTCUTS = [
@@ -82,33 +85,18 @@ export default function TimeSeriesChart() {
         },
         splitLine: { show: false },
       },
-      yAxis: [
-        {
-          type: "value",
-          position: "right",
-          axisLabel: {
-            color: "#8b98a5",
-            fontSize: 11,
-            formatter: (v) => `${v} W`,
-            inside: isPhone, // labels inside the plot on phones (full-bleed)
-          },
-          splitLine: { lineStyle: { color: "#2a323866" } },
+      yAxis: {
+        type: "value",
+        position: "right",
+        scale: true,
+        axisLabel: {
+          color: "#8b98a5",
+          fontSize: 11,
+          formatter: (v) => `${v} W`,
+          inside: isPhone, // labels inside the plot on phones (full-bleed)
         },
-        {
-          // Battery axis (left, own scale) — 50 W discharge would vanish on
-          // the grid axis.
-          type: "value",
-          position: "left",
-          scale: true,
-          axisLabel: {
-            color: "#c084fc",
-            fontSize: 11,
-            formatter: (v) => `${v} W`,
-            inside: isPhone,
-          },
-          splitLine: { show: false },
-        },
-      ],
+        splitLine: { lineStyle: { color: "#2a323866" } },
+      },
       dataZoom: [
         { type: "inside", xAxisIndex: 0, filterMode: "none" },
         {
@@ -147,10 +135,17 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid total", "Battery", "PV"],
-        // Phases off by default; clicking legend entries toggles them, and
-        // the phase stack always sums to the cumulative total.
-        selected: { L1: false, L2: false, L3: false, "Grid total": true, Battery: true, PV: true },
+        data: ["L1", "L2", "L3", "Grid", "Battery", "PV", "Grid total"],
+        // Phases off by default; clicking legend entries toggles them.
+        selected: {
+          L1: false,
+          L2: false,
+          L3: false,
+          Grid: true,
+          Battery: true,
+          PV: true,
+          "Grid total": true,
+        },
       },
     });
 
@@ -182,15 +177,7 @@ export default function TimeSeriesChart() {
     const rowsRef = { rows: [], bucketMs: 5000 };
 
     function applyRows(rows) {
-      // Scale the battery/PV axis to the data actually in view (a one-time
-      // 800 W spike would otherwise flatten normal ~50 W values forever).
-      let battMax = 0;
-      for (const r of rows) {
-        battMax = Math.max(battMax, Math.abs(r.batt ?? 0), Math.abs(r.pv ?? 0));
-      }
-      const battAxisMax = Math.max(100, Math.ceil((battMax * 1.2) / 50) * 50);
       chart.setOption({
-        yAxis: [{}, { max: battAxisMax }],
         series: SERIES.map((s) => ({
           name: s.name ?? s.key,
           data: rows.map((r) => [r.t, r[s.key]]),
