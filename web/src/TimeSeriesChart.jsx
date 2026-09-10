@@ -55,13 +55,11 @@ export default function TimeSeriesChart() {
     chart.setOption({
       animation: false,
       backgroundColor: "transparent",
-      grid: {
-        top: isPhone ? 44 : 28, // legend wraps to two rows on phones
-        right: isPhone ? 44 : 60,
-        bottom: 40,
-        left: 10,
-        containLabel: true,
-      },
+      grid: isPhone
+        ? // Phones: full-bleed plot — y labels drawn INSIDE the chart instead
+          // of a right gutter, so the graph spans edge to edge.
+          { top: 44, right: 2, bottom: 40, left: 2, containLabel: false }
+        : { top: 28, right: 60, bottom: 40, left: 10, containLabel: true },
       tooltip: {
         trigger: "axis",
         valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
@@ -83,7 +81,12 @@ export default function TimeSeriesChart() {
       yAxis: {
         type: "value",
         position: "right",
-        axisLabel: { color: "#8b98a5", fontSize: 11, formatter: (v) => `${v} W` },
+        axisLabel: {
+          color: "#8b98a5",
+          fontSize: 11,
+          formatter: (v) => `${v} W`,
+          inside: isPhone, // labels inside the plot on phones (full-bleed)
+        },
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
       dataZoom: [
