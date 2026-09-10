@@ -408,3 +408,21 @@ pre {
   font-weight: 600;
   font-size: 1.1rem;
 }
+
+/* Power-flow diagram */
+.flow-diagram {
+  width: 100%;
+  max-width: 520px;
+  display: block;
+  margin: 0.5rem auto;
+}
+
+.flow-edge-anim {
+  animation: flow-dash 1s linear infinite;
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
