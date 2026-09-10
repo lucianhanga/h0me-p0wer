@@ -36,7 +36,7 @@ export const miniBase = {
   grid: { top: 8, right: 4, bottom: 20, left: 4, containLabel: true },
   xAxis: {
     axisLine: { lineStyle: { color: "#2a3238" } },
-    axisLabel: { color: "#8b98a5", fontSize: 10 },
+    axisLabel: { color: "#8b98a5", fontSize: 10, hideOverlap: true },
     splitLine: { show: false },
     axisTick: { show: false },
   },
