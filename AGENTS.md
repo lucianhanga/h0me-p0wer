@@ -121,6 +121,19 @@ EPIPE noise on every client disconnect).
 
 ## Second page: overview dashboard (epic #8, done 2026-09-09)
 
+## Responsive design (epic #13, done 2026-09-10)
+
+- Breakpoints: phone ≤600px, tablet ≤1024px; 44px touch targets on
+  `pointer: coarse`; fluid `.app` container.
+- Live page: 2-col card grid on phones, table in `.table-wrap` (overflow-x).
+- Main chart: 240px height on phones (matchMedia), legend `type: "scroll"`,
+  `hideOverlap: true` on axis labels; touch pinch/drag zoom is native in
+  ECharts inside dataZoom.
+- Tiles: period grid uses `minmax(min(320px,100%),1fr)` so it never overflows.
+- **CSS comments are `/* */` only** — a `//` comment once silently swallowed
+  the `.tiles` rule (tiles rendered full-width stacked).
+
+## Previous: overview dashboard (epic #8, done 2026-09-09)
 - Two pages via state-based nav in `App.jsx` (no router): **Live** (original
   content) and **Dashboard** (`web/src/dashboard/`).
 - `GET /api/stats/overview` — single aggregate call for all tiles: today's
