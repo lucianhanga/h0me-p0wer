@@ -23,6 +23,7 @@ const SERIES = [
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "ph" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "ph" },
   { key: "grid", name: "Grid total", color: "#f7a44f", width: 2, area: true },
+  { key: "batt", name: "Battery", color: "#c084fc", width: 2 },
   { key: "solar", name: "Solar", color: "#5fce80", width: 1 },
 ];
 
@@ -126,10 +127,17 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid total", "Solar"],
+        data: ["L1", "L2", "L3", "Grid total", "Battery", "Solar"],
         // Phases off by default; clicking legend entries toggles them, and
         // the phase stack always sums to the cumulative total.
-        selected: { L1: false, L2: false, L3: false, "Grid total": true, Solar: true },
+        selected: {
+          L1: false,
+          L2: false,
+          L3: false,
+          "Grid total": true,
+          Battery: true,
+          Solar: true,
+        },
       },
     });
 
