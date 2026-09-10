@@ -54,6 +54,39 @@ app.get("/api/battery/live", (req, res) => {
   res.json({ ok: true, data: latestBattery ?? getLatestBattery() });
 });
 
+// Computed power flows between grid / battery / PV / home.
+// Approximation rules (documented in AGENTS.md):
+// - grid import/export comes straight from the meter (signed total).
+// - PV split: bat_charge_power counts all charging regardless of source, so
+//   pvToBattery = min(pvW, chargeW) and pvToHome = pvW - pvToBattery.
+// - home consumption = grid import + battery discharge + PV direct.
+app.get("/api/flow", (req, res) => {
+  const grid = poller.snapshot?.primary?.totalPower ?? null;
+  const b = latestBattery ?? getLatestBattery();
+  const pvW = b?.pvW ?? 0;
+  const chargeW = b?.chargeW ?? 0;
+  const pvToBattery = Math.min(pvW, chargeW);
+  const pvToHome = Math.max(0, pvW - pvToBattery);
+  res.json({
+    ok: true,
+    data: {
+      ts: Date.now(),
+      grid: {
+        import: grid != null ? Math.max(grid, 0) : null,
+        export: grid != null ? Math.max(-grid, 0) : null,
+      },
+      battery: b
+        ? { soc: b.soc, discharge: b.outputW, charge: chargeW, name: b.name ?? "Solarbank" }
+        : null,
+      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome },
+      home: {
+        consumption:
+          grid != null ? Math.max(grid, 0) + (b?.outputW ?? 0) + pvToHome : null,
+      },
+    },
+  });
+});
+
 // Persisted live samples for chart backfill: /api/history?minutes=60
 app.get("/api/history", (req, res) => {
   const minutes = Math.min(Number(req.query.minutes ?? 60), 2880);
