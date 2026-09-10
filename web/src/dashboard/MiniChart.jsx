@@ -23,7 +23,7 @@ export default function MiniChart({ option, height = 140 }) {
   }, [height]);
 
   useEffect(() => {
-    chartRef.current?.setOption(option, true);
+    chartRef.current?.setOption(option);
   }, [option]);
 
   return <div ref={ref} style={{ width: "100%", height }} />;

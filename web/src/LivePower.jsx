@@ -23,6 +23,7 @@ export default function LivePower() {
   // Today's energy totals (from the aggregate stats endpoint), refreshed
   // once a minute — the day total ticks up slowly, no need for 5 s updates.
   useEffect(() => {
+    mounted.current = true;
     const load = () =>
       fetch("/api/stats/overview")
         .then((r) => r.json())
@@ -36,6 +37,7 @@ export default function LivePower() {
   // Battery (Solarbank) status, refreshed every 10 s (backend syncs every 30 s).
   const [battery, setBattery] = useState(null);
   useEffect(() => {
+    mounted.current = true;
     const load = () =>
       fetch("/api/battery/live")
         .then((r) => r.json())
@@ -101,7 +103,7 @@ export default function LivePower() {
               <div className="card-label">
                 Grid {grid != null && (grid >= 0 ? "(import)" : "(export)")}
               </div>
-              <div className={`card-value ${grid >= 0 ? "import" : "export"}`}>
+              <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
                 {grid != null ? `${Math.abs(grid)} W` : "—"}
               </div>
             </div>

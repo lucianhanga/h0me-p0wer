@@ -144,8 +144,12 @@ export function getSnapshotRows(fromMs, toMs) {
   return selectSnapshotRows.all(fromMs, toMs);
 }
 
-// Any meter SN seen in cloud history (fallback when the meter is offline).
-const selectAnySn = db.prepare(`SELECT DISTINCT device_sn AS sn FROM cloud_history LIMIT 1`);
+// Any METER SN seen in cloud history (fallback when the meter is offline).
+// The meter is the device that has month/year period rows; the battery only
+// has day rows.
+const selectAnySn = db.prepare(`
+  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE period_type = 'month' LIMIT 1
+`);
 
 export function getAnyDeviceSn() {
   return selectAnySn.get()?.sn ?? null;
@@ -192,7 +196,8 @@ export function saveBatterySnapshot(b) {
 
 export function getLatestBattery() {
   const r = selectLatestBattery.get();
-  if (!r) return null;
+  // Anything older than 5 min is not "live" — don't present it as such.
+  if (!r || Date.now() - r.ts > 5 * 60 * 1000) return null;
   // Same camelCase shape as the live sync payload.
   return {
     ts: r.ts,

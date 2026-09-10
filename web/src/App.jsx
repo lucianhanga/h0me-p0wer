@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import LivePower from "./LivePower.jsx";
 import FlowDiagram from "./FlowDiagram.jsx";
 import TimeSeriesChart from "./TimeSeriesChart.jsx";
@@ -19,6 +19,13 @@ export default function App() {
     setPage(key);
     location.hash = key === "dashboard" ? "#dashboard" : "#live";
   }
+
+  // Browser back/forward changes the hash — follow it.
+  useEffect(() => {
+    const onHash = () => setPage(location.hash === "#dashboard" ? "dashboard" : "live");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   return (
     <div className="app">

@@ -85,7 +85,7 @@ On the production server (only Docker needed):
 mkdir h0me-p0wer && cd h0me-p0wer
 curl -O https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/docker-compose.yml
 curl -o .env https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/.env.example
-$EDITOR .env          # fill in credentials + METER_IP
+$EDITOR .env          # fill in credentials + METER_IP + TARIFF_EUR_PER_KWH
 chmod 600 .env        # secrets stay only on this machine
 
 # run / update
@@ -97,8 +97,20 @@ The dashboard is then on `http://<server>:3001`. SQLite lives in the
 `h0me-p0wer-data` volume and survives updates. The container restarts
 automatically (`unless-stopped`).
 
-**The meter accepts only ONE Modbus TCP connection** — never run two
-instances (container + local dev) against it at the same time.
+### Operational notes
+
+- **The meter accepts only ONE Modbus TCP connection** — never run two
+  instances (container + local dev) against it at the same time.
+- **Cloud rate limits**: Anker limits API calls and aggressively rate-limits
+  *logins* (repeated fresh logins lock the account for 7 minutes). The
+  backend therefore persists the auth token in `/data/.token-cache.json`
+  (inside the volume) and backs off automatically after login failures —
+  avoid restarting the container in a loop, and avoid running a second
+  cloud-connected instance from the same public IP.
+- **Graceful stop**: the server handles SIGTERM, so `docker stop` shuts down
+  cleanly (Modbus released immediately).
+- Healthcheck: `docker compose ps` shows health via `/api/live`; logs via
+  `docker compose logs -f`.
 
 ## Notes
 

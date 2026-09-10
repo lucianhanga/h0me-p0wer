@@ -99,6 +99,14 @@ EPIPE noise on every client disconnect).
 - SIGINT shutdown must terminate WS clients or `server.close()` hangs forever.
 - Old server instances on :3001 keep causing "missing route / EADDRINUSE"
   confusion — always check `lsof -nP -iTCP:3001 -sTCP:LISTEN` first.
+- **Logins are aggressively rate-limited**: repeated fresh logins lock the
+  account for 7 min (error 10019). The auth token is persisted next to
+  `DB_PATH` (`.token-cache.json`, gitignored, mode 600), `ensureToken()`
+  dedupes concurrent logins and applies a 10-min cooldown after failures.
+  Never bypass this.
+- **Cloud period dates are account-local days** — format them with
+  `localDate()` (local components), never `toISOString()` (UTC day shift).
+- Graceful shutdown handles SIGINT **and** SIGTERM (Docker/launchd).
 
 ## Current state / known limitations
 

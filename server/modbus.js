@@ -76,7 +76,16 @@ export class MeterPoller {
   }
 
   async poll() {
-    if (this.stopped) return;
+    if (this.stopped || this.pollInFlight) return;
+    this.pollInFlight = true;
+    try {
+      await this.doPoll();
+    } finally {
+      this.pollInFlight = false;
+    }
+  }
+
+  async doPoll() {
     if (!this.connected) {
       await this.connect();
       if (!this.connected) this.emit();

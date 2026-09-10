@@ -26,7 +26,18 @@ export default function FlowDiagram() {
   // Node positions (viewBox 400x260)
   const N = {
     pv: { x: 200, y: 30, label: "PV", sub: `${pv.production} W`, color: "#5fce80" },
-    grid: { x: 55, y: 150, label: "Grid", sub: grid.import != null ? `${grid.import ?? grid.export} W` : "—", color: "#f7a44f" },
+    grid: {
+      x: 55,
+      y: 150,
+      label: "Grid",
+      sub:
+        grid.import != null
+          ? grid.import > 0
+            ? `${grid.import} W`
+            : `−${grid.export} W`
+          : "—",
+      color: "#f7a44f",
+    },
     home: { x: 200, y: 150, label: "Home", sub: home.consumption != null ? `${home.consumption} W` : "—", color: "#e8ecef" },
     batt: {
       x: 345, y: 150,
