@@ -236,6 +236,28 @@ app.get("/api/timeseries", (req, res) => {
     }
   }
 
+  // Battery/PV interpolation pass: their samples arrive every 30 s while the
+  // bucket grid can be as fine as 5 s — and the grid-anchor pass above never
+  // fills between them when grid data is continuous. Interpolate between
+  // consecutive battery anchors regardless of what else is in the buckets.
+  const battAnchors = anchors.filter((bt) => acc.get(bt)?.batt);
+  for (let i = 1; i < battAnchors.length; i++) {
+    const bt0 = battAnchors[i - 1];
+    const bt1 = battAnchors[i];
+    const b0 = acc.get(bt0).batt;
+    const b1 = acc.get(bt1).batt;
+    const p0 = acc.get(bt0).pv;
+    const p1 = acc.get(bt1).pv;
+    for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
+      if (t < from || t > to) continue;
+      const frac = (t - bt0) / (bt1 - bt0);
+      const b = acc.get(t) ?? {};
+      if (!b.batt && b0 && b1)
+        add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
+      if (!b.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
+    }
+  }
+
   const round = (cell) => (cell ? Math.round((cell.s / cell.c) * 100) / 100 : null);
 
   // Emit EVERY bucket in the window (nulls where no data exists). The chart
