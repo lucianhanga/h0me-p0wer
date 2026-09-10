@@ -23,8 +23,10 @@ const SERIES = [
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "ph" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "ph" },
   { key: "grid", name: "Grid total", color: "#f7a44f", width: 2, area: true },
-  { key: "batt", name: "Battery", color: "#c084fc", width: 2 },
-  { key: "solar", name: "Solar", color: "#5fce80", width: 1 },
+  // Battery gets its own left-side y-axis: ~50 W would be invisible on the
+  // grid's 0–2000 W scale. (Solar CT removed from the chart — nothing is
+  // clamped on it; re-add here when it reports non-zero.)
+  { key: "batt", name: "Battery", color: "#c084fc", width: 2, yAxis: 1 },
 ];
 
 const SHORTCUTS = [
@@ -79,17 +81,33 @@ export default function TimeSeriesChart() {
         },
         splitLine: { show: false },
       },
-      yAxis: {
-        type: "value",
-        position: "right",
-        axisLabel: {
-          color: "#8b98a5",
-          fontSize: 11,
-          formatter: (v) => `${v} W`,
-          inside: isPhone, // labels inside the plot on phones (full-bleed)
+      yAxis: [
+        {
+          type: "value",
+          position: "right",
+          axisLabel: {
+            color: "#8b98a5",
+            fontSize: 11,
+            formatter: (v) => `${v} W`,
+            inside: isPhone, // labels inside the plot on phones (full-bleed)
+          },
+          splitLine: { lineStyle: { color: "#2a323866" } },
         },
-        splitLine: { lineStyle: { color: "#2a323866" } },
-      },
+        {
+          // Battery axis (left, own scale) — 50 W discharge would vanish on
+          // the grid axis.
+          type: "value",
+          position: "left",
+          scale: true,
+          axisLabel: {
+            color: "#c084fc",
+            fontSize: 11,
+            formatter: (v) => `${v} W`,
+            inside: isPhone,
+          },
+          splitLine: { show: false },
+        },
+      ],
       dataZoom: [
         { type: "inside", xAxisIndex: 0, filterMode: "none" },
         {
@@ -108,6 +126,7 @@ export default function TimeSeriesChart() {
       series: SERIES.map((s) => ({
         name: s.name ?? s.key,
         type: "line",
+        yAxisIndex: s.yAxis ?? 0,
         showSymbol: false,
         connectNulls: false,
         silent: !!s.silent,
@@ -127,17 +146,10 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid total", "Battery", "Solar"],
+        data: ["L1", "L2", "L3", "Grid total", "Battery"],
         // Phases off by default; clicking legend entries toggles them, and
         // the phase stack always sums to the cumulative total.
-        selected: {
-          L1: false,
-          L2: false,
-          L3: false,
-          "Grid total": true,
-          Battery: true,
-          Solar: true,
-        },
+        selected: { L1: false, L2: false, L3: false, "Grid total": true, Battery: true },
       },
     });
 
