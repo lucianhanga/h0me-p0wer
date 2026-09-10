@@ -28,9 +28,9 @@ const SERIES = [
   { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "home" },
   { key: "batt", name: "Battery", color: "#c084fc", width: 1, stack: "home" },
   { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
-  // Grid total as its own unstacked line on top — the stack's top edge takes
-  // the color of the last stacked series, which would hide the grid outline.
-  { key: "grid", name: "Grid total", color: "#f7a44f", width: 2 },
+  // Explicit home-consumption line (grid + battery + PV) — the stack's top
+  // edge would otherwise take the color of the last stacked series.
+  { key: "home", name: "Home", color: "#e8ecef", width: 2 },
 ];
 
 const SHORTCUTS = [
@@ -135,7 +135,7 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid", "Battery", "PV", "Grid total"],
+        data: ["L1", "L2", "L3", "Grid", "Battery", "PV", "Home"],
         // Phases off by default; clicking legend entries toggles them.
         selected: {
           L1: false,
@@ -144,7 +144,7 @@ export default function TimeSeriesChart() {
           Grid: true,
           Battery: true,
           PV: true,
-          "Grid total": true,
+          Home: true,
         },
       },
     });
@@ -180,7 +180,14 @@ export default function TimeSeriesChart() {
       chart.setOption({
         series: SERIES.map((s) => ({
           name: s.name ?? s.key,
-          data: rows.map((r) => [r.t, r[s.key]]),
+          data:
+            s.key === "home"
+              ? rows.map((r) =>
+                  r.grid == null
+                    ? [r.t, null]
+                    : [r.t, (r.grid ?? 0) + (r.batt ?? 0) + (r.pv ?? 0)],
+                )
+              : rows.map((r) => [r.t, r[s.key]]),
         })),
       });
     }
