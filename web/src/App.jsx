@@ -1,28 +1,29 @@
 import { useEffect, useState } from "react";
-import LivePower from "./LivePower.jsx";
-import FlowDiagram from "./FlowDiagram.jsx";
-import TimeSeriesChart from "./TimeSeriesChart.jsx";
-import SiteInfo from "./SiteInfo.jsx";
-import Dashboard from "./dashboard/Dashboard.jsx";
+import LiveTab from "./live/LiveTab.jsx";
 
 const PAGES = [
   { key: "live", label: "Live" },
+  { key: "graph", label: "Graph" },
   { key: "dashboard", label: "Dashboard" },
+  { key: "history", label: "History" },
 ];
 
 export default function App() {
   const [page, setPage] = useState(() =>
-    location.hash === "#dashboard" ? "dashboard" : "live",
+    PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "live",
   );
 
   function switchPage(key) {
     setPage(key);
-    location.hash = key === "dashboard" ? "#dashboard" : "#live";
+    location.hash = `#${key}`;
   }
 
   // Browser back/forward changes the hash — follow it.
   useEffect(() => {
-    const onHash = () => setPage(location.hash === "#dashboard" ? "dashboard" : "live");
+    const onHash = () =>
+      setPage(
+        PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "live",
+      );
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -43,30 +44,13 @@ export default function App() {
           ))}
         </nav>
       </header>
-      <main>
-        {page === "live" ? (
-          <>
-            <section>
-              <h2>Live (Modbus TCP)</h2>
-              <LivePower />
-            </section>
-            <section>
-              <h2>Power flow</h2>
-              <FlowDiagram />
-            </section>
-            <section>
-              <h2>Power over time</h2>
-              <TimeSeriesChart />
-            </section>
-            <section>
-              <h2>Site &amp; devices (Anker cloud)</h2>
-              <SiteInfo />
-            </section>
-          </>
-        ) : (
-          <Dashboard />
-        )}
-      </main>
+      <main>{page === "live" ? <LiveTab /> : <Placeholder name={page} />}</main>
     </div>
   );
+}
+
+// Parked tabs: content intentionally left out for now (previous components
+// live untouched in web/src/parked/, just not bundled).
+function Placeholder({ name }) {
+  return <p className="muted">{name} — coming soon</p>;
 }
