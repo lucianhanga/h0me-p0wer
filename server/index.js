@@ -632,9 +632,9 @@ setInterval(() => {
   pruneBattery();
 }, 3600 * 1000).unref();
 
-// Battery (Solarbank) live sync: scen_info every 5 min (2 calls — well under
-// the rate limit). First run is delayed so the cloud login doesn't race the
-// startup history backfill.
+// Battery (Solarbank) live sync: scen_info every 30 s (1 call after the
+// first — well under the ~10 req/min rate limit, even with the Anker mobile
+// app polling from the same IP).
 let latestBattery = null;
 async function syncBattery() {
   if (!anker.configured) return;
@@ -649,7 +649,7 @@ async function syncBattery() {
   }
 }
 setTimeout(syncBattery, 60 * 1000);
-setInterval(syncBattery, 5 * 60 * 1000).unref();
+setInterval(syncBattery, 30 * 1000).unref();
 
 poller.start();
 

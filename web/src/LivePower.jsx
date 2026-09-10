@@ -33,7 +33,7 @@ export default function LivePower() {
     return () => clearInterval(timer);
   }, []);
 
-  // Battery (Solarbank) status, refreshed every 30 s.
+  // Battery (Solarbank) status, refreshed every 10 s (backend syncs every 30 s).
   const [battery, setBattery] = useState(null);
   useEffect(() => {
     const load = () =>
@@ -42,7 +42,7 @@ export default function LivePower() {
         .then((res) => res.ok && res.data && mounted.current && setBattery(res.data))
         .catch(() => {});
     load();
-    const timer = setInterval(load, 30000);
+    const timer = setInterval(load, 10000);
     return () => clearInterval(timer);
   }, []);
 
