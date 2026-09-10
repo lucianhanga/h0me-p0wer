@@ -349,6 +349,30 @@ app.get("/api/stats/overview", (req, res) => {
       }))
     : [];
 
+  // --- Battery (Solarbank) today: SOC + integrated discharge/charge kWh
+  // from the 5-min live snapshots (trapezoid, gaps > 30 min skipped).
+  const battRows = getBatteryHistory(dayStartMs, now);
+  let dischargedKwh = 0;
+  let chargedKwh = 0;
+  for (let i = 1; i < battRows.length; i++) {
+    const dt = (battRows[i].ts - battRows[i - 1].ts) / 3600000;
+    if (dt > 0.5) continue;
+    dischargedKwh += (((battRows[i - 1].output_w + battRows[i].output_w) / 2) * dt) / 1000;
+    chargedKwh += (((battRows[i - 1].charge_w + battRows[i].charge_w) / 2) * dt) / 1000;
+  }
+  const battLatest = latestBattery ?? getLatestBattery();
+  const battery = battLatest
+    ? {
+        name: battLatest.name ?? "Solarbank",
+        soc: battLatest.soc,
+        outputW: battLatest.outputW,
+        chargeW: battLatest.chargeW,
+        pvW: battLatest.pvW,
+        dischargedKwh: Math.round(dischargedKwh * 100) / 100,
+        chargedKwh: Math.round(chargedKwh * 100) / 100,
+      }
+    : null;
+
   res.json({
     ok: true,
     data: {
@@ -360,6 +384,7 @@ app.get("/api/stats/overview", (req, res) => {
         coverage,
       },
       profile,
+      battery,
       week: weekRows,
       month: monthRows.filter((r) => r.label.startsWith(ym)),
       year: yearRows,

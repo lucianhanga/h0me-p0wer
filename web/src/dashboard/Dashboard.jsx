@@ -34,6 +34,12 @@ export default function Dashboard() {
   const sum = (rows, key) => Math.round(rows.reduce((a, r) => a + (r[key] ?? 0), 0) * 100) / 100;
   const grid = live?.primary?.totalPower;
 
+  function socClass(soc) {
+    if (soc > 50) return "soc-high";
+    if (soc > 20) return "soc-mid";
+    return "soc-low";
+  }
+
   return (
     <div>
       <div className="tiles">
@@ -68,6 +74,28 @@ export default function Dashboard() {
 
       <div className="tiles-period">
         <DayTile stats={stats} />
+        {stats.battery && (
+          <Tile
+            title={`Battery — ${stats.battery.name}`}
+            main={`${stats.battery.soc}%`}
+            sub={`discharged ${stats.battery.dischargedKwh} kWh · charged ${stats.battery.chargedKwh} kWh today`}
+          >
+            <div className="soc-bar" style={{ marginTop: "0.5rem" }}>
+              <div
+                className={`soc-fill ${socClass(stats.battery.soc)}`}
+                style={{ width: `${stats.battery.soc}%` }}
+              />
+            </div>
+            <div className="tile-sub" style={{ marginTop: "0.5rem" }}>
+              {stats.battery.outputW > 0
+                ? `discharging ${stats.battery.outputW} W`
+                : stats.battery.chargeW > 0
+                  ? `charging ${stats.battery.chargeW} W`
+                  : "idle"}
+              {stats.battery.pvW > 0 ? ` · PV ${stats.battery.pvW} W` : ""}
+            </div>
+          </Tile>
+        )}
         <KwhBarsTile
           title="Week overview"
           rows={stats.week}
