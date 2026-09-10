@@ -140,11 +140,12 @@ app.get("/api/timeseries", (req, res) => {
     if (r.gridMin != null) envelope.set(r.bt, { min: r.gridMin, max: r.gridMax });
   }
 
-  // Source 1b: battery (Solarbank) snapshots every 5 min — signed power:
-  // discharge positive, charge negative.
+  // Source 1b: battery (Solarbank) snapshots every 30 s — signed power:
+  // discharge positive, charge negative; plus PV input watts.
   for (const r of getBatteryHistory(from, to)) {
-    const signed = (r.output_w ?? 0) - (r.charge_w ?? 0);
-    add(Math.floor(r.ts / bucketMs) * bucketMs, "batt", signed);
+    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+    add(bt, "batt", (r.output_w ?? 0) - (r.charge_w ?? 0));
+    add(bt, "pv", r.pv_w ?? 0);
   }
 
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
@@ -216,6 +217,8 @@ app.get("/api/timeseries", (req, res) => {
     const v1 = c1.s / c1.c;
     const b0 = acc.get(bt0).batt;
     const b1 = acc.get(bt1).batt;
+    const p0 = acc.get(bt0).pv;
+    const p1 = acc.get(bt1).pv;
     const sh0 = anchorShares[i - 1] ?? nearestShares(i - 1);
     const sh1 = anchorShares[i] ?? nearestShares(i);
     for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
@@ -224,6 +227,7 @@ app.get("/api/timeseries", (req, res) => {
       const grid = v0 + (v1 - v0) * frac;
       add(t, "grid", grid);
       if (b0 && b1) add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
+      if (p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
       if (sh0 && sh1) {
         add(t, "l1", grid * (sh0[0] + (sh1[0] - sh0[0]) * frac));
         add(t, "l2", grid * (sh0[1] + (sh1[1] - sh0[1]) * frac));
@@ -254,6 +258,7 @@ app.get("/api/timeseries", (req, res) => {
       l3: b ? round(b.l3) : null,
       solar: b ? round(b.solar) : null,
       batt: b ? round(b.batt) : null,
+      pv: b ? round(b.pv) : null,
     });
   }
 

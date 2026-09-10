@@ -27,6 +27,7 @@ const SERIES = [
   // grid's 0–2000 W scale. (Solar CT removed from the chart — nothing is
   // clamped on it; re-add here when it reports non-zero.)
   { key: "batt", name: "Battery", color: "#c084fc", width: 2, yAxis: 1 },
+  { key: "pv", name: "PV", color: "#5fce80", width: 2, yAxis: 1 },
 ];
 
 const SHORTCUTS = [
@@ -146,10 +147,10 @@ export default function TimeSeriesChart() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Grid total", "Battery"],
+        data: ["L1", "L2", "L3", "Grid total", "Battery", "PV"],
         // Phases off by default; clicking legend entries toggles them, and
         // the phase stack always sums to the cumulative total.
-        selected: { L1: false, L2: false, L3: false, "Grid total": true, Battery: true },
+        selected: { L1: false, L2: false, L3: false, "Grid total": true, Battery: true, PV: true },
       },
     });
 
