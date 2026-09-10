@@ -73,6 +73,33 @@ launchctl load ~/Library/LaunchAgents/com.h0mep0wer.server.plist
 The Vite dev server proxies `/api` to the backend; the dashboard's WebSocket
 connects directly to the backend port.
 
+## Deploy (Docker, production)
+
+Every merge to `main` publishes an image to
+`ghcr.io/lucianhanga/h0me-p0wer:latest` (GitHub Actions → CI + Publish).
+
+On the production server (only Docker needed):
+
+```sh
+# one-time setup
+mkdir h0me-p0wer && cd h0me-p0wer
+curl -O https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/docker-compose.yml
+curl -o .env https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/.env.example
+$EDITOR .env          # fill in credentials + METER_IP
+chmod 600 .env        # secrets stay only on this machine
+
+# run / update
+docker compose pull
+docker compose up -d
+```
+
+The dashboard is then on `http://<server>:3001`. SQLite lives in the
+`h0me-p0wer-data` volume and survives updates. The container restarts
+automatically (`unless-stopped`).
+
+**The meter accepts only ONE Modbus TCP connection** — never run two
+instances (container + local dev) against it at the same time.
+
 ## Notes
 
 - The register map comes from Anker's official Home Assistant integration

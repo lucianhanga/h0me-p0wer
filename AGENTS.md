@@ -119,6 +119,20 @@ EPIPE noise on every client disconnect).
 - Per-phase toggle in the chart (phases are already in `/api/timeseries`).
 - Docker packaging.
 
+## Production / Docker (epic #19, done 2026-09-10)
+
+- `Dockerfile` multi-stage: web build → `node:22-alpine` runtime, prod deps,
+  non-root `node` user, `DB_PATH` env (default `/data/data.db`).
+- `docker-compose.yml`: port 3001, named volume `h0me-p0wer-data` for SQLite,
+  `env_file: .env` (untracked, chmod 600 on the server), `TZ=Europe/Berlin`,
+  `restart: unless-stopped`, healthcheck on `/api/live`.
+- GitHub Actions: `ci.yml` (deps, vite build, node --check, offline smoke
+  test on :3100) + `publish.yml` (build+push to GHCR on main,
+  `ghcr.io/lucianhanga/h0me-p0wer:latest|sha-<sha>`, public image).
+- Secrets never enter git or the image: server-local `.env` only.
+- **Meter allows ONE Modbus TCP connection** — no parallel instances.
+- Deployment/update flow documented in README "Deploy (Docker, production)".
+
 ## Second page: overview dashboard (epic #8, done 2026-09-09)
 
 ## Responsive design (epic #13, done 2026-09-10)
