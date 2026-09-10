@@ -119,6 +119,18 @@ EPIPE noise on every client disconnect).
 - Per-phase toggle in the chart (phases are already in `/api/timeseries`).
 - Docker packaging.
 
+## Energy flow visualization (epic #30, done 2026-09-10)
+
+- `GET /api/flow` — computed flows: grid import/export (meter), battery
+  discharge/charge, PV split (`pvToBattery = min(pvW, chargeW)`,
+  `pvToHome = pvW − pvToBattery`), `home = gridImport + battDischarge + pvToHome`.
+- Live page: SVG `FlowDiagram` (PV/Grid/Home/Battery nodes, animated dashed
+  edges in flow direction, 5 s refresh).
+- Chart: `pv` series (from `battery_snapshots.pv_w`) on the battery y-axis.
+- `/api/stats/overview` → `flows`: today's kWh per flow (trapezoid over
+  snapshots/battery_snapshots). Dashboard tiles: Home today, PV today.
+- Battery sync is every 30 s (1 scen_info call; siteId cached after first).
+
 ## Battery: Solarbank 2 E1600 Plus (epic #25, done 2026-09-10)
 
 - The battery (A17C3) created a **site** in the account — site-scoped
