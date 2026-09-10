@@ -1,7 +1,7 @@
 import ModbusRTU from "modbus-serial";
 import { BATCH_RANGES, REGISTERS, METER_TYPE_NAMES, decodeValue } from "./registers.js";
 
-const RECONNECT_DELAY_MS = 10000;
+const RETRY_DELAY_MS = 3000; // wait after a failed cycle (both modes)
 
 const MODBUS_HINT =
   "Enable Modbus TCP in the Anker app: Smart Meter Gen 2 -> Settings -> " +
@@ -35,23 +35,44 @@ export class MeterPoller {
   }
 
   getState() {
+    // In transient mode the socket closes after every poll, so "connected"
+    // can't mean "socket open" — it must mean "healthy": a successful read
+    // within the last ~2 poll cycles. Otherwise the UI flaps between
+    // offline/online between polls.
+    const healthy = this.transient
+      ? this.lastSuccessAt != null &&
+        Date.now() - this.lastSuccessAt < 2.2 * this.pollIntervalMs
+      : this.connected;
     return {
-      connected: this.connected,
-      error: this.connected ? null : this.lastError,
-      hint: this.connected ? null : MODBUS_HINT,
+      connected: healthy,
+      error: healthy ? null : this.lastError,
+      hint: healthy ? null : MODBUS_HINT,
       snapshot: this.snapshot,
     };
   }
 
   async start() {
     this.stopped = false;
-    await this.connect();
-    this.timer = setInterval(() => this.poll(), this.pollIntervalMs);
+    this.loop();
+  }
+
+  // Poll loop as a setTimeout chain: cycle → (disconnect) → wait interval →
+  // next cycle. On failure, retry after RETRY_DELAY_MS instead of a full
+  // interval. No overlapping polls by construction.
+  async loop() {
+    if (this.stopped) return;
+    this.lastCycleOk = false;
+    try {
+      await this.poll();
+    } finally {
+      const delay = this.lastCycleOk ? this.pollIntervalMs : RETRY_DELAY_MS;
+      this.timer = setTimeout(() => this.loop(), delay);
+    }
   }
 
   stop() {
     this.stopped = true;
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearTimeout(this.timer);
     this.disconnect();
   }
 
@@ -120,8 +141,7 @@ export class MeterPoller {
       }
 
       this.snapshot = {
-        timestamp: new Date().toISOString(),
-        meter: {
+        timestamp: new Date().toISOString(),        meter: {
           model: decoded.meter_model,
           sn: decoded.meter_sn,
           type: METER_TYPE_NAMES[decoded.meter_type] ?? `unknown (${decoded.meter_type})`,
@@ -145,14 +165,13 @@ export class MeterPoller {
         },
       };
       this.lastError = null;
+      this.lastSuccessAt = Date.now();
+      this.lastCycleOk = true;
     } catch (err) {
       this.connected = false;
       this.lastError = `read failed (${err.message})`;
-      console.warn(`[modbus] ${this.lastError}, reconnecting in ${RECONNECT_DELAY_MS / 1000}s`);
+      console.warn(`[modbus] ${this.lastError}, retrying in ${RETRY_DELAY_MS / 1000}s`);
       this.disconnect();
-      if (!this.transient) {
-        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
-      }
     } finally {
       // Transient mode: release the meter after every cycle so a second
       // instance can have its turn.

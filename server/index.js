@@ -123,15 +123,23 @@ app.get("/api/timeseries", (req, res) => {
   if (!(from < to)) {
     return res.status(400).json({ ok: false, error: "from must be before to" });
   }
-  // Round the bucket up to a whole 5 s step; never finer than the raw 5 s.
-  // `view` (ms) is the VISIBLE window: buckets are sized for it even when the
-  // fetched range is padded wider, so a 1 h view gets raw 5 s resolution.
+  // Round the bucket up to a whole poll-interval step; never finer than the
+  // actual sampling rate. `view` (ms) is the VISIBLE window: buckets are
+  // sized for it even when the fetched range is padded wider.
+  const minBucketMs = poller.pollIntervalMs;
   const viewMs = Math.max(Number(req.query.view ?? 0) || to - from, 1000);
-  const autoBucketMs = Math.max(5000, Math.ceil(viewMs / points / 5000) * 5000);
+  const autoBucketMs = Math.max(
+    minBucketMs,
+    Math.ceil(viewMs / points / minBucketMs) * minBucketMs,
+  );
   const requestedBucketMs = Number(req.query.bucket ?? 0);
   const bucketMs =
     requestedBucketMs > 0
-      ? Math.max(5000, requestedBucketMs, Math.ceil((to - from) / 4000 / 5000) * 5000)
+      ? Math.max(
+          minBucketMs,
+          requestedBucketMs,
+          Math.ceil((to - from) / 4000 / minBucketMs) * minBucketMs,
+        )
       : autoBucketMs;
 
   const acc = new Map(); // bt -> {grid:{s,c}, l1.., solar:{s,c}}
