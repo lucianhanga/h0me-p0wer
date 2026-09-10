@@ -151,6 +151,15 @@ export function getAnyDeviceSn() {
   return selectAnySn.get()?.sn ?? null;
 }
 
+// Battery SN = the cloud_history device SN that is not the meter.
+const selectBatterySn = db.prepare(`
+  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE device_sn != ? LIMIT 1
+`);
+
+export function getBatterySn(meterSn) {
+  return selectBatterySn.get(meterSn ?? "")?.sn ?? null;
+}
+
 // --- Battery (Solarbank) live snapshots ------------------------------------
 
 db.exec(`

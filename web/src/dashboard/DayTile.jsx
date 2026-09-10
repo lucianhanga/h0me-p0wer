@@ -24,6 +24,14 @@ export default function DayTile({ stats }) {
         areaStyle: { color: "#f7a44f22" },
         data: stats.profile.map((p) => [p.t, p.power]),
       },
+      {
+        name: "Battery",
+        type: "line",
+        showSymbol: false,
+        connectNulls: false,
+        lineStyle: { color: "#c084fc", width: 1.5 },
+        data: stats.profile.map((p) => [p.t, p.batt ?? null]),
+      },
     ],
   };
 

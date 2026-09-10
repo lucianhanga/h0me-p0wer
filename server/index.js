@@ -22,6 +22,7 @@ import {
   getCloudDayPower,
   getSnapshotRows,
   getAnyDeviceSn,
+  getBatterySn,
   saveBatterySnapshot,
   getLatestBattery,
   getBatteryHistory,
@@ -383,6 +384,61 @@ app.get("/api/stats/overview", (req, res) => {
   const elapsedBuckets = Math.max(1, Math.floor((now - dayStartMs) / BUCKET));
   const coverage = Math.min(100, Math.round((profile.length / elapsedBuckets) * 100));
 
+  // --- Battery profile for today: 30-s live snapshots as anchors, cloud
+  // battery day-trend as fallback, interpolated (same pattern as grid).
+  const battSn = latestBattery?.sn ?? getBatterySn(sn);
+  const battAnchors = new Map(); // bt -> {s, c}
+  const putBatt = (bt, v) => {
+    const cell = (battAnchors.get(bt) ?? battAnchors.set(bt, { s: 0, c: 0 }).get(bt));
+    cell.s += v;
+    cell.c++;
+  };
+  for (const r of getBatteryHistory(dayStartMs, now)) {
+    if (r.output_w == null) continue;
+    putBatt(Math.floor(r.ts / BUCKET) * BUCKET, (r.output_w ?? 0) - (r.charge_w ?? 0));
+  }
+  if (battSn) {
+    const todayStr = new Date(dayStartMs).toISOString().slice(0, 10);
+    for (const r of getCloudDayPower(battSn, todayStr, todayStr)) {
+      if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
+      if (r.ts + 20 * 60 * 1000 > now) continue;
+      const bt = Math.floor(r.ts / BUCKET) * BUCKET;
+      if (!battAnchors.has(bt)) putBatt(bt, r.power);
+    }
+  }
+  const battSorted = [...battAnchors.entries()].sort(([a], [b]) => a - b);
+  const battByT = new Map();
+  for (let i = 0; i < battSorted.length; i++) {
+    const [bt, cell] = battSorted[i];
+    battByT.set(bt, Math.round(cell.s / cell.c));
+    const next = battSorted[i + 1];
+    if (next) {
+      const [nbt] = next;
+      const nv = next[1].s / next[1].c;
+      for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
+        const frac = (t - bt) / (nbt - bt);
+        battByT.set(t, Math.round(cell.s / cell.c + (nv - cell.s / cell.c) * frac));
+      }
+    }
+  }
+  for (const p of profile) p.batt = battByT.get(p.t) ?? null;
+
+  // --- Battery kWh per day (for week/month tiles): integrate the cloud
+  // battery day trend (20-min signed power; discharge +, charge −).
+  function battKwhForDay(dateStr) {
+    if (!battSn) return { disKwh: 0, chgKwh: 0 };
+    const rows = getCloudTrend(battSn, "day", dateStr).rows;
+    let disKwh = 0;
+    let chgKwh = 0;
+    for (const r of rows) {
+      if (r.power == null) continue;
+      const kwh = (r.power * (20 / 60)) / 1000;
+      if (kwh >= 0) disKwh += kwh;
+      else chgKwh += -kwh;
+    }
+    return { disKwh: Math.round(disKwh * 100) / 100, chgKwh: Math.round(chgKwh * 100) / 100 };
+  }
+
   // --- Week (last 7 days) & month: daily kWh from cloud_history month rows.
   function monthKwh(yearMonth) {
     if (!sn) return [];
@@ -395,6 +451,8 @@ app.get("/api/stats/overview", (req, res) => {
   const ym = new Date().toISOString().slice(0, 7);
   const prevYm = new Date(dayStartMs - 7 * 86400000).toISOString().slice(0, 7);
   const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
+  // Attach per-day battery kWh (from the battery's cloud day trends).
+  for (const r of monthRows) Object.assign(r, battKwhForDay(r.label));
   const weekRows = monthRows.filter((r) => {
     const t = new Date(`${r.label}T12:00:00`).getTime();
     return t > now - 7 * 86400000 && t <= now;
@@ -604,25 +662,30 @@ async function syncCloudHistory() {
   // Battery (Solarbank) day trend via the site-level v1 endpoint (the v2
   // device endpoint rejects device_type=solarbank). Different payload shape:
   // {power: [{time, value}]} → mapped onto the shared cloud_history rows.
+  // Sync today + yesterday so week/month tiles have complete battery days.
   if (latestBattery?.sn && latestBattery.siteId) {
-    try {
-      const data = await anker.getEnergyAnalysis({
-        siteId: latestBattery.siteId,
-        deviceSn: latestBattery.sn,
-        deviceType: "solarbank",
-        type: "day",
-        startTime: iso(now),
-        endTime: "",
-      });
-      const rows = (data?.power ?? []).map((p) => ({
-        time: p.time,
-        power: p.value,
-        import_energy: "",
-        export_energy: "",
-      }));
-      saveCloudTrend(latestBattery.sn, "day", iso(now), rows);
-    } catch (err) {
-      console.warn(`[cloud-sync] battery day failed: ${err.message}`);
+    for (const dayOffset of [0, 1]) {
+      const d = new Date(now.getTime() - dayOffset * 86400000);
+      const day = iso(d);
+      try {
+        const data = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          deviceSn: latestBattery.sn,
+          deviceType: "solarbank",
+          type: "day",
+          startTime: day,
+          endTime: "",
+        });
+        const rows = (data?.power ?? []).map((p) => ({
+          time: p.time,
+          power: p.value,
+          import_energy: "",
+          export_energy: "",
+        }));
+        saveCloudTrend(latestBattery.sn, "day", day, rows);
+      } catch (err) {
+        console.warn(`[cloud-sync] battery day ${day} failed: ${err.message}`);
+      }
     }
   }
 }
