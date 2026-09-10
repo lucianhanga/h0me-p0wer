@@ -151,6 +151,48 @@ export function getAnyDeviceSn() {
   return selectAnySn.get()?.sn ?? null;
 }
 
+// --- Battery (Solarbank) live snapshots ------------------------------------
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS battery_snapshots (
+    ts INTEGER PRIMARY KEY,
+    soc REAL,
+    output_w REAL,
+    charge_w REAL,
+    pv_w REAL,
+    to_home_w REAL
+  )
+`);
+
+const insertBattery = db.prepare(`
+  INSERT OR REPLACE INTO battery_snapshots (ts, soc, output_w, charge_w, pv_w, to_home_w)
+  VALUES (?, ?, ?, ?, ?, ?)
+`);
+
+const selectLatestBattery = db.prepare(`
+  SELECT * FROM battery_snapshots ORDER BY ts DESC LIMIT 1
+`);
+
+const selectBatterySince = db.prepare(`
+  SELECT * FROM battery_snapshots WHERE ts >= ? ORDER BY ts ASC
+`);
+
+export function saveBatterySnapshot(b) {
+  insertBattery.run(b.ts, b.soc, b.outputW, b.chargeW, b.pvW, b.toHomeW);
+}
+
+export function getLatestBattery() {
+  return selectLatestBattery.get() ?? null;
+}
+
+export function getBatteryHistory(sinceMs) {
+  return selectBatterySince.all(sinceMs);
+}
+
+export function pruneBattery() {
+  db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
+}
+
 // --- Unified time series (for the stock-chart style visualization) ---------
 
 // 5-second Modbus samples averaged into buckets of bucketMs.

@@ -167,6 +167,31 @@ export class AnkerClient {
     return this.post("power_service/v1/app/get_relate_and_bind_devices", {});
   }
 
+  // Live battery (Solarbank) status from the site's scene info. The site id
+  // is looked up once and cached (rate limits are tight).
+  async getBatteryInfo() {
+    if (!this.siteId) {
+      const sites = await this.getSiteList();
+      this.siteId = sites?.site_list?.[0]?.site_id ?? null;
+      if (!this.siteId) return null;
+    }
+    const scene = await this.getSceneInfo(this.siteId);
+    const sb = scene?.solarbank_info?.solarbank_list?.[0];
+    if (!sb) return null;
+    const num = (v) => (v === "" || v == null ? 0 : Number(v));
+    return {
+      ts: Date.now(),
+      sn: sb.device_sn,
+      name: sb.device_name,
+      soc: num(sb.battery_power), // state of charge, percent
+      outputW: num(sb.output_power), // discharging into home
+      chargeW: num(sb.bat_charge_power), // charging
+      pvW: num(sb.photovoltaic_power), // solar input
+      toHomeW: num(scene.solarbank_info.to_home_load),
+      siteId: this.siteId,
+    };
+  }
+
   getEnergyAnalysis({ siteId, deviceSn = "", deviceType = "grid", type = "day", startTime, endTime = "" }) {
     return this.post("power_service/v1/site/energy_analysis", {
       site_id: siteId,

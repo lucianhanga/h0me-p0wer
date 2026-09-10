@@ -22,6 +22,10 @@ import {
   getCloudDayPower,
   getSnapshotRows,
   getAnyDeviceSn,
+  saveBatterySnapshot,
+  getLatestBattery,
+  getBatteryHistory,
+  pruneBattery,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -43,6 +47,11 @@ app.use(express.json());
 
 app.get("/api/live", (req, res) => {
   res.json(poller.getState());
+});
+
+// Latest battery (Solarbank) status: memory first, DB fallback.
+app.get("/api/battery/live", (req, res) => {
+  res.json({ ok: true, data: latestBattery ?? getLatestBattery() });
 });
 
 // Persisted live samples for chart backfill: /api/history?minutes=60
@@ -545,7 +554,30 @@ poller.onSnapshot((state) => {
 
 // Prune samples older than the retention window once an hour.
 pruneOld();
-setInterval(pruneOld, 3600 * 1000).unref();
+pruneBattery();
+setInterval(() => {
+  pruneOld();
+  pruneBattery();
+}, 3600 * 1000).unref();
+
+// Battery (Solarbank) live sync: scen_info every 5 min (2 calls — well under
+// the rate limit). First run is delayed so the cloud login doesn't race the
+// startup history backfill.
+let latestBattery = null;
+async function syncBattery() {
+  if (!anker.configured) return;
+  try {
+    const info = await anker.getBatteryInfo();
+    if (info) {
+      latestBattery = info;
+      saveBatterySnapshot(info);
+    }
+  } catch (err) {
+    console.warn(`[battery] sync failed: ${err.message}`);
+  }
+}
+setTimeout(syncBattery, 60 * 1000);
+setInterval(syncBattery, 5 * 60 * 1000).unref();
 
 poller.start();
 
