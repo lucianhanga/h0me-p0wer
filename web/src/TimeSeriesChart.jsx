@@ -270,12 +270,23 @@ export default function TimeSeriesChart() {
       }
     }, 5000);
 
+    // Background tabs get their timers throttled (Chrome: ~1/min), so the
+    // live window falls behind while hidden. On return, do an immediate full
+    // refresh of the current window instead of crawling back 5 s at a time.
+    const onVisible = () => {
+      if (document.visibilityState === "visible") scheduleLoad();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+
     const resizeObserver = new ResizeObserver(() => chart.resize());
     resizeObserver.observe(containerRef.current);
 
     return () => {
       clearInterval(liveTimer);
       clearTimeout(fetchTimer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
       resizeObserver.disconnect();
       apiRef.current = null;
       chart.dispose();
