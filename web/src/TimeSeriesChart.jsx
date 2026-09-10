@@ -42,16 +42,26 @@ export default function TimeSeriesChart() {
   const [stats, setStats] = useState(null); // {avg, min, max, bucketMs}
 
   useEffect(() => {
+    // Smaller chart + scrollable legend on phones; touch pinch/drag zoom is
+    // built into ECharts' inside dataZoom, nothing extra needed there.
+    const isPhone = window.matchMedia("(max-width: 600px)").matches;
+    const chartHeight = isPhone ? 240 : 340;
     const chart = echarts.init(containerRef.current, null, {
       renderer: "canvas",
       width: containerRef.current.clientWidth,
-      height: 340,
+      height: chartHeight,
     });
 
     chart.setOption({
       animation: false,
       backgroundColor: "transparent",
-      grid: { top: 28, right: 60, bottom: 40, left: 10, containLabel: true },
+      grid: {
+        top: isPhone ? 44 : 28, // legend wraps to two rows on phones
+        right: isPhone ? 44 : 60,
+        bottom: 40,
+        left: 10,
+        containLabel: true,
+      },
       tooltip: {
         trigger: "axis",
         valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
@@ -65,6 +75,7 @@ export default function TimeSeriesChart() {
         axisLabel: {
           color: "#8b98a5",
           fontSize: 11,
+          hideOverlap: true, // prevents crammed labels on narrow screens
           formatter: (ts) => new Date(ts).toLocaleTimeString(),
         },
         splitLine: { show: false },
@@ -106,6 +117,7 @@ export default function TimeSeriesChart() {
       legend: {
         top: 0,
         left: 0,
+        type: "scroll", // arrows when it doesn't fit (phones)
         textStyle: { color: "#8b98a5", fontSize: 11 },
         icon: "roundRect",
         itemWidth: 12,
@@ -291,7 +303,13 @@ export default function TimeSeriesChart() {
           </span>
         )}
       </div>
-      <div ref={containerRef} style={{ width: "100%", height: 340 }} />
+      <div
+        ref={containerRef}
+        style={{
+          width: "100%",
+          height: window.matchMedia("(max-width: 600px)").matches ? 240 : 340,
+        }}
+      />
       <p className="muted">drag to pan · scroll to zoom · drag the slider below the chart</p>
     </div>
   );
