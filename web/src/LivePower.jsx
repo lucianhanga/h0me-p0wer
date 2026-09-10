@@ -11,7 +11,21 @@ const WS_URL =
 export default function LivePower() {
   const [state, setState] = useState(null);
   const [wsOpen, setWsOpen] = useState(false);
+  const [today, setToday] = useState(null); // {importKwh, exportKwh}
   const mounted = useRef(true);
+
+  // Today's energy totals (from the aggregate stats endpoint), refreshed
+  // once a minute — the day total ticks up slowly, no need for 5 s updates.
+  useEffect(() => {
+    const load = () =>
+      fetch("/api/stats/overview")
+        .then((r) => r.json())
+        .then((res) => res.ok && mounted.current && setToday(res.data.today))
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     mounted.current = true;
@@ -77,6 +91,17 @@ export default function LivePower() {
               <div className="card-value">
                 {solar != null ? `${Math.abs(solar)} W` : "—"}
               </div>
+            </div>
+            <div className="card">
+              <div className="card-label">Today</div>
+              <div className="card-value">
+                {today ? `${today.importKwh} kWh` : "—"}
+              </div>
+              {today && (
+                <div className="card-label">
+                  export {today.exportKwh} kWh · coverage {today.coverage}%
+                </div>
+              )}
             </div>
             <div className="card">
               <div className="card-label">Meter</div>
