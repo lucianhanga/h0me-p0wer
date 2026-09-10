@@ -200,7 +200,9 @@ EPIPE noise on every client disconnect).
   test on :3100) + `publish.yml` (build+push to GHCR on main,
   `ghcr.io/lucianhanga/h0me-p0wer:latest|sha-<sha>`, public image).
 - Secrets never enter git or the image: server-local `.env` only.
-- **Meter allows ONE Modbus TCP connection** — no parallel instances.
+- **Meter allows ONE Modbus TCP connection** — no parallel instances. For
+  dev+prod coexistence: `MODBUS_TRANSIENT=true` + `POLL_INTERVAL_MS=20000`
+  (connect-read-disconnect per cycle instead of a permanent connection).
 - Deployment/update flow documented in README "Deploy (Docker, production)".
 
 ## Second page: overview dashboard (epic #8, done 2026-09-09)

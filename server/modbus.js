@@ -1,7 +1,6 @@
 import ModbusRTU from "modbus-serial";
 import { BATCH_RANGES, REGISTERS, METER_TYPE_NAMES, decodeValue } from "./registers.js";
 
-const POLL_INTERVAL_MS = 5000;
 const RECONNECT_DELAY_MS = 10000;
 
 const MODBUS_HINT =
@@ -9,9 +8,14 @@ const MODBUS_HINT =
   "Three-Party Control Settings -> Modbus TCP";
 
 export class MeterPoller {
-  constructor(host, port = 502) {
+  // transient=true: connect-read-disconnect each cycle instead of holding a
+  // permanent connection — lets two instances (dev + prod) share the meter's
+  // single Modbus connection by only occupying it ~1 s per poll.
+  constructor(host, port = 502, { pollIntervalMs = 5000, transient = false } = {}) {
     this.host = host;
     this.port = port;
+    this.pollIntervalMs = pollIntervalMs;
+    this.transient = transient;
     this.client = new ModbusRTU();
     this.connected = false;
     this.snapshot = null; // last successful reading
@@ -42,12 +46,16 @@ export class MeterPoller {
   async start() {
     this.stopped = false;
     await this.connect();
-    this.timer = setInterval(() => this.poll(), POLL_INTERVAL_MS);
+    this.timer = setInterval(() => this.poll(), this.pollIntervalMs);
   }
 
   stop() {
     this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    this.disconnect();
+  }
+
+  disconnect() {
     try {
       this.client.close(() => {});
     } catch {
@@ -141,12 +149,17 @@ export class MeterPoller {
       this.connected = false;
       this.lastError = `read failed (${err.message})`;
       console.warn(`[modbus] ${this.lastError}, reconnecting in ${RECONNECT_DELAY_MS / 1000}s`);
-      try {
-        this.client.close(() => {});
-      } catch {
-        /* ignore */
+      this.disconnect();
+      if (!this.transient) {
+        await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
       }
-      await new Promise((r) => setTimeout(r, RECONNECT_DELAY_MS));
+    } finally {
+      // Transient mode: release the meter after every cycle so a second
+      // instance can have its turn.
+      if (this.transient) {
+        this.disconnect();
+        this.connected = false;
+      }
     }
 
     this.emit();

@@ -45,7 +45,12 @@ export function localDate(d = new Date()) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-const poller = new MeterPoller(METER_IP, METER_PORT);
+const poller = new MeterPoller(METER_IP, METER_PORT, {
+  // POLL_INTERVAL_MS: poll cadence (default 5000). MODBUS_TRANSIENT=true:
+  // connect-read-disconnect per cycle so two instances can share the meter.
+  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 5000),
+  transient: process.env.MODBUS_TRANSIENT === "true",
+});
 // CLOUD_ENABLED=false runs meter-only: no Anker login attempts at all
 // (credentials stay in .env for when the throttle clears).
 const cloudEnabled = process.env.CLOUD_ENABLED !== "false";
