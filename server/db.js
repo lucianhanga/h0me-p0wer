@@ -176,10 +176,18 @@ db.exec(`
     to_home_w REAL
   )
 `);
+// Per-string PV columns added later — guarded for existing databases.
+for (const col of ["pv1_w REAL", "pv2_w REAL"]) {
+  try {
+    db.exec(`ALTER TABLE battery_snapshots ADD COLUMN ${col}`);
+  } catch {
+    /* column already exists */
+  }
+}
 
 const insertBattery = db.prepare(`
-  INSERT OR REPLACE INTO battery_snapshots (ts, soc, output_w, charge_w, pv_w, to_home_w)
-  VALUES (?, ?, ?, ?, ?, ?)
+  INSERT OR REPLACE INTO battery_snapshots (ts, soc, output_w, charge_w, pv_w, to_home_w, pv1_w, pv2_w)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const selectLatestBattery = db.prepare(`
@@ -191,7 +199,7 @@ const selectBatterySince = db.prepare(`
 `);
 
 export function saveBatterySnapshot(b) {
-  insertBattery.run(b.ts, b.soc, b.outputW, b.chargeW, b.pvW, b.toHomeW);
+  insertBattery.run(b.ts, b.soc, b.outputW, b.chargeW, b.pvW, b.toHomeW, b.pv1W ?? 0, b.pv2W ?? 0);
 }
 
 export function getLatestBattery() {
@@ -205,6 +213,8 @@ export function getLatestBattery() {
     outputW: r.output_w,
     chargeW: r.charge_w,
     pvW: r.pv_w,
+    pv1W: r.pv1_w,
+    pv2W: r.pv2_w,
     toHomeW: r.to_home_w,
   };
 }

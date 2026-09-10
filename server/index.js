@@ -67,6 +67,19 @@ app.get("/api/live", (req, res) => {
   res.json(poller.getState());
 });
 
+// Connectivity health for the Live tab badges.
+app.get("/api/health", (req, res) => {
+  const batt = latestBattery ?? getLatestBattery();
+  res.json({
+    ok: true,
+    data: {
+      meterDirect: poller.getState().connected, // Modbus TCP healthy
+      cloud: { enabled: anker.configured, lastOkAt: lastCloudOkAt },
+      battery: { lastTs: batt?.ts ?? null },
+    },
+  });
+});
+
 // Latest battery (Solarbank) status: memory first, DB fallback.
 app.get("/api/battery/live", (req, res) => {
   res.json({ ok: true, data: latestBattery ?? getLatestBattery() });
@@ -831,6 +844,7 @@ setInterval(() => {
 // app) is the primary source once connected; the 30 s REST scen_info sync is
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null;
+let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
 let batteryMqtt = null;
 
 function startBatteryMqtt() {
@@ -839,6 +853,7 @@ function startBatteryMqtt() {
   batteryMqtt.onData = (d) => {
     // Same shape as the REST sync payload, preserving name/siteId.
     latestBattery = { ...latestBattery, ...d };
+    lastCloudOkAt = Date.now();
     try {
       saveBatterySnapshot(latestBattery);
     } catch (err) {
@@ -856,6 +871,7 @@ async function syncBattery() {
     const info = await anker.getBatteryInfo();
     if (info) {
       latestBattery = info;
+      lastCloudOkAt = Date.now();
       saveBatterySnapshot(info);
       startBatteryMqtt();
     }

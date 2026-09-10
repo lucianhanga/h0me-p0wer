@@ -259,6 +259,7 @@ export class AnkerClient {
     const sb = scene?.solarbank_info?.solarbank_list?.[0];
     if (!sb) return null;
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
+    const info = scene.solarbank_info;
     return {
       ts: Date.now(),
       sn: sb.device_sn,
@@ -266,8 +267,10 @@ export class AnkerClient {
       soc: num(sb.battery_power), // state of charge, percent
       outputW: num(sb.output_power), // discharging into home
       chargeW: num(sb.bat_charge_power), // charging
-      pvW: num(sb.photovoltaic_power), // solar input
-      toHomeW: num(scene.solarbank_info.to_home_load),
+      pvW: num(sb.photovoltaic_power), // solar input (total)
+      pv1W: num(info?.solar_power_1), // per-string PV (PV1/PV2 on E1600)
+      pv2W: num(info?.solar_power_2),
+      toHomeW: num(info?.to_home_load),
       siteId: this.siteId,
     };
   }
