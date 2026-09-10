@@ -134,6 +134,17 @@ app.get("/api/timeseries", (req, res) => {
     for (const [bt, cell] of cloudBuckets) {
       if (!acc.has(bt)) add(bt, "grid", cell.s / cell.c);
     }
+
+    // Battery cloud fallback: day-trend anchors where live 5-min battery
+    // snapshots haven't synced yet (e.g. right after server start).
+    if (latestBattery?.sn) {
+      for (const r of getCloudDayPower(latestBattery.sn, fromDate, toDate)) {
+        if (r.power == null || r.ts < from || r.ts > to) continue;
+        if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
+        const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+        if (!acc.get(bt)?.batt) add(bt, "batt", r.power);
+      }
+    }
   }
 
   // Final pass: bridge consecutive data-bearing buckets (local or cloud
@@ -466,6 +477,31 @@ async function syncCloudHistory() {
     } catch (err) {
       console.warn(`[cloud-sync] ${j.type} failed: ${err.message}`);
       break; // likely rate-limited or login issue — stop this round
+    }
+  }
+
+  // Battery (Solarbank) day trend via the site-level v1 endpoint (the v2
+  // device endpoint rejects device_type=solarbank). Different payload shape:
+  // {power: [{time, value}]} → mapped onto the shared cloud_history rows.
+  if (latestBattery?.sn && latestBattery.siteId) {
+    try {
+      const data = await anker.getEnergyAnalysis({
+        siteId: latestBattery.siteId,
+        deviceSn: latestBattery.sn,
+        deviceType: "solarbank",
+        type: "day",
+        startTime: iso(now),
+        endTime: "",
+      });
+      const rows = (data?.power ?? []).map((p) => ({
+        time: p.time,
+        power: p.value,
+        import_energy: "",
+        export_energy: "",
+      }));
+      saveCloudTrend(latestBattery.sn, "day", iso(now), rows);
+    } catch (err) {
+      console.warn(`[cloud-sync] battery day failed: ${err.message}`);
     }
   }
 }
