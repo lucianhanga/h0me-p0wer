@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import * as echarts from "echarts";
+import echarts from "./echarts.js";
 
 // Unified power chart on Apache ECharts.
 //

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import echarts from "../echarts.js";
 
 // Shared tiny ECharts wrapper for dashboard tiles. Takes a full option
 // object; re-renders when it changes.
