@@ -11,6 +11,7 @@ dotenv.config({
 import { WebSocketServer } from "ws";
 import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
+import { AnkerMqtt } from "./mqtt.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -810,17 +811,37 @@ setInterval(() => {
   pruneBattery();
 }, 3600 * 1000).unref();
 
-// Battery (Solarbank) live sync: scen_info every 30 s (1 call after the
-// first — well under the ~10 req/min rate limit, even with the Anker mobile
-// app polling from the same IP).
+// Battery (Solarbank) live data: MQTT push (~3-5 s, same channel as the Anker
+// app) is the primary source once connected; the 30 s REST scen_info sync is
+// the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null;
+let batteryMqtt = null;
+
+function startBatteryMqtt() {
+  if (batteryMqtt || !latestBattery?.sn) return;
+  batteryMqtt = new AnkerMqtt(anker, latestBattery.sn);
+  batteryMqtt.onData = (d) => {
+    // Same shape as the REST sync payload, preserving name/siteId.
+    latestBattery = { ...latestBattery, ...d };
+    try {
+      saveBatterySnapshot(latestBattery);
+    } catch (err) {
+      console.warn("[db] failed to persist battery snapshot:", err.message);
+    }
+  };
+  batteryMqtt.start(); // never rejects — retries internally with backoff
+}
+
 async function syncBattery() {
   if (!anker.configured) return;
+  // MQTT streaming active — REST is only the fallback for when it's down.
+  if (batteryMqtt?.connected) return;
   try {
     const info = await anker.getBatteryInfo();
     if (info) {
       latestBattery = info;
       saveBatterySnapshot(info);
+      startBatteryMqtt();
     }
   } catch (err) {
     console.warn(`[battery] sync failed: ${err.message}`);
@@ -838,6 +859,7 @@ function gracefulShutdown() {
   shuttingDown = true;
 
   poller.stop();
+  batteryMqtt?.stop();
   // WebSocket clients would keep server.close() waiting forever — kill them.
   for (const ws of wss.clients) ws.terminate();
   wss.close();

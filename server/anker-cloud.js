@@ -118,7 +118,14 @@ export class AnkerClient {
     }
     this.loginPromise = this.login()
       .catch((err) => {
-        this.loginCooldownUntil = Date.now() + 10 * 60 * 1000;
+        // Escalating backoff: repeated attempts extend Anker's rate-limit
+        // window, so each consecutive failure cools down twice as long.
+        this.loginFailures = (this.loginFailures ?? 0) + 1;
+        const cooldownMs = Math.min(
+          10 * 60 * 1000 * 2 ** (this.loginFailures - 1),
+          60 * 60 * 1000,
+        );
+        this.loginCooldownUntil = Date.now() + cooldownMs;
         throw err;
       })
       .finally(() => {
@@ -183,6 +190,7 @@ export class AnkerClient {
     // API returns epoch seconds; normalize to ms.
     this.tokenExpiresAt =
       data.token_expires_at < 1e12 ? data.token_expires_at * 1000 : data.token_expires_at;
+    this.loginFailures = 0;
     this.saveTokenCache();
     console.log(`[cloud] logged in as ${data.nick_name ?? this.email} (${data.country_code})`);
     return data;

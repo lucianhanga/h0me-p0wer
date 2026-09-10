@@ -147,6 +147,29 @@ EPIPE noise on every client disconnect).
 - `/api/stats/overview` → `flows`: today's kWh per flow (trapezoid over
   snapshots/battery_snapshots). Dashboard tiles: Home today, PV today.
 - Battery sync is every 30 s (1 scen_info call; siteId cached after first).
+  Once the first REST sync yields the battery SN, `server/mqtt.js`
+  (`AnkerMqtt`) takes over with realtime MQTT push (see below); REST stays as
+  fallback whenever MQTT is disconnected.
+
+## Battery realtime via MQTT (2026-09-10)
+
+- Same channel as the Anker app: `POST app/devicemanage/get_user_mqtt_info`
+  returns endpoint + client certs; `mqtts://<endpoint>:8883` with
+  ca/cert/key, clientId `{thing_name}_{5 random digits}`, clean session.
+- Topics: subscribe `dt/{app_name}/{pn}/{sn}/`, publish commands to
+  `cmd/{app_name}/{pn}/{sn}/req` (pn=A17C3). MQTT payload is a JSON envelope
+  (`head` + `payload`); the inner `data` is base64 of the binary message.
+- Binary message: `FF 09` + LE length (incl. checksum) + pattern
+  (`03 00 0f` send / `03 01 0f` recv) + 2-byte msgtype + optional increment
+  byte (absent when byte 9 is a field name a0–a9) + TLV fields (1-byte name,
+  1-2-byte LE length incl. type byte, type tag < 0x10: 00 str, 01 ui, 02 sile,
+  03 var, 04 bin, 05 sfle) + XOR checksum (xor of all bytes incl. itself = 0).
+- Telemetry `0405` only streams after publishing the realtime trigger `0057`
+  (fields a1=22, a2=on, a3=timeout LE32, fe=unix ts LE32); re-sent every
+  4 min (max timeout 600 s). Field map = community `_A17C1_0405`: soc `ad`,
+  discharge `b7`×0.01, charge `b0`×0.01, PV `ab`×0.1.
+- `AnkerMqtt.start()` never rejects; reconnect doubles backoff to 5 min and
+  re-fetches mqtt info (fresh certs). Failures can never crash the server.
 
 ## Battery: Solarbank 2 E1600 Plus (epic #25, done 2026-09-10)
 
