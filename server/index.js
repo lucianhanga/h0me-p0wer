@@ -126,6 +126,26 @@ app.get("/api/timeseries", (req, res) => {
   // anchor values are at most 20 min apart — interpolation only ever crosses
   // the distance between two real measurements.
   const anchors = [...acc.keys()].sort((a, b) => a - b);
+
+  // Phase shares (l_i / grid) at anchors with local data; used to split the
+  // grid total proportionally in bridged buckets so phase lines stay
+  // continuous. Anchors without local data inherit the nearest known share.
+  function sharesAt(bt) {
+    const b = acc.get(bt);
+    if (!b?.grid?.c || !b.l1?.c || !b.l2?.c || !b.l3?.c) return null;
+    const g = b.grid.s / b.grid.c;
+    if (Math.abs(g) < 1) return null;
+    return [b.l1.s / b.l1.c / g, b.l2.s / b.l2.c / g, b.l3.s / b.l3.c / g];
+  }
+  const anchorShares = anchors.map(sharesAt);
+  const nearestShares = (i) => {
+    for (let d = 0; d < anchors.length; d++) {
+      if (anchorShares[i - d]) return anchorShares[i - d];
+      if (anchorShares[i + d]) return anchorShares[i + d];
+    }
+    return null;
+  };
+
   for (let i = 1; i < anchors.length; i++) {
     const bt0 = anchors[i - 1];
     const bt1 = anchors[i];
@@ -134,10 +154,18 @@ app.get("/api/timeseries", (req, res) => {
     if (!c0 || !c1) continue;
     const v0 = c0.s / c0.c;
     const v1 = c1.s / c1.c;
+    const sh0 = anchorShares[i - 1] ?? nearestShares(i - 1);
+    const sh1 = anchorShares[i] ?? nearestShares(i);
     for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
       if (t < from || t > to || acc.has(t)) continue;
       const frac = (t - bt0) / (bt1 - bt0);
-      add(t, "grid", v0 + (v1 - v0) * frac);
+      const grid = v0 + (v1 - v0) * frac;
+      add(t, "grid", grid);
+      if (sh0 && sh1) {
+        add(t, "l1", grid * (sh0[0] + (sh1[0] - sh0[0]) * frac));
+        add(t, "l2", grid * (sh0[1] + (sh1[1] - sh0[1]) * frac));
+        add(t, "l3", grid * (sh0[2] + (sh1[2] - sh0[2]) * frac));
+      }
     }
   }
 
@@ -163,6 +191,39 @@ app.get("/api/timeseries", (req, res) => {
       l3: b ? round(b.l3) : null,
       solar: b ? round(b.solar) : null,
     });
+  }
+
+  // Post-pass: cloud anchor buckets have grid but no phase split. Fill them
+  // proportionally, interpolating shares between the nearest phase-bearing
+  // buckets left and right, so phase lines have no single-bucket holes.
+  const shareOf = (r) =>
+    r.grid != null && r.l1 != null && Math.abs(r.grid) >= 1
+      ? [r.l1 / r.grid, r.l2 / r.grid, r.l3 / r.grid]
+      : null;
+  const leftShares = new Array(data.length).fill(null);
+  const rightShares = new Array(data.length).fill(null);
+  let last = null;
+  for (let i = 0; i < data.length; i++) {
+    const s = shareOf(data[i]);
+    if (s) last = s;
+    leftShares[i] = last;
+  }
+  last = null;
+  for (let i = data.length - 1; i >= 0; i--) {
+    const s = shareOf(data[i]);
+    if (s) last = s;
+    rightShares[i] = last;
+  }
+  for (let i = 0; i < data.length; i++) {
+    const r = data[i];
+    if (r.grid == null || r.l1 != null) continue;
+    const ls = leftShares[i];
+    const rs = rightShares[i];
+    const sh = ls && rs ? ls.map((v, k) => (v + rs[k]) / 2) : (ls ?? rs);
+    if (!sh) continue;
+    r.l1 = Math.round(r.grid * sh[0] * 100) / 100;
+    r.l2 = Math.round(r.grid * sh[1] * 100) / 100;
+    r.l3 = Math.round(r.grid * sh[2] * 100) / 100;
   }
 
   res.json({ ok: true, bucketMs, data });
