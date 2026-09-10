@@ -87,7 +87,7 @@ export default function LivePower() {
               </div>
             </div>
             <div className="card">
-              <div className="card-label">Secondary CT (solar)</div>
+              <div className="card-label">Solar CT</div>
               <div className="card-value">
                 {solar != null ? `${Math.abs(solar)} W` : "—"}
               </div>
@@ -115,7 +115,8 @@ export default function LivePower() {
             </div>
           </div>
 
-          <table>
+          <div className="table-wrap">
+            <table>
             <thead>
               <tr>
                 <th>Phase</th>
@@ -136,7 +137,8 @@ export default function LivePower() {
                 </tr>
               ))}
             </tbody>
-          </table>
+            </table>
+          </div>
           <p className="muted">last update: {new Date(snapshot.timestamp).toLocaleTimeString()}</p>
         </>
       )}
