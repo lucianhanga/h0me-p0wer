@@ -182,7 +182,15 @@ export default function TimeSeriesChart() {
     const rowsRef = { rows: [], bucketMs: 5000 };
 
     function applyRows(rows) {
+      // Scale the battery/PV axis to the data actually in view (a one-time
+      // 800 W spike would otherwise flatten normal ~50 W values forever).
+      let battMax = 0;
+      for (const r of rows) {
+        battMax = Math.max(battMax, Math.abs(r.batt ?? 0), Math.abs(r.pv ?? 0));
+      }
+      const battAxisMax = Math.max(100, Math.ceil((battMax * 1.2) / 50) * 50);
       chart.setOption({
+        yAxis: [{}, { max: battAxisMax }],
         series: SERIES.map((s) => ({
           name: s.name ?? s.key,
           data: rows.map((r) => [r.t, r[s.key]]),
