@@ -19,6 +19,7 @@ header {
   display: flex;
   align-items: baseline;
   gap: 1rem;
+  flex-wrap: wrap;
   border-bottom: 1px solid #2a3238;
   margin-bottom: 1.5rem;
 }
@@ -31,6 +32,43 @@ nav {
 nav button.nav-active {
   border-color: #f7a44f;
   color: #f7a44f;
+}
+
+/* --- Responsive (phones <=600px, tablets <=1024px) ----------------------- */
+
+/* Comfortable touch targets everywhere (Apple HIG: 44 pt). */
+@media (pointer: coarse) {
+  button,
+  select {
+    min-height: 44px;
+    padding: 0.5rem 1rem;
+  }
+}
+
+@media (max-width: 1024px) {
+  .app {
+    max-width: 100%;
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .app {
+    padding: 0.75rem;
+  }
+
+  h1 {
+    font-size: 1.2rem;
+  }
+
+  header {
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  section {
+    margin-bottom: 1.5rem;
+  }
 }
 
 h1 {
