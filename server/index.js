@@ -46,9 +46,12 @@ export function localDate(d = new Date()) {
 }
 
 const poller = new MeterPoller(METER_IP, METER_PORT);
+// CLOUD_ENABLED=false runs meter-only: no Anker login attempts at all
+// (credentials stay in .env for when the throttle clears).
+const cloudEnabled = process.env.CLOUD_ENABLED !== "false";
 const anker = new AnkerClient(
-  process.env.ANKER_EMAIL,
-  process.env.ANKER_PASSWORD,
+  cloudEnabled ? process.env.ANKER_EMAIL : "",
+  cloudEnabled ? process.env.ANKER_PASSWORD : "",
   process.env.ANKER_COUNTRY ?? "DE",
 );
 
