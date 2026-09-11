@@ -141,6 +141,9 @@ EPIPE noise on every client disconnect).
 - `GET /api/flow` — computed flows: grid import/export (meter), battery
   discharge/charge, PV split (`pvToBattery = min(pvW, chargeW)`,
   `pvToHome = pvW − pvToBattery`), `home = gridImport + battDischarge + pvToHome`.
+  Each group carries its own source timestamp (`grid.ts` = meter snapshot,
+  `battery.ts`/`pv.ts` = battery reading; grid's is an ISO string, battery's
+  ms epoch) — the flow diagram shows it under each active edge's watt label.
 - Live page: SVG `FlowDiagram` (PV/Grid/Home/Battery nodes, animated dashed
   edges in flow direction, 5 s refresh).
 - Chart: `pv` series (from `battery_snapshots.pv_w`) on the battery y-axis.
@@ -170,6 +173,16 @@ EPIPE noise on every client disconnect).
   discharge `b7`×0.01, charge `b0`×0.01, PV `ab`×0.1.
 - `AnkerMqtt.start()` never rejects; reconnect doubles backoff to 5 min and
   re-fetches mqtt info (fresh certs). Failures can never crash the server.
+- Stall handling (2026-09-11): a connected-but-silent session is detected by a
+  watchdog (`lastDataAt`/`connectedAt` older than 120 s → `client.end(true)` →
+  reconnect). Backoff resets only when telemetry ARRIVES, not on connect —
+  otherwise a broker that accepts but routes nothing churns every 2 min.
+  `syncBattery()` gates REST on `batteryMqtt.isFresh()` (not `.connected`), so
+  a stalled MQTT session falls back to 30 s REST automatically. `MQTT_DEBUG=1`
+  logs every inbound message/parse failure. Seen 2026-09-11: broker accepted
+  connack/suback(QoS 1)/puback but routed ZERO messages for hours (trigger
+  format verified identical to community `mqtt.py` publish) — an Anker-side
+  condition; REST fallback kept data fresh throughout.
 
 ## Battery: Solarbank 2 E1600 Plus (epic #25, done 2026-09-10)
 
@@ -207,11 +220,25 @@ EPIPE noise on every client disconnect).
 
 ## Second page: overview dashboard (epic #8, done 2026-09-09)
 
+## Live-tab shell + version (2026-09-11)
+
+- 4-tab shell in `App.jsx` (Live/Graph/Dashboard/History, hash-routed); only
+  Live is implemented, the rest are placeholders and old components are parked
+  under `web/src/parked/` (not bundled).
+- App version comes from the ROOT `package.json` via `define: __APP_VERSION__`
+  in `web/vite.config.js`, shown discreetly as `.app-version` in the header.
+  Bump the root version when the app changes.
+- Details phase/PV cards (`.phase-cards`) render at ALL widths (wrapping row
+  on desktop, stacked on phones) — they were `display:none` above 600px after
+  the details table was removed, which emptied the section on desktop.
+- `nav` wraps (`flex-wrap`) and phone buttons are compact so nothing forces
+  horizontal scrolling.
+
 ## Responsive design (epic #13, done 2026-09-10)
 
 - Breakpoints: phone ≤600px, tablet ≤1024px; 44px touch targets on
   `pointer: coarse`; fluid `.app` container.
-- Live page: 2-col card grid on phones, table in `.table-wrap` (overflow-x).
+- Live page: 2-col card grid on phones; `.phase-cards` stacked column.
 - Main chart: 240px height on phones (matchMedia), legend `type: "scroll"`,
   `hideOverlap: true` on axis labels; touch pinch/drag zoom is native in
   ECharts inside dataZoom.

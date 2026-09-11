@@ -93,6 +93,7 @@ app.get("/api/battery/live", (req, res) => {
 // - home consumption = grid import + battery discharge + PV direct.
 app.get("/api/flow", (req, res) => {
   const grid = poller.snapshot?.primary?.totalPower ?? null;
+  const gridTs = poller.snapshot?.timestamp ?? null;
   const b = latestBattery ?? getLatestBattery();
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
@@ -105,11 +106,12 @@ app.get("/api/flow", (req, res) => {
       grid: {
         import: grid != null ? Math.max(grid, 0) : null,
         export: grid != null ? Math.max(-grid, 0) : null,
+        ts: gridTs,
       },
       battery: b
-        ? { soc: b.soc, discharge: b.outputW, charge: chargeW, name: b.name ?? "Solarbank" }
+        ? { soc: b.soc, discharge: b.outputW, charge: chargeW, name: b.name ?? "Solarbank", ts: b.ts ?? null }
         : null,
-      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome },
+      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null },
       home: {
         consumption:
           grid != null ? Math.max(grid, 0) + (b?.outputW ?? 0) + pvToHome : null,
@@ -702,6 +704,7 @@ async function syncCloudHistory() {
     try {
       const data = await anker.getDeviceEnergyAnalysis({ deviceSn: sn, ...j });
       saveCloudTrend(sn, j.type, j.startTime, data?.data_trend ?? []);
+      lastCloudOkAt = Date.now();
     } catch (err) {
       console.warn(`[cloud-sync] ${j.type} failed: ${err.message}`);
       break; // likely rate-limited or login issue — stop this round
@@ -865,8 +868,9 @@ function startBatteryMqtt() {
 
 async function syncBattery() {
   if (!anker.configured) return;
-  // MQTT streaming active — REST is only the fallback for when it's down.
-  if (batteryMqtt?.connected) return;
+  // MQTT streaming active and delivering — REST is only the fallback for when
+  // it's down or silently stalled (no telemetry for 2 min).
+  if (batteryMqtt?.isFresh()) return;
   try {
     const info = await anker.getBatteryInfo();
     if (info) {

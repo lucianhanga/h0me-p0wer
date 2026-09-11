@@ -33,6 +33,14 @@ header {
 nav {
   display: flex;
   gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.app-version {
+  color: #8b98a5;
+  font-size: 0.75rem;
+  margin-left: auto;
+  align-self: center;
 }
 
 nav button.nav-active {
@@ -70,6 +78,12 @@ nav button.nav-active {
   header {
     gap: 0.5rem;
     margin-bottom: 1rem;
+  }
+
+  /* Keep controls compact so nothing overflows the viewport width. */
+  nav button {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
   }
 
   section {
@@ -114,10 +128,40 @@ section {
   overflow-x: auto;
 }
 
-/* Per-phase mini cards shown on phones instead of the table
-   (Nielsen Norman mobile-table pattern: rows become cards). */
+/* Per-phase mini cards: a wrapping row on wide screens, stacked on phones. */
 .phase-cards {
-  display: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.phase-card {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  flex: 1 1 180px;
+}
+
+.phase-name {
+  color: #8b98a5;
+  font-weight: 600;
+}
+
+.phase-power {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+
+.phase-detail {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  margin-left: auto;
 }
 
 @media (max-width: 600px) {
@@ -144,41 +188,12 @@ section {
     font-size: 1.3rem;
   }
 
-  .table-wrap {
-    display: none;
-  }
-
   .phase-cards {
-    display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-    margin: 0.5rem 0;
   }
 
   .phase-card {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    background: #1a2128;
-    border: 1px solid #2a3238;
-    border-radius: 8px;
-    padding: 0.65rem 1rem;
-  }
-
-  .phase-name {
-    color: #8b98a5;
-    font-weight: 600;
-  }
-
-  .phase-power {
-    font-size: 1.15rem;
-    font-weight: 600;
-  }
-
-  .phase-detail {
-    color: #8b98a5;
-    font-size: 0.8rem;
-    margin-left: auto;
+    flex: none;
   }
 
   table {
