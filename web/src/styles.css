@@ -449,9 +449,44 @@ pre {
   }
 }
 
+/* Landscape phones: dvh already excludes the browser toolbars, so a big fixed
+   subtraction would shrink the chart to a strip. Compact the page chrome to
+   ~100px instead (non-sticky header, 32px buttons, hint hidden) and subtract
+   only that, so chart + chrome fit the viewport without scrolling. */
 @media (orientation: landscape) and (max-height: 500px) {
+  .app {
+    padding: 0.5rem 1rem;
+  }
+
+  header {
+    position: static;
+    padding: 0.25rem 0;
+    margin-bottom: 0.5rem;
+  }
+
+  header h1 {
+    font-size: 1.1rem;
+    margin: 0.25rem 0;
+  }
+
+  nav button,
+  .controls button {
+    min-height: 32px;
+    padding: 0.25rem 0.6rem;
+  }
+
+  .controls {
+    margin-bottom: 0.5rem;
+  }
+
   .chart-box {
-    height: calc(100dvh - 170px);
+    height: calc(100dvh - 100px);
+  }
+
+  /* The hint line under the chart costs height the landscape phone
+     doesn't have (it was already being clipped by the viewport). */
+  .chart-box + p {
+    display: none;
   }
 }
 
