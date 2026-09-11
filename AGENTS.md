@@ -223,9 +223,10 @@ EPIPE noise on every client disconnect).
 ## Live-tab shell + version (2026-09-11)
 
 - 4-tab shell in `App.jsx` (Live/Graph/Dashboard/History, hash-routed).
-  Live (`web/src/live/LiveTab.jsx`) and Graph (`web/src/graph/GraphTab.jsx` —
-  the ECharts timeseries chart, unparked 2026-09-11) are implemented;
-  Dashboard/History are placeholders, old components parked under
+  Live (`web/src/live/LiveTab.jsx`), Graph (`web/src/graph/GraphTab.jsx`) and
+  Dashboard (`web/src/dashboard/`, unparked 2026-09-11: totals + cost tiles,
+  day profile, week/month/year kWh bars, battery SOC tile) are implemented;
+  History is a placeholder, `SiteInfo.jsx` still parked under
   `web/src/parked/` (not bundled).
 - App version comes from the ROOT `package.json` via `define: __APP_VERSION__`
   in `web/vite.config.js`, shown discreetly as `.app-version` in the header.
