@@ -164,6 +164,14 @@ export class AnkerMqtt {
     this.loggedFirstData = false;
     this.reconnectTimer = null;
     this.triggerTimer = null;
+    this.watchdogTimer = null;
+    this.lastDataAt = null; // last telemetry message received
+    this.connectedAt = null;
+  }
+
+  // True only when telemetry is actually flowing (not merely connected).
+  isFresh(maxAgeMs = 120 * 1000) {
+    return this.connected && this.lastDataAt != null && Date.now() - this.lastDataAt < maxAgeMs;
   }
 
   // Never rejects: any failure is logged and retried with backoff so MQTT can
@@ -198,7 +206,9 @@ export class AnkerMqtt {
     });
     this.client.on("connect", () => {
       this.connected = true;
-      this.backoffMs = 5000;
+      this.connectedAt = Date.now();
+      // NOTE: backoff is reset only when telemetry actually arrives (#onMessage),
+      // not here — a connect that never delivers data must keep escalating.
       console.log(`[mqtt] connected to ${info.endpoint_addr}, subscribing to battery ${this.sn}`);
       const topic = `dt/${info.app_name}/${this.pn}/${this.sn}/`;
       this.client.subscribe(topic, (err) => {
@@ -208,6 +218,21 @@ export class AnkerMqtt {
       // The trigger expires (max 600 s) — re-send periodically while connected.
       this.triggerTimer = setInterval(() => this.#sendRealtimeTrigger(), 240 * 1000);
       this.triggerTimer.unref();
+      // Stall watchdog: a half-open connection emits no close/error and the
+      // publish calls fail silently, so detect missing telemetry and force a
+      // reconnect (end() triggers the close handler below).
+      this.watchdogTimer = setInterval(() => {
+        const ref = this.lastDataAt ?? this.connectedAt;
+        if (this.connected && ref != null && Date.now() - ref > 120 * 1000) {
+          console.warn("[mqtt] no telemetry for 120s — connection stalled, forcing reconnect");
+          try {
+            this.client.end(true);
+          } catch {
+            /* already gone */
+          }
+        }
+      }, 30 * 1000);
+      this.watchdogTimer.unref();
     });
     this.client.on("message", (topic, payload) => this.#onMessage(topic, payload));
     this.client.on("error", (err) => {
@@ -216,6 +241,7 @@ export class AnkerMqtt {
     this.client.on("close", () => {
       this.connected = false;
       clearInterval(this.triggerTimer);
+      clearInterval(this.watchdogTimer);
       if (!this.stopped) {
         console.warn(`[mqtt] disconnected — reconnecting in ${this.backoffMs / 1000}s`);
         this.#scheduleReconnect();
@@ -259,7 +285,9 @@ export class AnkerMqtt {
           data: hexdata.toString("base64"),
         }),
       });
-      this.client.publish(`cmd/${info.app_name}/${this.pn}/${this.sn}/req`, message);
+      this.client.publish(`cmd/${info.app_name}/${this.pn}/${this.sn}/req`, message, (err) => {
+        if (err) console.warn(`[mqtt] realtime trigger publish failed: ${err.message}`);
+      });
     } catch (err) {
       console.warn(`[mqtt] realtime trigger failed: ${err.message}`);
     }
@@ -269,10 +297,21 @@ export class AnkerMqtt {
     try {
       const envelope = JSON.parse(payload.toString());
       const inner = JSON.parse(envelope?.payload ?? "{}");
-      if (!inner.data) return;
+      if (!inner.data) {
+        if (process.env.MQTT_DEBUG)
+          console.log(`[mqtt] msg without data on ${topic}: ${payload.toString().slice(0, 200)}`);
+        return;
+      }
       const msg = parseDeviceMessage(Buffer.from(inner.data, "base64"));
-      if (!msg) return; // bad checksum or not a Solix binary message
-      if (msg.msgtype !== MSGTYPE_TELEMETRY) return;
+      if (!msg) {
+        if (process.env.MQTT_DEBUG)
+          console.log(`[mqtt] unparseable device message: ${inner.data.slice(0, 120)}`);
+        return; // bad checksum or not a Solix binary message
+      }
+      if (msg.msgtype !== MSGTYPE_TELEMETRY) {
+        if (process.env.MQTT_DEBUG) console.log(`[mqtt] non-telemetry msgtype ${msg.msgtype}`);
+        return;
+      }
 
       const out = { ts: Date.now() };
       for (const [hexName, def] of Object.entries(FIELDS_0405)) {
@@ -300,6 +339,8 @@ export class AnkerMqtt {
             `charge=${data.chargeW}W pv=${data.pvW}W`,
         );
       }
+      this.lastDataAt = Date.now();
+      this.backoffMs = 5000; // real data arrived — connection is healthy
       this.onData?.(data);
     } catch (err) {
       console.warn(`[mqtt] message parse failed: ${err.message}`);
@@ -310,6 +351,7 @@ export class AnkerMqtt {
     this.stopped = true;
     clearTimeout(this.reconnectTimer);
     clearInterval(this.triggerTimer);
+    clearInterval(this.watchdogTimer);
     try {
       this.client?.end(true);
     } catch {

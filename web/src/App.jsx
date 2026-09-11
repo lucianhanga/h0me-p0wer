@@ -43,6 +43,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <span className="app-version">v{__APP_VERSION__}</span>
       </header>
       <main>{page === "live" ? <LiveTab /> : <Placeholder name={page} />}</main>
     </div>
