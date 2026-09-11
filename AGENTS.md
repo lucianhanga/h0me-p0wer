@@ -244,8 +244,13 @@ EPIPE noise on every client disconnect).
   `pointer: coarse`; fluid `.app` container.
 - Live page: 2-col card grid on phones; `.phase-cards` stacked column.
 - Main chart: height is CSS-driven (`.chart-box`: 340px desktop, 240px phone,
-  `calc(100dvh - 170px)` on landscape phones ≤500px high) so rotation resizes
+  `calc(100dvh - 100px)` on landscape phones ≤500px high) so rotation resizes
   via the chart's ResizeObserver — do NOT set the height inline in JS again.
+  Landscape phones also compact the page chrome (non-sticky header, 32px
+  buttons, hint hidden): `dvh` already excludes the browser toolbars, so the
+  old fixed `170px` subtraction shrank the chart to a ~130px strip (fixed
+  2026-09-11 after headless-Chrome measurement: innerHeight ≈ 303 on an
+  844×390 screen).
   Legend `type: "scroll"`, `hideOverlap: true` on axis labels; touch
   pinch/drag zoom is native in ECharts inside dataZoom.
 - Tiles: period grid uses `minmax(min(320px,100%),1fr)` so it never overflows.
