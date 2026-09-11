@@ -227,7 +227,8 @@ EPIPE noise on every client disconnect).
   under `web/src/parked/` (not bundled).
 - App version comes from the ROOT `package.json` via `define: __APP_VERSION__`
   in `web/vite.config.js`, shown discreetly as `.app-version` in the header.
-  Bump the root version when the app changes.
+  Bump the root version when the app changes. The Dockerfile's webbuild stage
+  must `COPY package.json /app/package.json` for this (it only copies `web/`).
 - Details phase/PV cards (`.phase-cards`) render at ALL widths (wrapping row
   on desktop, stacked on phones) — they were `display:none` above 600px after
   the details table was removed, which emptied the section on desktop.

@@ -4,6 +4,8 @@ WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
+# vite.config.js reads the app version from the ROOT package.json
+COPY package.json /app/package.json
 RUN npm run build
 
 # --- Stage 2: runtime -------------------------------------------------------
