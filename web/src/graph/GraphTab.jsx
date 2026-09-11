@@ -48,12 +48,13 @@ export default function GraphTab() {
   useEffect(() => {
     // Smaller chart + scrollable legend on phones; touch pinch/drag zoom is
     // built into ECharts' inside dataZoom, nothing extra needed there.
+    // Height comes from CSS (.chart-box, incl. landscape rule) so rotation
+    // resizes via the ResizeObserver below — no JS re-init needed.
     const isPhone = window.matchMedia("(max-width: 600px)").matches;
-    const chartHeight = isPhone ? 240 : 340;
     const chart = echarts.init(containerRef.current, null, {
       renderer: "canvas",
       width: containerRef.current.clientWidth,
-      height: chartHeight,
+      height: containerRef.current.clientHeight,
     });
 
     chart.setOption({
@@ -357,13 +358,7 @@ export default function GraphTab() {
           </span>
         )}
       </div>
-      <div
-        ref={containerRef}
-        style={{
-          width: "100%",
-          height: window.matchMedia("(max-width: 600px)").matches ? 240 : 340,
-        }}
-      />
+      <div ref={containerRef} className="chart-box" />
       <p className="muted">drag to pan · scroll to zoom · drag the slider below the chart</p>
     </div>
   );

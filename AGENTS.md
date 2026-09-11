@@ -242,9 +242,11 @@ EPIPE noise on every client disconnect).
 - Breakpoints: phone ≤600px, tablet ≤1024px; 44px touch targets on
   `pointer: coarse`; fluid `.app` container.
 - Live page: 2-col card grid on phones; `.phase-cards` stacked column.
-- Main chart: 240px height on phones (matchMedia), legend `type: "scroll"`,
-  `hideOverlap: true` on axis labels; touch pinch/drag zoom is native in
-  ECharts inside dataZoom.
+- Main chart: height is CSS-driven (`.chart-box`: 340px desktop, 240px phone,
+  `calc(100dvh - 170px)` on landscape phones ≤500px high) so rotation resizes
+  via the chart's ResizeObserver — do NOT set the height inline in JS again.
+  Legend `type: "scroll"`, `hideOverlap: true` on axis labels; touch
+  pinch/drag zoom is native in ECharts inside dataZoom.
 - Tiles: period grid uses `minmax(min(320px,100%),1fr)` so it never overflows.
 - **CSS comments are `/* */` only** — a `//` comment once silently swallowed
   the `.tiles` rule (tiles rendered full-width stacked).
