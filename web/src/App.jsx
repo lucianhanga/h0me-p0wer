@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
+import Dashboard from "./dashboard/Dashboard.jsx";
 
 const PAGES = [
   { key: "live", label: "Live" },
@@ -51,6 +52,8 @@ export default function App() {
           <LiveTab />
         ) : page === "graph" ? (
           <GraphTab />
+        ) : page === "dashboard" ? (
+          <Dashboard />
         ) : (
           <Placeholder name={page} />
         )}
