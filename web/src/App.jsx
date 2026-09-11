@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
+import GraphTab from "./graph/GraphTab.jsx";
 
 const PAGES = [
   { key: "live", label: "Live" },
@@ -45,13 +46,21 @@ export default function App() {
         </nav>
         <span className="app-version">v{__APP_VERSION__}</span>
       </header>
-      <main>{page === "live" ? <LiveTab /> : <Placeholder name={page} />}</main>
+      <main>
+        {page === "live" ? (
+          <LiveTab />
+        ) : page === "graph" ? (
+          <GraphTab />
+        ) : (
+          <Placeholder name={page} />
+        )}
+      </main>
     </div>
   );
 }
 
-// Parked tabs: content intentionally left out for now (previous components
-// live untouched in web/src/parked/, just not bundled).
+// Remaining parked tabs: old components live untouched in web/src/parked/,
+// just not bundled.
 function Placeholder({ name }) {
   return <p className="muted">{name} — coming soon</p>;
 }

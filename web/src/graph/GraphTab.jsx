@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import echarts from "./echarts.js";
+import echarts from "../echarts.js";
 
 // Unified power chart on Apache ECharts.
 //
@@ -40,7 +40,7 @@ const SHORTCUTS = [
 
 const LIVE_EDGE_MS = 2 * 60 * 1000; // consider "live" when right edge within 2 min of now
 
-export default function TimeSeriesChart() {
+export default function GraphTab() {
   const containerRef = useRef(null);
   const apiRef = useRef(null); // { setSpan(ms) } for the span buttons
   const [stats, setStats] = useState(null); // {avg, min, max, bucketMs}
