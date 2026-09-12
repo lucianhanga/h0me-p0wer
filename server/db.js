@@ -289,3 +289,36 @@ export function getCloudDayPower(sn, fromDate, toDate) {
     power: r.power,
   }));
 }
+
+// --- Welcome tab: key-value cache (geocode, PVGIS, AI result) --------------
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS welcome_store (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL
+  )
+`);
+
+const kvGetStmt = db.prepare(`SELECT value, fetched_at FROM welcome_store WHERE key = ?`);
+const kvSetStmt = db.prepare(
+  `INSERT OR REPLACE INTO welcome_store (key, value, fetched_at) VALUES (?, ?, ?)`,
+);
+
+export function kvGet(key) {
+  const r = kvGetStmt.get(key);
+  return r ? { value: JSON.parse(r.value), fetchedAt: r.fetched_at } : null;
+}
+
+export function kvSet(key, value) {
+  kvSetStmt.run(key, JSON.stringify(value), Date.now());
+}
+
+// First battery sample at/after a moment (start-of-day SOC at sunrise).
+const selectFirstBatteryAfter = db.prepare(
+  `SELECT ts, soc FROM battery_snapshots WHERE ts >= ? AND soc IS NOT NULL ORDER BY ts ASC LIMIT 1`,
+);
+
+export function getFirstBatteryAfter(fromMs) {
+  return selectFirstBatteryAfter.get(fromMs) ?? null;
+}

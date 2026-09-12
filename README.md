@@ -7,6 +7,17 @@ monitoring and historical energy visualization, built as a proof of concept.
 
 ## Features
 
+- **AI Welcome tab** (landing page): a morning briefing written by an LLM of
+  your choice (any OpenAI-compatible endpoint — Kimi `k3` by default) —
+  today's weather with a sunrise→sunset arc, week/month sun outlook, estimated
+  production of your (planned or real) PV system, start-of-day snapshot vs.
+  predicted end-of-day battery/house state, and savings in € at your tariff.
+  The server gathers the facts deterministically (Nominatim geocoding,
+  Open-Meteo forecast, PVGIS solar climatology — all free and keyless — plus
+  your local consumption/battery history) and makes ONE structured AI call,
+  cached 6 h (max 4 calls/day); a deterministic offline fallback keeps the tab
+  useful when the AI is unreachable. Configure via `HOME_ADDRESS`, `PV_*` and
+  `AI_*` in `.env`
 - **Live data, no cloud**: 5-second power readings (grid total, per-phase
   power/current/voltage, secondary CT) pulled directly from the meter over
   local **Modbus TCP** — Anker's officially supported local interface

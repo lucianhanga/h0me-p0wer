@@ -12,6 +12,7 @@ import { WebSocketServer } from "ws";
 import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
+import { registerWelcomeRoute } from "./welcome.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -617,6 +618,15 @@ app.get(
 );
 app.get("/api/cloud/devices", cloudRoute(() => anker.listDevices()));
 app.get("/api/cloud/bind-devices", cloudRoute(() => anker.getBindDevices()));
+
+// Welcome tab: AI briefing (geocode + weather + PVGIS + consumption + battery,
+// one structured AI call, 6 h cache). Deps read live in-memory state lazily
+// (latestBattery is declared later in this file — the closure only runs at
+// request time, after module evaluation finished).
+registerWelcomeRoute(app, {
+  getLiveBattery: () => latestBattery ?? getLatestBattery(),
+  getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+});
 app.get(
   "/api/cloud/energy",
   cloudRoute((req) => {
