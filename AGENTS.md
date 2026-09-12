@@ -75,7 +75,11 @@ EPIPE noise on every client disconnect).
 3. Emit EVERY bucket in the window (nulls where empty) — the old chart library
    needed this; ECharts doesn't, but the frontend still expects dense rows.
 4. Skip cloud points from still-open 20-min intervals (partial averages create
-   phantom dips at the cloud/local boundary).
+   phantom dips at the cloud/local boundary). Also drop a cloud anchor that is
+   EXACTLY 0 while BOTH neighboring closed intervals are > 200 W — the cloud
+   occasionally reports a bogus zero (seen 2026-09-11 23:40: ~581 → 0 → ~595)
+   that V-dips the line; zeros next to other ~0 values are kept (legit
+   low/export regions).
 5. Bridge consecutive **grid-bearing** buckets (local or cloud anchors) by
    linear interpolation — no cap; cloud anchors are ≤ 20 min apart wherever
    history exists, so interpolation never fabricates more than that. The
