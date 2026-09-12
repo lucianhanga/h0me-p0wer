@@ -20,10 +20,22 @@ export function registerWelcomeRoute(app, deps) {
       fetchPvgis(geo.lat, geo.lon, config.pv),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, deps });
-    const ai = config.ai.apiKey ? await callWelcomeAI(config, context) : buildFallback(config, context);
+    let ai;
+    let aiPowered = Boolean(config.ai.apiKey);
+    if (aiPowered) {
+      try {
+        ai = await callWelcomeAI(config, context);
+      } catch (err) {
+        console.warn(`[welcome] AI call failed (${err.message}) — deterministic fallback`);
+        ai = buildFallback(config, context);
+        aiPowered = false;
+      }
+    } else {
+      ai = buildFallback(config, context);
+    }
     const payload = {
       ...ai,
-      aiPowered: Boolean(config.ai.apiKey),
+      aiPowered,
       generatedAt: new Date().toISOString(),
       stale: false,
       // Ground truth owned by the server — never by the model.
@@ -56,7 +68,10 @@ export function registerWelcomeRoute(app, deps) {
       return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
     }
     const cached = kvGet(CACHE_KEY);
-    if (cached && Date.now() - cached.fetchedAt < AI_TTL_MS) {
+    // Fallback payloads self-heal: retry the AI after 15 min instead of
+    // letting one outage block AI briefings for the full 6 h TTL.
+    const ttl = cached?.value?.aiPowered === false ? 15 * 60 * 1000 : AI_TTL_MS;
+    if (cached && Date.now() - cached.fetchedAt < ttl) {
       return res.json({ ok: true, data: cached.value });
     }
     try {
