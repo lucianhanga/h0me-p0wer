@@ -85,6 +85,11 @@ EPIPE noise on every client disconnect).
    cadence, visible as the line dropping to zero). Cloud anchors are read one
    20-min interval past the window edges so gaps straddling the boundary
    still bridge (edge anchors are never emitted).
+6. `batt` and `pv` interpolate in their own passes between their own anchors
+   (samples every ~30 s, at night in pairs ~15 min apart). Battery rows are
+   also read one interval past the left edge (gap-straddling rule above).
+   The cloud battery day-trend has NO PV channel — pv must bridge between
+   pv-bearing anchors only, or cloud-only regions (overnight) stay null.
 
 ### Chart (ECharts)
 - Chosen over lightweight-charts: LWC's time axis is index-based (collapses

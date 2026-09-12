@@ -182,9 +182,14 @@ app.get("/api/timeseries", (req, res) => {
     if (r.gridMin != null) envelope.set(r.bt, { min: r.gridMin, max: r.gridMax });
   }
 
+  const CLOUD_INTERVAL_MS = 20 * 60 * 1000;
+
   // Source 1b: battery (Solarbank) snapshots every 30 s — signed power:
-  // discharge positive, charge negative; plus PV input watts.
-  for (const r of getBatteryHistory(from, to)) {
+  // discharge positive, charge negative; plus PV input watts. Read one
+  // interval past the left edge so batt/pv interpolation has a left anchor
+  // when the window starts inside a battery-data gap (at night rows arrive
+  // in pairs ~15 min apart — the same edge-anchor rule as the cloud pass).
+  for (const r of getBatteryHistory(from - CLOUD_INTERVAL_MS, to)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     add(bt, "batt", (r.output_w ?? 0) - (r.charge_w ?? 0));
     add(bt, "pv", r.pv_w ?? 0);
@@ -194,7 +199,6 @@ app.get("/api/timeseries", (req, res) => {
   // data (local wins). Still-open 20-min intervals are skipped — their
   // partial averages produce phantom dips.
   const sn = poller.snapshot?.meter?.sn;
-  const CLOUD_INTERVAL_MS = 20 * 60 * 1000;
   if (sn) {
     const fromDate = localDate(new Date(from - 86400000));
     const toDate = localDate(new Date(to));
@@ -309,6 +313,24 @@ app.get("/api/timeseries", (req, res) => {
       if (!b.batt && b0 && b1)
         add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
       if (!b.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
+    }
+  }
+
+  // PV interpolation pass with PV-bearing anchors only: battery CLOUD anchors
+  // carry no PV channel (the battery day-trend is signed battery power), so
+  // the pass above leaves pv null across cloud-only regions (e.g. overnight
+  // when the laptop slept and no local battery rows exist). Bridge between
+  // the local pv anchors that bracket such regions.
+  const pvAnchors = anchors.filter((bt) => acc.get(bt)?.pv);
+  for (let i = 1; i < pvAnchors.length; i++) {
+    const bt0 = pvAnchors[i - 1];
+    const bt1 = pvAnchors[i];
+    const p0 = acc.get(bt0).pv;
+    const p1 = acc.get(bt1).pv;
+    for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
+      if (t < from || t > to || acc.get(t)?.pv) continue;
+      const frac = (t - bt0) / (bt1 - bt0);
+      add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
     }
   }
 
