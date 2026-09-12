@@ -449,6 +449,12 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
+.src-eur {
+  color: #8b98a5;
+  font-size: 0.75rem;
+  margin-left: 0.3rem;
+}
+
 /* Battery SOC gauge (HA battery-card pattern) */
 .soc-row {
   display: flex;

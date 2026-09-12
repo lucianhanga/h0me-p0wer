@@ -653,6 +653,14 @@ app.get("/api/stats/overview", (req, res) => {
   for (const p of [byPeriod.week, byPeriod.month, byPeriod.year]) {
     p.homeKwh = r2(p.gridKwh + p.battKwh + p.pvKwh);
   }
+  // Money view per source: grid = spent, battery/PV = saved (discharge and
+  // direct PV are avoided grid import at the same tariff — overstated for a
+  // grid-charged battery, same caveat as costs.batterySavingsToday).
+  for (const p of Object.values(byPeriod)) {
+    p.gridEur = eur(p.gridKwh);
+    p.battEur = eur(p.battKwh);
+    p.pvEur = eur(p.pvKwh);
+  }
 
   res.json({
     ok: true,

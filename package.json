@@ -1,7 +1,7 @@
 {
   "name": "h0me-p0wer",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Dashboard for the Anker SOLIX Smart Meter Gen 2 (AE1X0) — live Modbus data + Anker cloud history",
   "scripts": {
     "setup": "npm --prefix server install && npm --prefix web install",

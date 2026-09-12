@@ -152,11 +152,12 @@ export function Tile({ title, main, sub, children }) {
 }
 
 // Consumption-by-source card: house total on top, then the three sources
-// with the same colors as the chart (grid/battery/PV).
+// with the same colors as the chart (grid/battery/PV). Grid € = spent,
+// battery/PV € = saved (avoided grid import at the same tariff).
 const SRC_ROWS = [
-  { key: "gridKwh", label: "Grid", color: "#f7a44f" },
-  { key: "battKwh", label: "Battery", color: "#c084fc" },
-  { key: "pvKwh", label: "PV", color: "#5fce80" },
+  { key: "gridKwh", eur: "gridEur", label: "Grid", color: "#f7a44f" },
+  { key: "battKwh", eur: "battEur", label: "Battery", color: "#c084fc", saved: true },
+  { key: "pvKwh", eur: "pvEur", label: "PV", color: "#5fce80", saved: true },
 ];
 
 function SourceCard({ title, data }) {
@@ -169,7 +170,13 @@ function SourceCard({ title, data }) {
           <div className="src-row" key={r.key}>
             <span className="src-dot" style={{ background: r.color }} />
             <span>{r.label}</span>
-            <span className="src-value">{data[r.key]} kWh</span>
+            <span className="src-value">
+              {data[r.key]} kWh
+              <span className="src-eur">
+                · €{data[r.eur]}
+                {r.saved ? " saved" : ""}
+              </span>
+            </span>
           </div>
         ))}
       </div>

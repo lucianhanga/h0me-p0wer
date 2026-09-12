@@ -255,6 +255,9 @@ EPIPE noise on every client disconnect).
   no PV channel — once panels exist, week/month/year PV needs a daily-rollup
   table (add it when panels arrive, not before).
 - Replaced the redundant "Home today"/"PV today" tiles.
+- Each source row also shows € (`gridEur` spent, `battEur`/`pvEur` "saved" =
+  avoided grid import at the same tariff — same grid-charged-battery caveat
+  as `costs.batterySavingsToday`).
 
 ## Second page: overview dashboard (epic #8, done 2026-09-09)
 
