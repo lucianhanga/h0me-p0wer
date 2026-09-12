@@ -134,6 +134,10 @@ EPIPE noise on every client disconnect).
 - Git identity is repo-local: `lucianhanga` + GitHub noreply email.
 - Headless screenshot tooling (Chrome/Playwright) was too slow on this machine;
   `docs/screenshot.png` is a manual capture.
+- Home-screen/PWA icons live in `web/public/` (`icon.svg` master, PNGs rendered
+  via headless Chrome). Chrome does NOT scale a bare SVG to tiny viewports
+  (renders it 1:1, cropped) — re-render sizes through a wrapper HTML with an
+  `<img style="width:Npx;height:Npx">` (see `git show` the icon commit).
 
 ## Ideas for next iterations
 
