@@ -50,11 +50,12 @@ export default function GraphTab() {
     // built into ECharts' inside dataZoom, nothing extra needed there.
     // Height comes from CSS (.chart-box, incl. landscape rule) so rotation
     // resizes via the ResizeObserver below — no JS re-init needed.
+    // Do NOT pass width/height to init: ECharts stores them in its opts and
+    // every later chart.resize() would re-apply the pinned init size instead
+    // of measuring the container (rotation bug 2026-09-12).
     const isPhone = window.matchMedia("(max-width: 600px)").matches;
     const chart = echarts.init(containerRef.current, null, {
       renderer: "canvas",
-      width: containerRef.current.clientWidth,
-      height: containerRef.current.clientHeight,
     });
 
     chart.setOption({
