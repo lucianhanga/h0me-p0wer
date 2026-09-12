@@ -50,11 +50,11 @@ export function parseWelcomeConfig(env = process.env) {
   };
 }
 
-export async function fetchJson(url, { timeoutMs = 10000, headers = {} } = {}) {
+export async function fetchJson(url, { timeoutMs = 10000, headers = {}, method, body } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, headers });
+    const res = await fetch(url, { signal: ctrl.signal, headers, method, body });
     if (!res.ok) throw new Error(`${res.status} ${res.statusText} from ${url.slice(0, 80)}`);
     return await res.json();
   } finally {

@@ -99,3 +99,118 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
       : { socNow: null, outputW: null, chargeW: null, sunriseSoc: sunriseBatt?.soc ?? null },
   };
 }
+
+import { fetchJson } from "./welcome-sources.js";
+
+export const WELCOME_SCHEMA = {
+  name: "welcome",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["greeting", "today", "week", "month", "production", "endOfDay", "savings"],
+    properties: {
+      greeting: { type: "string" },
+      today: {
+        type: "object", additionalProperties: false, required: ["summary", "icon"],
+        properties: {
+          summary: { type: "string" },
+          icon: { type: "string", enum: ["sun", "cloud-sun", "cloud", "rain", "snow"] },
+        },
+      },
+      week: { type: "object", additionalProperties: false, required: ["statement"], properties: { statement: { type: "string" } } },
+      month: { type: "object", additionalProperties: false, required: ["statement"], properties: { statement: { type: "string" } } },
+      production: {
+        type: "object", additionalProperties: false,
+        required: ["todayKwh", "weekKwh", "monthKwh", "reasoning"],
+        properties: {
+          todayKwh: { type: "number" }, weekKwh: { type: "number" }, monthKwh: { type: "number" },
+          reasoning: { type: "string" },
+        },
+      },
+      endOfDay: {
+        type: "object", additionalProperties: false,
+        required: ["batterySocEstimate", "toHouseKwh", "toBatteryKwh", "gridExportKwh", "note"],
+        properties: {
+          batterySocEstimate: { type: "number" }, toHouseKwh: { type: "number" },
+          toBatteryKwh: { type: "number" }, gridExportKwh: { type: "number" }, note: { type: "string" },
+        },
+      },
+      savings: {
+        type: "object", additionalProperties: false, required: ["todayEur", "monthEur", "note"],
+        properties: { todayEur: { type: "number" }, monthEur: { type: "number" }, note: { type: "string" } },
+      },
+    },
+  },
+};
+
+const SYSTEM_PROMPT = `You write the morning energy briefing for a home dashboard.
+Hard rules:
+- Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
+- The PV system is PLANNED, not installed: production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
+- Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
+- Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
+
+function validateAiResponse(j) {
+  for (const k of WELCOME_SCHEMA.schema.required) if (!(k in j)) throw new Error(`AI reply missing "${k}"`);
+  if (!WELCOME_SCHEMA.schema.properties.today.properties.icon.enum.includes(j.today?.icon)) {
+    throw new Error(`AI reply bad icon "${j.today?.icon}"`);
+  }
+  return j;
+}
+
+export async function callWelcomeAI(config, context) {
+  const user = JSON.stringify({ language: config.ai.language, ...context });
+  const body = (responseFormat) => ({
+    model: config.ai.model,
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: user },
+    ],
+    response_format: responseFormat,
+  });
+  const url = `${config.ai.baseUrl}/chat/completions`;
+  const headers = { Authorization: `Bearer ${config.ai.apiKey}`, "Content-Type": "application/json" };
+  try {
+    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_schema", json_schema: WELCOME_SCHEMA })) });
+    return validateAiResponse(JSON.parse(j.choices[0].message.content));
+  } catch (err) {
+    console.warn(`[welcome] structured AI call failed (${err.message}) — retrying with json_object`);
+    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_object" })) });
+    return validateAiResponse(JSON.parse(j.choices[0].message.content));
+  }
+}
+
+// Deterministic stand-in when the AI is unreachable: same response shape,
+// numbers prorated from PVGIS by today's forecast radiation vs. the month's
+// average, template prose instead of AI prose.
+export function buildFallback(config, context) {
+  const month = new Date().getMonth() + 1;
+  const monthKwh = context.solarClimatology?.monthly?.find((m) => m.month === month)?.kwh ?? null;
+  const daysInMonth = new Date(new Date().getFullYear(), month, 0).getDate();
+  const avgRad = 3.0; // rough Central-Europe yearly mean kWh/m²/day, used only to scale
+  const radToday = context.today?.radiationSumKwhM2 ?? avgRad;
+  const todayKwh = monthKwh != null ? Math.round(((monthKwh / daysInMonth) * (radToday / avgRad)) * 10) / 10 : null;
+  const weekKwh = monthKwh != null
+    ? Math.round(context.week.reduce((a, d) => a + ((monthKwh / daysInMonth) * ((d.radiationSumKwhM2 ?? avgRad) / avgRad)), 0) * 10) / 10
+    : null;
+  const icon = context.today == null ? "cloud" : context.today.weathercode < 2 ? "sun" : context.today.weathercode < 60 ? "cloud-sun" : context.today.weathercode < 80 ? "cloud" : "rain";
+  return {
+    greeting: `Welcome! ${context.weekday}, ${context.date} — sunrise ${context.sun.sunrise}, sunset ${context.sun.sunset}.`,
+    today: { summary: `Between ${context.today?.tempMin ?? "?"}°C and ${context.today?.tempMax ?? "?"}°C, about ${context.sun.sunHoursToday ?? "?"} h of sunshine.`, icon },
+    week: { statement: `Sunshine between ${Math.min(...context.week.map((d) => d.sunHours ?? 0))} h and ${Math.max(...context.week.map((d) => d.sunHours ?? 0))} h per day this week.` },
+    month: { statement: `Typical ${context.monthName} production for your setup: ~${monthKwh ?? "?"} kWh (PVGIS climatology).` },
+    production: { todayKwh, weekKwh, monthKwh, reasoning: "Prorated from PVGIS monthly average by forecast radiation (offline estimate)." },
+    endOfDay: {
+      batterySocEstimate: context.battery.socNow ?? 0,
+      toHouseKwh: context.consumption.monthToDateAvgImportKwh ?? 0,
+      toBatteryKwh: 0, gridExportKwh: 0,
+      note: "Offline estimate — based on your average consumption; the PV system is still planned.",
+    },
+    savings: {
+      todayEur: todayKwh != null ? Math.round(todayKwh * context.tariffEurPerKwh * 100) / 100 : 0,
+      monthEur: monthKwh != null ? Math.round(monthKwh * context.tariffEurPerKwh * 100) / 100 : 0,
+      note: `At ${context.tariffEurPerKwh} €/kWh, assuming full self-consumption.`,
+    },
+  };
+}
