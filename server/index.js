@@ -198,9 +198,14 @@ app.get("/api/timeseries", (req, res) => {
   if (sn) {
     const fromDate = localDate(new Date(from - 86400000));
     const toDate = localDate(new Date(to));
+    // Anchors reach one cloud interval past the window edges so interpolation
+    // can bridge gaps that straddle the boundary (the edge buckets otherwise
+    // stay null — a data outage ending just inside the window has no in-window
+    // left anchor). Edge anchors are never emitted (output starts at `from`).
+    const anchorFrom = from - CLOUD_INTERVAL_MS;
     const cloudBuckets = new Map(); // bt -> {s, c}
     for (const r of getCloudDayPower(sn, fromDate, toDate)) {
-      if (r.power == null || r.ts < from || r.ts > to) continue;
+      if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
       if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // interval not closed
       const bt = Math.floor(r.ts / bucketMs) * bucketMs;
       const cell = (cloudBuckets.get(bt) ?? cloudBuckets.set(bt, { s: 0, c: 0 }).get(bt));
@@ -215,7 +220,7 @@ app.get("/api/timeseries", (req, res) => {
     // snapshots haven't synced yet (e.g. right after server start).
     if (latestBattery?.sn) {
       for (const r of getCloudDayPower(latestBattery.sn, fromDate, toDate)) {
-        if (r.power == null || r.ts < from || r.ts > to) continue;
+        if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
         if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
         const bt = Math.floor(r.ts / bucketMs) * bucketMs;
         if (!acc.get(bt)?.batt) add(bt, "batt", r.power);
@@ -223,11 +228,14 @@ app.get("/api/timeseries", (req, res) => {
     }
   }
 
-  // Final pass: bridge consecutive data-bearing buckets (local or cloud
+  // Final pass: bridge consecutive GRID-bearing buckets (local or cloud
   // anchors) with linear interpolation, so the line is always continuous.
-  // This never fabricates long spans: wherever cloud history exists, real
-  // anchor values are at most 20 min apart — interpolation only ever crosses
-  // the distance between two real measurements.
+  // Anchors must be buckets that actually hold grid data: a bucket holding
+  // ONLY battery/PV data is not a grid anchor — treating it as one made the
+  // !c0/!c1 guard skip both adjacent intervals and left the bucket null
+  // (the periodic single-bucket dips, 2026-09-12). Wherever cloud history
+  // exists, real grid anchors are at most 20 min apart — interpolation only
+  // ever crosses the distance between two real measurements.
   const anchors = [...acc.keys()].sort((a, b) => a - b);
 
   // Phase shares (l_i / grid) at anchors with local data; used to split the
@@ -240,29 +248,29 @@ app.get("/api/timeseries", (req, res) => {
     if (Math.abs(g) < 1) return null;
     return [b.l1.s / b.l1.c / g, b.l2.s / b.l2.c / g, b.l3.s / b.l3.c / g];
   }
-  const anchorShares = anchors.map(sharesAt);
+  const gridAnchors = anchors.filter((bt) => acc.get(bt)?.grid);
+  const gridShares = gridAnchors.map(sharesAt);
   const nearestShares = (i) => {
-    for (let d = 0; d < anchors.length; d++) {
-      if (anchorShares[i - d]) return anchorShares[i - d];
-      if (anchorShares[i + d]) return anchorShares[i + d];
+    for (let d = 0; d < gridAnchors.length; d++) {
+      if (gridShares[i - d]) return gridShares[i - d];
+      if (gridShares[i + d]) return gridShares[i + d];
     }
     return null;
   };
 
-  for (let i = 1; i < anchors.length; i++) {
-    const bt0 = anchors[i - 1];
-    const bt1 = anchors[i];
+  for (let i = 1; i < gridAnchors.length; i++) {
+    const bt0 = gridAnchors[i - 1];
+    const bt1 = gridAnchors[i];
     const c0 = acc.get(bt0).grid;
     const c1 = acc.get(bt1).grid;
-    if (!c0 || !c1) continue;
     const v0 = c0.s / c0.c;
     const v1 = c1.s / c1.c;
     const b0 = acc.get(bt0).batt;
     const b1 = acc.get(bt1).batt;
     const p0 = acc.get(bt0).pv;
     const p1 = acc.get(bt1).pv;
-    const sh0 = anchorShares[i - 1] ?? nearestShares(i - 1);
-    const sh1 = anchorShares[i] ?? nearestShares(i);
+    const sh0 = gridShares[i - 1] ?? nearestShares(i - 1);
+    const sh1 = gridShares[i] ?? nearestShares(i);
     for (let t = bt0 + bucketMs; t < bt1; t += bucketMs) {
       // Skip buckets that already have grid data — but a bucket holding ONLY
       // battery/PV data must still get its grid value filled.

@@ -76,9 +76,15 @@ EPIPE noise on every client disconnect).
    needed this; ECharts doesn't, but the frontend still expects dense rows.
 4. Skip cloud points from still-open 20-min intervals (partial averages create
    phantom dips at the cloud/local boundary).
-5. Bridge consecutive data-bearing buckets (local or cloud anchors) by linear
-   interpolation — no cap; cloud anchors are ≤ 20 min apart wherever history
-   exists, so interpolation never fabricates more than that.
+5. Bridge consecutive **grid-bearing** buckets (local or cloud anchors) by
+   linear interpolation — no cap; cloud anchors are ≤ 20 min apart wherever
+   history exists, so interpolation never fabricates more than that. The
+   anchor list must contain ONLY buckets that actually hold grid data
+   (2026-09-12: a battery-only bucket acting as an "anchor" made the guard
+   skip both adjacent intervals → periodic single-bucket null dips at ~5-min
+   cadence, visible as the line dropping to zero). Cloud anchors are read one
+   20-min interval past the window edges so gaps straddling the boundary
+   still bridge (edge anchors are never emitted).
 
 ### Chart (ECharts)
 - Chosen over lightweight-charts: LWC's time axis is index-based (collapses
