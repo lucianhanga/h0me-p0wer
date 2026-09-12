@@ -90,6 +90,11 @@ EPIPE noise on every client disconnect).
   `programmatic` guard so the shift doesn't trigger a full refetch. Full
   refetch only on user zoom/pan (debounced 250 ms) or span buttons.
 - Do not set series `title:` — it renders labels over the line.
+- **Never pass explicit `width`/`height` to `echarts.init`** — they persist in
+  the chart's opts and every later `chart.resize()` re-applies the pinned init
+  size instead of measuring the container (rotation bug 2026-09-12: chart
+  stayed at portrait width after flipping to landscape). Let init measure the
+  container; the ResizeObserver + `chart.resize()` then works on rotation.
 
 ### Gotchas already hit
 - `node:sqlite` binds JS numbers as REAL → SQL `(ts/b)*b` is float division;
