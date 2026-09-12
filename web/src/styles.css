@@ -507,3 +507,22 @@ pre {
     stroke-dashoffset: -12;
   }
 }
+
+/* Welcome tab */
+.welcome .wx-hero { margin-bottom: 1rem; }
+.wx-greeting { font-size: 1.15rem; margin: 0 0 0.25rem; }
+.wx-meta { font-size: 0.75rem; margin: 0; }
+.wx-today { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.wx-icon { width: 56px; height: 56px; color: #f7a44f; flex-shrink: 0; }
+.wx-today > div { flex: 1 1 220px; }
+.sun-arc { width: 200px; max-width: 100%; }
+.arc-label { fill: #8b98a5; font-size: 11px; }
+.wx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; }
+.wx-grid h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.wx-grid p { margin: 0.25rem 0; }
+.wx-big { font-size: 1.3rem; font-weight: 600; }
+@media (max-width: 600px) {
+  .wx-today { gap: 0.75rem; }
+  .wx-icon { width: 44px; height: 44px; }
+  .sun-arc { width: 160px; }
+}

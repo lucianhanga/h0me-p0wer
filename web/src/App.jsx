@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
+import WelcomeTab from "./welcome/WelcomeTab.jsx";
 
 const PAGES = [
+  { key: "welcome", label: "Welcome" },
   { key: "live", label: "Live" },
   { key: "graph", label: "Graph" },
   { key: "dashboard", label: "Dashboard" },
@@ -12,7 +14,7 @@ const PAGES = [
 
 export default function App() {
   const [page, setPage] = useState(() =>
-    PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "live",
+    PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
   );
 
   function switchPage(key) {
@@ -24,7 +26,7 @@ export default function App() {
   useEffect(() => {
     const onHash = () =>
       setPage(
-        PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "live",
+        PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
       );
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -48,7 +50,9 @@ export default function App() {
         <span className="app-version">v{__APP_VERSION__}</span>
       </header>
       <main>
-        {page === "live" ? (
+        {page === "welcome" ? (
+          <WelcomeTab />
+        ) : page === "live" ? (
           <LiveTab />
         ) : page === "graph" ? (
           <GraphTab />
