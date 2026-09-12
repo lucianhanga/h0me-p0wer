@@ -238,6 +238,30 @@ EPIPE noise on every client disconnect).
 - `nav` wraps (`flex-wrap`) and phone buttons are compact so nothing forces
   horizontal scrolling.
 
+## AI Welcome tab (2026-09-12)
+
+- 5th tab "Welcome" is the DEFAULT route. `GET /api/welcome` (server/welcome.js)
+  gathers deterministic facts → ONE OpenAI-compatible AI call
+  (`response_format: json_schema`), cached 6 h (max 4 calls/day), stale-on-error,
+  deterministic fallback (`aiPowered: false`) when the AI is down.
+- Config (`.env`): `HOME_ADDRESS` (geocoded once via Nominatim, cached in the
+  `welcome_store` KV table), `PV_PEAK_KWP`/`PV_ORIENTATION` (16-point cardinal,
+  mapped to PVGIS aspect = compass−180)/`PV_TILT_DEG`/`PV_PANEL_TYPE`,
+  provider-agnostic `AI_API_KEY`/`AI_BASE_URL`/`AI_MODEL`/`AI_LANGUAGE`
+  (Kimi Code subscription endpoint `https://api.kimi.com/coding/v1`, model `k3`
+  — a `sk-kimi-` key does NOT work on `api.moonshot.ai`). `TARIFF_EUR_PER_KWH`
+  is reused for savings.
+- Data: Open-Meteo (sunrise/sunset, sunshine hours, radiation, 7-day) and
+  PVGIS `PVcalc` (monthly kWh for the exact setup, cached 24 h) are free and
+  keyless. Consumption averages come from `cloud_history` month/year rows;
+  start-of-day SOC = first `battery_snapshots` row after sunrise.
+- The PV system is PLANNED (2×500 W, SSW, 17° ≈ 1048 kWh/kWp/yr per PVGIS —
+  ~6% below optimal): production figures are estimates, not measurements.
+- Server owns ground truth (sun times, temps, start-of-day snapshot); the AI
+  only interprets. `welcome_store` KV rows are disposable cache.
+- **Open-Meteo `shortwave_radiation_sum` is MJ/m², not kWh/m²** — the context
+  divides by 3.6 into kWh/m². That unit trap cost a fix round.
+
 ## Responsive design (epic #13, done 2026-09-10)
 
 - Breakpoints: phone ≤600px, tablet ≤1024px; 44px touch targets on
