@@ -13,9 +13,10 @@ import echarts from "../echarts.js";
 const SERIES = [
   // Envelope first so the main lines draw on top. Where the window is covered
   // by local 5 s samples, gridMin/gridMax show the real per-bucket fluctuation
-  // of the grid total (= phase sum); cloud-only history stays flat.
-  { key: "gridMin", color: "#f7a44f44", width: 1, silent: true },
-  { key: "gridMax", color: "#f7a44f44", width: 1, silent: true },
+  // of the grid total (= phase sum); cloud-only history stays flat. Both share
+  // the name "Grid range" so ONE legend entry toggles them together.
+  { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
+  { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   // ONE stack: phases at the bottom (L1+L2+L3 = grid total), then Battery
   // and PV on top — the stack top is the TOTAL house consumption. Battery
   // charging (negative signed power) stacks below the baseline. Note: when
@@ -44,6 +45,9 @@ export default function GraphTab() {
   const containerRef = useRef(null);
   const apiRef = useRef(null); // { setSpan(ms) } for the span buttons
   const [stats, setStats] = useState(null); // {avg, min, max, bucketMs}
+  // Which span preset the current window matches (null when zoomed/panned to
+  // a custom range) — drives the highlighted shortcut button.
+  const [activeMs, setActiveMs] = useState(24 * 3600 * 1000);
 
   useEffect(() => {
     // Smaller chart + scrollable legend on phones; touch pinch/drag zoom is
@@ -145,7 +149,7 @@ export default function GraphTab() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Battery", "PV", "Home"],
+        data: ["L1", "L2", "L3", "Battery", "PV", "Home", "Grid range"],
         // All on by default: phases at the bottom of the stack, Battery + PV
         // on top, Home line above everything. Click legend entries to toggle.
         selected: {
@@ -155,6 +159,7 @@ export default function GraphTab() {
           Battery: true,
           PV: true,
           Home: true,
+          "Grid range": true,
         },
       },
     });
@@ -260,7 +265,16 @@ export default function GraphTab() {
     }
 
     chart.on("datazoom", () => {
-      if (!programmatic) scheduleLoad();
+      if (programmatic) return;
+      scheduleLoad();
+      // User zoomed/panned: highlight the matching preset, if any (2% slack
+      // — the live edge slides the window slightly between refreshes).
+      const win = visibleWindow();
+      if (win) {
+        const span = win[1] - win[0];
+        const match = SHORTCUTS.find((s) => Math.abs(span - s.ms) / s.ms < 0.02);
+        setActiveMs(match?.ms ?? null);
+      }
     });
 
     // Span shortcut: fetch the span's data, then set the window by value —
@@ -271,6 +285,7 @@ export default function GraphTab() {
         const from = to - ms;
         await loadRange(from, to);
         setWindow(from, to);
+        setActiveMs(ms);
       },
     };
 
@@ -342,11 +357,18 @@ export default function GraphTab() {
     <div>
       <div className="controls">
         {SHORTCUTS.map((s) => (
-          <button key={s.label} onClick={() => apiRef.current?.setSpan(s.ms)}>
+          <button
+            key={s.label}
+            className={activeMs === s.ms ? "span-active" : ""}
+            onClick={() => apiRef.current?.setSpan(s.ms)}
+          >
             {s.label}
           </button>
         ))}
-        <button onClick={() => apiRef.current?.setSpan(3600 * 1000)} title="Back to the last hour">
+        <button
+          onClick={() => apiRef.current?.setSpan(24 * 3600 * 1000)}
+          title="Back to the last 24 hours"
+        >
           Reset
         </button>
         {stats && (

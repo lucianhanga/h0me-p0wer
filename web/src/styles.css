@@ -315,6 +315,13 @@ th {
   flex-wrap: wrap;
 }
 
+/* Active span preset on the graph (1h/6h/24h/7d/30d) — same accent as the
+   active tab so the current window is visible at a glance. */
+.controls button.span-active {
+  border-color: #f7a44f;
+  color: #f7a44f;
+}
+
 select,
 button {
   background: #1a2128;
