@@ -601,9 +601,8 @@ app.get("/api/stats/overview", (req, res) => {
   const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
   const eur = (kwh) => Math.round(kwh * tariff * 100) / 100;
   const weekImport = weekRows.reduce((a, r) => a + r.importKwh, 0);
-  const monthImport = monthRows
-    .filter((r) => r.label.startsWith(ym))
-    .reduce((a, r) => a + r.importKwh, 0);
+  const monthRowsCur = monthRows.filter((r) => r.label.startsWith(ym));
+  const monthImport = monthRowsCur.reduce((a, r) => a + r.importKwh, 0);
   const yearImport = yearRows.reduce((a, r) => a + r.importKwh, 0);
   const costs = {
     tariffEurPerKwh: tariff,
@@ -613,6 +612,47 @@ app.get("/api/stats/overview", (req, res) => {
     year: eur(yearImport),
     batterySavingsToday: eur(dischargedKwh),
   };
+
+  // Consumption by source per period (dashboard tiles): house total = grid
+  // import + battery discharge + PV direct-to-home. Battery kWh per day comes
+  // from the battery's cloud day-trends (synced locally); PV beyond today is
+  // 0 — local pv_w samples live only 48 h and the cloud has no PV channel
+  // (needs a daily rollup once panels exist).
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const battYear = (() => {
+    let sum = 0;
+    const d = new Date(dayStartMs);
+    for (let date = new Date(d.getFullYear(), 0, 1); date <= d; date.setDate(date.getDate() + 1)) {
+      sum += battKwhForDay(localDate(date)).disKwh;
+    }
+    return r2(sum);
+  })();
+  const byPeriod = {
+    today: {
+      homeKwh: flows.homeKwh,
+      gridKwh: flows.gridImportKwh,
+      battKwh: flows.battDischargedKwh,
+      pvKwh: r2(pvToHomeKwh),
+    },
+    week: {
+      gridKwh: r2(weekImport),
+      battKwh: r2(weekRows.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
+      pvKwh: 0,
+    },
+    month: {
+      gridKwh: r2(monthImport),
+      battKwh: r2(monthRowsCur.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
+      pvKwh: 0,
+    },
+    year: {
+      gridKwh: r2(yearImport),
+      battKwh: battYear,
+      pvKwh: 0,
+    },
+  };
+  for (const p of [byPeriod.week, byPeriod.month, byPeriod.year]) {
+    p.homeKwh = r2(p.gridKwh + p.battKwh + p.pvKwh);
+  }
 
   res.json({
     ok: true,
@@ -628,8 +668,9 @@ app.get("/api/stats/overview", (req, res) => {
       battery,
       flows,
       costs,
+      byPeriod,
       week: weekRows,
-      month: monthRows.filter((r) => r.label.startsWith(ym)),
+      month: monthRowsCur,
       year: yearRows,
     },
   });

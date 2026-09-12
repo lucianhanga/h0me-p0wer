@@ -42,6 +42,13 @@ export default function Dashboard() {
 
   return (
     <div>
+      <div className="src-grid">
+        <SourceCard title="Today" data={stats.byPeriod.today} />
+        <SourceCard title="This week" data={stats.byPeriod.week} />
+        <SourceCard title="This month" data={stats.byPeriod.month} />
+        <SourceCard title="This year" data={stats.byPeriod.year} />
+      </div>
+
       <div className="tiles">
         <Tile
           title="Now"
@@ -69,20 +76,6 @@ export default function Dashboard() {
           title="This year"
           main={`${sum(stats.year, "importKwh")} kWh`}
           sub={`≈ €${stats.costs.year} · export ${sum(stats.year, "exportKwh")} kWh`}
-        />
-        <Tile
-          title="Home today"
-          main={`${stats.flows.homeKwh} kWh`}
-          sub={`grid ${stats.flows.gridImportKwh} · battery ${stats.flows.battDischargedKwh} kWh`}
-        />
-        <Tile
-          title="PV today"
-          main={`${stats.flows.pvKwh} kWh`}
-          sub={
-            stats.flows.pvKwh > 0
-              ? `battery ${stats.flows.battChargedKwh} kWh charged`
-              : "no panels connected"
-          }
         />
       </div>
 
@@ -154,6 +147,32 @@ export function Tile({ title, main, sub, children }) {
       {main && <div className="tile-main">{main}</div>}
       {sub && <div className="tile-sub">{sub}</div>}
       {children}
+    </div>
+  );
+}
+
+// Consumption-by-source card: house total on top, then the three sources
+// with the same colors as the chart (grid/battery/PV).
+const SRC_ROWS = [
+  { key: "gridKwh", label: "Grid", color: "#f7a44f" },
+  { key: "battKwh", label: "Battery", color: "#c084fc" },
+  { key: "pvKwh", label: "PV", color: "#5fce80" },
+];
+
+function SourceCard({ title, data }) {
+  return (
+    <div className="tile">
+      <div className="tile-title">{title}</div>
+      <div className="src-home">{data.homeKwh} kWh</div>
+      <div className="src-rows">
+        {SRC_ROWS.map((r) => (
+          <div className="src-row" key={r.key}>
+            <span className="src-dot" style={{ background: r.color }} />
+            <span>{r.label}</span>
+            <span className="src-value">{data[r.key]} kWh</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

@@ -242,6 +242,20 @@ EPIPE noise on every client disconnect).
   (connect-read-disconnect per cycle instead of a permanent connection).
 - Deployment/update flow documented in README "Deploy (Docker, production)".
 
+## Consumption-by-source tiles (2026-09-12)
+
+- Dashboard top section: 4 period cards (Today/Week/Month/Year) × 4 values
+  (house total, from grid, from battery, from PV — chart colors, spartan).
+  From `/api/stats/overview` → `byPeriod`: today from the `flows` trapezoid,
+  week/month battery from the battery's cloud day-trends (`disKwh`), year
+  battery = day-trend sum (complete — battery is new). Accounting: house =
+  grid import + battery discharge + PV **direct-to-home** (PV→battery counts
+  later as battery, no double counting).
+- **PV is 0 beyond today**: `pv_w` samples live only 48 h and the cloud has
+  no PV channel — once panels exist, week/month/year PV needs a daily-rollup
+  table (add it when panels arrive, not before).
+- Replaced the redundant "Home today"/"PV today" tiles.
+
 ## Second page: overview dashboard (epic #8, done 2026-09-09)
 
 ## Live-tab shell + version (2026-09-11)

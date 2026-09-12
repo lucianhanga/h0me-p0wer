@@ -408,6 +408,47 @@ pre {
   margin-top: 0.35rem;
 }
 
+/* Consumption-by-source cards (dashboard top section) */
+.src-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.src-home {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin-bottom: 0.6rem;
+}
+
+.src-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.src-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #8b98a5;
+  font-size: 0.85rem;
+}
+
+.src-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.src-value {
+  margin-left: auto;
+  color: #e8ecef;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Battery SOC gauge (HA battery-card pattern) */
 .soc-row {
   display: flex;
