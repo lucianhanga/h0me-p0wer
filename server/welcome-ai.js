@@ -49,7 +49,7 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
     weathercode: daily.weathercode[i],
     precipProbMax: daily.precipitation_probability_max[i],
     sunHours: round1((daily.sunshine_duration[i] ?? 0) / 3600),
-    radiationSumKwhM2: round1(daily.shortwave_radiation_sum[i]),
+    radiationSumKwhM2: round1(daily.shortwave_radiation_sum[i] / 3.6),
     sunrise: hhmm(daily.sunrise[i]),
     sunset: hhmm(daily.sunset[i]),
   }));
