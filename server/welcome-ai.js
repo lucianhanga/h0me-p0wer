@@ -29,7 +29,7 @@ function avgImportByWeekday(rows) {
   const cutoff = localDate(new Date(Date.now() - 56 * 86400000));
   const acc = {}; // Mon -> {s, c}
   for (const r of rows) {
-    if (r.date < cutoff) continue;
+    if (r.date < cutoff || r.date >= localDate()) continue; // exclude today's partial row
     const wd = WEEKDAYS[new Date(`${r.date}T12:00:00`).getDay()];
     (acc[wd] ??= { s: 0, c: 0 }).s += r.importKwh;
     acc[wd].c++;

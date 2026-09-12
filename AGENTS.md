@@ -261,6 +261,8 @@ EPIPE noise on every client disconnect).
   only interprets. `welcome_store` KV rows are disposable cache.
 - **Open-Meteo `shortwave_radiation_sum` is MJ/m², not kWh/m²** — the context
   divides by 3.6 into kWh/m². That unit trap cost a fix round.
+- Cold start with Open-Meteo down → generic error state (no partial render);
+  bookend cards show SOC as text, not bars (spec amended).
 
 ## Responsive design (epic #13, done 2026-09-10)
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -39,6 +39,7 @@ function SunArc({ sunrise, sunset }) {
 export default function WelcomeTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const hasData = useRef(false); // survives the []-closure for keep-last-good
 
   useEffect(() => {
     let alive = true;
@@ -46,9 +47,11 @@ export default function WelcomeTab() {
       try {
         const j = await fetch("/api/welcome").then((r) => r.json());
         if (!alive) return;
-        if (j.ok) { setData(j.data); setError(null); } else setError(j.error);
+        if (j.ok) { hasData.current = true; setData(j.data); setError(null); }
+        else if (!hasData.current) setError(String(j.error ?? "request failed"));
+        // Keep last good: once data exists, failed polls are ignored.
       } catch (e) {
-        if (alive) setError(e.message);
+        if (alive && !hasData.current) setError(String(e.message ?? "request failed"));
       }
     }
     load();

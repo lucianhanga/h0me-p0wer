@@ -129,7 +129,7 @@ so far). End-of-day = AI prediction; start-of-day = measurement.
   - **Week** and **Month** statement cards
   - **Production card**: today / week / month kWh
   - **Day bookends**: start-of-day (measured) vs. end-of-day (predicted)
-    cards — battery SOC bars, kWh to house / to battery / grid export
+    cards — battery SOC percentages (text), kWh to house / to battery / grid export
   - **Savings card**: € today / month (tariff from config)
 - Polls `/api/welcome` every 5 min (cheap — server cache).
 - Responsive: cards stack ≤600px like the Live tab; no horizontal scroll.
@@ -139,7 +139,7 @@ so far). End-of-day = AI prediction; start-of-day = measurement.
 | Failure | Behavior |
 |---|---|
 | AI down / invalid key / rate limit | stale cache → fallback (deterministic) mode |
-| Open-Meteo down | stale cache; if none: tab renders non-weather cards, weather card shows "unavailable" |
+| Open-Meteo down | stale cache whenever a cache exists; on cold start (no cache): generic error state — the deterministic fallback needs weather, so there is nothing sensible to render |
 | PVGIS down | 24 h cache; else month estimate marked unavailable, AI told to omit precision |
 | Geocode fail | config error surfaced in `/api/welcome` `error` field; tab shows setup hint |
 | No `HOME_ADDRESS` / no `AI_API_KEY` | tab renders setup instructions instead of crashing |

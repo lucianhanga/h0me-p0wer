@@ -81,8 +81,9 @@ export function registerWelcomeRoute(app, deps) {
       console.warn(`[welcome] refresh failed: ${err.message}`);
       if (cached) return res.json({ ok: true, data: { ...cached.value, stale: true } });
       // Cold start, AI down: deterministic fallback still needs weather; if
-      // THAT is what failed, there is nothing sensible to show.
-      return res.json({ ok: false, error: `Welcome data unavailable: ${err.message}` });
+      // THAT is what failed, there is nothing sensible to show. Generic
+      // message only — err.message can embed the home address / coordinates.
+      return res.json({ ok: false, error: "Welcome data unavailable — check server logs." });
     }
   });
 }
