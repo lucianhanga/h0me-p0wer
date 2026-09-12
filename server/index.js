@@ -207,10 +207,24 @@ app.get("/api/timeseries", (req, res) => {
     // stay null — a data outage ending just inside the window has no in-window
     // left anchor). Edge anchors are never emitted (output starts at `from`).
     const anchorFrom = from - CLOUD_INTERVAL_MS;
-    const cloudBuckets = new Map(); // bt -> {s, c}
+    const cloudRows = [];
     for (const r of getCloudDayPower(sn, fromDate, toDate)) {
       if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
       if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // interval not closed
+      cloudRows.push(r);
+    }
+    // The cloud occasionally reports a 20-min average of EXACTLY 0 between
+    // two healthy intervals (seen 2026-09-11 23:40: ~581 → 0 → ~595) — a
+    // bogus anchor that V-dips the interpolated line toward zero. Drop a
+    // zero anchor only when BOTH neighboring closed intervals are healthy;
+    // keep zeros where a neighbor is also ~0 (legit low/export regions).
+    const plausible = cloudRows.filter(
+      (r, i) =>
+        r.power !== 0 ||
+        !(cloudRows[i - 1]?.power > 200 && cloudRows[i + 1]?.power > 200),
+    );
+    const cloudBuckets = new Map(); // bt -> {s, c}
+    for (const r of plausible) {
       const bt = Math.floor(r.ts / bucketMs) * bucketMs;
       const cell = (cloudBuckets.get(bt) ?? cloudBuckets.set(bt, { s: 0, c: 0 }).get(bt));
       cell.s += r.power;
