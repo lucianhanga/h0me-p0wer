@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
+import BackBars from "./BackBars.jsx";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -28,10 +29,46 @@ export default function Dashboard() {
 
   return (
     <div className="src-grid">
-      <SourceCard title="Today" data={stats.byPeriod.today} />
-      <SourceCard title="This week" data={stats.byPeriod.week} />
-      <SourceCard title="This month" data={stats.byPeriod.month} />
-      <SourceCard title="This year" data={stats.byPeriod.year} />
+      <SourceCard
+        title="Today"
+        data={stats.byPeriod.today}
+        back={
+          <BackBars
+            rows={stats.byPeriod.today.bars}
+            formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          />
+        }
+      />
+      <SourceCard
+        title="This week"
+        data={stats.byPeriod.week}
+        back={
+          <BackBars
+            rows={stats.byPeriod.week.bars}
+            formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
+          />
+        }
+      />
+      <SourceCard
+        title="This month"
+        data={stats.byPeriod.month}
+        back={
+          <BackBars
+            rows={stats.byPeriod.month.bars}
+            formatLabel={(l) => l.slice(8)}
+          />
+        }
+      />
+      <SourceCard
+        title="This year"
+        data={stats.byPeriod.year}
+        back={
+          <BackBars
+            rows={stats.byPeriod.year.bars}
+            formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
+          />
+        }
+      />
     </div>
   );
 }
@@ -45,10 +82,10 @@ const SRC_ROWS = [
   { key: "pvKwh", eur: "pvEur", label: "PV", color: "#5fce80", saved: true },
 ];
 
-function SourceCard({ title, data }) {
+function SourceCard({ title, data, back }) {
   const savedEur = Math.round((data.battEur + data.pvEur) * 100) / 100;
   return (
-    <FlipTile>
+    <FlipTile back={back}>
       <div className="tile">
         <div className="tile-title">{title}</div>
         <div className="src-home">{data.homeKwh} kWh</div>

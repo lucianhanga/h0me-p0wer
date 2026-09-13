@@ -266,6 +266,11 @@ EPIPE noise on every client disconnect).
   `DayTile`/`KwhBarsTile`/`MiniChart` deleted, git history has them).
 - 4 period cards (Today/Week/Month/Year) × 4 values (house total, from grid,
   from battery, from PV — chart colors, spartan).
+- **Flip side**: stacked kWh bars per bucket (`web/src/dashboard/BackBars.jsx`)
+  — Today = 30-min buckets from the profile, Week/Month = per day (cloud month
+  rows + battery day-trends), Year = per month (battery summed from day-trends,
+  ~365 local queries per call). ECharts axis tooltip shows the day's split.
+  Data: `byPeriod.*.bars` in `/api/stats/overview`.
   From `/api/stats/overview` → `byPeriod`: today from the `flows` trapezoid,
   week/month battery from the battery's cloud day-trends (`disKwh`), year
   battery = day-trend sum (complete — battery is new). Accounting: house =
