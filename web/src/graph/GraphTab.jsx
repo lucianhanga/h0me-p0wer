@@ -19,18 +19,20 @@ const SERIES = [
   // at coarse zoom the absolute min/max aliases into unrepresentative needles.
   { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
-  // ONE stack: phases at the bottom (L1+L2+L3 = grid total), then Battery
-  // and PV on top — the stack top is the TOTAL house consumption. Battery
-  // charging (negative signed power) stacks below the baseline. Note: when
-  // the home EXPORTS to the grid (PV surplus), negative values stack below
-  // zero separately — the Home line remains the authoritative total.
+  // ONE stack of SOURCES feeding the house (Home Assistant energy-dashboard
+  // model): grid phases at the bottom, then battery CELLS output, then the
+  // FULL PV production on top. Battery charging draws below the baseline as
+  // a separate sink (negative "Battery in") — so every scenario reads at a
+  // glance: PV→battery (green band + purple sink), battery→house (purple
+  // band), PV→house (green band, no sink), PV→both (band + sink), and the
+  // Home line (grid + inverter output) stays the authoritative total.
   { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "home" },
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "home" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "home" },
-  { key: "batt", name: "Battery", color: "#c084fc", width: 1, stack: "home" },
-  // PV is NOT stacked: the Solarbank's output already includes the PV
-  // pass-through, so stacking pv on top would double-count it (2026-09-13).
-  { key: "pv", name: "PV", color: "#5fce80", width: 1 },
+  { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "home" },
+  { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
+  // Battery charging (PV→cells, or grid→cells) — rendered NEGATIVE (sink).
+  { key: "battChg", name: "Battery in", color: "#8a63d2", width: 1 },
   // Explicit home-consumption line (grid + battery inverter output).
   { key: "home", name: "Home", color: "#e8ecef", width: 2 },
 ];
@@ -153,14 +155,16 @@ export default function GraphTab() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Battery", "PV", "Home", "Grid range"],
-        // All on by default: phases at the bottom of the stack, Battery + PV
-        // on top, Home line above everything. Click legend entries to toggle.
+        data: ["L1", "L2", "L3", "Battery out", "Battery in", "PV", "Home", "Grid range"],
+        // All on by default: phases at the bottom of the stack, Battery out +
+        // PV on top, Battery in as the sink below zero, Home line above
+        // everything. Click legend entries to toggle.
         selected: {
           L1: true,
           L2: true,
           L3: true,
-          Battery: true,
+          "Battery out": true,
+          "Battery in": true,
           PV: true,
           Home: true,
           "Grid range": true,
@@ -206,17 +210,28 @@ export default function GraphTab() {
         series: SERIES.map((s) => ({
           name: s.name ?? s.key,
           data:
-            s.key === "home"
-              ? rows.map((r) =>
-                  r.grid == null
-                    ? [r.t, null]
-                    // home = grid + inverter output (battOut; PV is inside
-                    // it — never add pv on top, model validated 2026-09-13).
-                    : [r.t, (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0)],
-                )
-              : (s.key === "gridMin" || s.key === "gridMax") && !envelopeOn
-                ? rows.map((r) => [r.t, r.grid])
-                : rows.map((r) => [r.t, r[s.key]]),
+            s.key === "battCells"
+              ? rows.map((r) => {
+                  if (r.battOut == null) return [r.t, null];
+                  // Cells-only output: the inverter output includes the PV
+                  // pass-through (pvW − chargeW while outputting) — subtract
+                  // it or PV energy counts twice (validated 2026-09-13).
+                  const pvHome = r.battOut > 0 ? Math.max(0, (r.pv ?? 0) - (r.battChg ?? 0)) : 0;
+                  return [r.t, Math.max(0, r.battOut - pvHome)];
+                })
+              : s.key === "battChg"
+                ? rows.map((r) => (r.battChg == null ? [r.t, null] : [r.t, -r.battChg]))
+                : s.key === "home"
+                  ? rows.map((r) =>
+                      r.grid == null
+                        ? [r.t, null]
+                        // home = grid + inverter output (battOut; PV is inside
+                        // it — never add pv on top, model validated 2026-09-13).
+                        : [r.t, (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0)],
+                    )
+                  : (s.key === "gridMin" || s.key === "gridMax") && !envelopeOn
+                    ? rows.map((r) => [r.t, r.grid])
+                    : rows.map((r) => [r.t, r[s.key]]),
         })),
       });
     }
