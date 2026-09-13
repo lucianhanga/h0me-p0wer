@@ -303,6 +303,11 @@ EPIPE noise on every client disconnect).
   ~6% below optimal): production figures are estimates, not measurements.
 - Server owns ground truth (sun times, temps, start-of-day snapshot); the AI
   only interprets. `welcome_store` KV rows are disposable cache.
+- The system prompt encodes the **Self-Consumption priority** (from the
+  Solarbank manual): PV → house first, surplus → battery, grid last. Consumption
+  averages feed it CLEAN data: 0-filled pre-link days (`importKwh <= 0`) and the
+  always-partial linking day are excluded — otherwise the AI reasons against a
+  bogus ~0 baseline and inverts the house/battery split.
 - **Open-Meteo `shortwave_radiation_sum` is MJ/m², not kWh/m²** — the context
   divides by 3.6 into kWh/m². That unit trap cost a fix round.
 - Cold start with Open-Meteo down → generic error state (no partial render);
