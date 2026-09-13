@@ -8,6 +8,7 @@ import BackBars from "./BackBars.jsx";
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [error, setError] = useState(null);
+  const [updatedAt, setUpdatedAt] = useState(null);
 
   useEffect(() => {
     const load = () => {
@@ -16,6 +17,7 @@ export default function Dashboard() {
         .then((res) => {
           if (!res.ok) throw new Error(res.error);
           setStats(res.data);
+          setUpdatedAt(new Date());
         })
         .catch((e) => setError(String(e.message ?? e)));
     };
@@ -28,31 +30,38 @@ export default function Dashboard() {
   if (!stats) return <p className="muted">loading…</p>;
 
   return (
-    <div className="src-grid">
-      <SourceCard
-        type="day"
-        title="Today"
-        data={stats.byPeriod.today}
-        formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-      />
-      <SourceCard
-        type="week"
-        title="This week"
-        data={stats.byPeriod.week}
-        formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
-      />
-      <SourceCard
-        type="month"
-        title="This month"
-        data={stats.byPeriod.month}
-        formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
-      />
-      <SourceCard
-        type="year"
-        title="This year"
-        data={stats.byPeriod.year}
-        formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
-      />
+    <div>
+      <div className="src-grid">
+        <SourceCard
+          type="day"
+          title="Today"
+          data={stats.byPeriod.today}
+          formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        />
+        <SourceCard
+          type="week"
+          title="This week"
+          data={stats.byPeriod.week}
+          formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
+        />
+        <SourceCard
+          type="month"
+          title="This month"
+          data={stats.byPeriod.month}
+          formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
+        />
+        <SourceCard
+          type="year"
+          title="This year"
+          data={stats.byPeriod.year}
+          formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
+        />
+      </div>
+      {updatedAt && (
+        <p className="muted dash-updated">
+          updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+        </p>
+      )}
     </div>
   );
 }

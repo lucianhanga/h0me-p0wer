@@ -498,6 +498,12 @@ pre {
   font-size: 0.8rem;
 }
 
+.dash-updated {
+  text-align: right;
+  font-size: 0.75rem;
+  margin-top: -0.5rem;
+}
+
 /* Flippable tile (generic FlipTile): front = the tile content, back = empty
    card of the same size (per-tile back content comes later). */
 .flip-tile {
