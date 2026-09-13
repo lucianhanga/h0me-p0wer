@@ -464,12 +464,14 @@ pre {
 }
 
 .src-nav {
-  padding: 0 0.35rem;
-  min-height: 0;
-  background: transparent;
-  border-color: transparent;
+  padding: 0.25rem 0.6rem;
+  min-width: 2.4rem;
+  min-height: 34px;
+  background: #101418;
+  border: 1px solid #2a3238;
+  border-radius: 6px;
   color: #8b98a5;
-  font-size: 0.95rem;
+  font-size: 1.05rem;
   line-height: 1.2;
 }
 
