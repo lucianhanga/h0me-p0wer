@@ -32,6 +32,39 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  // Swipe left/right to switch tabs (phones). Gestures starting on
+  // interactive surfaces are ignored — the graph's drag-to-pan and the
+  // buttons keep working. Horizontal must dominate vertical (scrolling
+  // stays untouched), threshold 60px.
+  useEffect(() => {
+    let startX = null;
+    let startY = 0;
+    const onStart = (e) => {
+      if (e.target.closest(".chart-box, button, a, select, input")) {
+        startX = null;
+        return;
+      }
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    };
+    const onEnd = (e) => {
+      if (startX == null) return;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      startX = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      const i = PAGES.findIndex((p) => p.key === page);
+      const next = (i + (dx < 0 ? 1 : -1) + PAGES.length) % PAGES.length;
+      switchPage(PAGES[next].key);
+    };
+    document.addEventListener("touchstart", onStart, { passive: true });
+    document.addEventListener("touchend", onEnd, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onStart);
+      document.removeEventListener("touchend", onEnd);
+    };
+  }, [page]);
+
   return (
     <div className="app">
       <header>
