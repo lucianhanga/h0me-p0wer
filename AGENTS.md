@@ -119,6 +119,9 @@ EPIPE noise on every client disconnect).
 - SIGINT shutdown must terminate WS clients or `server.close()` hangs forever.
 - Old server instances on :3001 keep causing "missing route / EADDRINUSE"
   confusion — always check `lsof -nP -iTCP:3001 -sTCP:LISTEN` first.
+  **After ANY change lands (server OR frontend), always restart the dev
+  server** — the frontend bundle is only rebuilt on `npm run build`, and the
+  node process never reloads `server/*.js` on its own.
 - **Logins are aggressively rate-limited**: repeated fresh logins lock the
   account for 7 min (error 10019). The auth token is persisted next to
   `DB_PATH` (`.token-cache.json`, gitignored, mode 600), `ensureToken()`
