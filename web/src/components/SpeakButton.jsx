@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 // speakText/stopSpeech are exported so SyncedSpeech can drive the same
 // coordination (auto-play, word-boundary highlighting).
 const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
+export const speechSupported = Boolean(synth);
 let activeId = null;
 const setters = new Map(); // id -> setSpeaking
 
