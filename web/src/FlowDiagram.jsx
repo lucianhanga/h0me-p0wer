@@ -49,12 +49,15 @@ export default function FlowDiagram() {
 
   // Edge: [from, to, watts, color, id, sourceTs] — sourceTs is the timestamp
   // of the data source feeding that edge (meter snapshot or battery reading).
+  // Topology (Solarbank 2 E1600 Plus, built-in inverter): ALL PV flows into
+  // the battery unit; the house is fed ONLY through the unit's inverter
+  // (cell discharge + PV pass-through). There is NO direct PV→Home edge —
+  // pv.toHome leaves through the inverter, so it rides the Battery→Home edge.
   const edges = [
-    [N.pv, N.home, pv.toHome, "#5fce80", "pv-home", pv.ts],
-    [N.pv, N.batt, pv.toBattery, "#5fce80", "pv-batt", pv.ts],
+    [N.pv, N.batt, pv.production, "#5fce80", "pv-batt", pv.ts],
     [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home", grid.ts],
     [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid", grid.ts],
-    [N.batt, N.home, battDischarge, "#c084fc", "batt-home", battery?.ts],
+    [N.batt, N.home, battDischarge + pv.toHome, "#c084fc", "batt-home", battery?.ts],
     [N.home, N.batt, battCharge, "#c084fc", "home-batt", battery?.ts],
   ];
 
