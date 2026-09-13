@@ -571,6 +571,32 @@ pre {
 .welcome .wx-hero { margin-bottom: 1rem; }
 .wx-greeting { font-size: 1.15rem; margin: 0 0 0.25rem; }
 .wx-meta { font-size: 0.75rem; margin: 0; }
+
+/* Refresh button in the meta line — small ghost button, spins in-flight. */
+.wx-refresh {
+  margin-left: 0.5rem;
+  padding: 0.1rem 0.45rem;
+  min-height: 0;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: #f7a44f;
+  vertical-align: middle;
+}
+
+.wx-refresh:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.wx-refresh.spinning {
+  animation: wx-spin 1s linear infinite;
+}
+
+@keyframes wx-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .wx-today { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .wx-icon { width: 56px; height: 56px; color: #f7a44f; flex-shrink: 0; }
 .wx-today > div { flex: 1 1 220px; }

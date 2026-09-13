@@ -291,6 +291,9 @@ EPIPE noise on every client disconnect).
   is down. A **background scheduler** (45 s after startup, then every 10 min)
   refreshes the cache when stale — opening the tab never waits for the AI; the
   route's lazy refresh is only the fallback. Same TTL budget (≤ 4 calls/day).
+  The tab has a manual ↻ refresh button → `POST /api/welcome/refresh` — forces
+  regeneration on demand (bypasses the TTL; the budget governs only the
+  scheduler).
 - Config (`.env`): `HOME_ADDRESS` (geocoded once via Nominatim, cached in the
   `welcome_store` KV table), `PV_PEAK_KWP`/`PV_ORIENTATION` (16-point cardinal,
   mapped to PVGIS aspect = compass−180)/`PV_TILT_DEG`/`PV_PANEL_TYPE`,
