@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import FlipTile from "../components/FlipTile.jsx";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -78,63 +79,78 @@ export default function WelcomeTab() {
   const gt = data.groundTruth ?? {};
   return (
     <div className="welcome">
-      <section className="card wx-hero">
-        <p className="wx-greeting">{data.greeting}</p>
-        <p className="muted wx-meta">
-          {data.aiPowered ? "AI briefing" : "offline estimate"}
-          {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          <button
-            className={`wx-refresh${refreshing ? " spinning" : ""}`}
-            onClick={refresh}
-            disabled={refreshing}
-            title="Refresh briefing (new AI call)"
-            aria-label="Refresh briefing"
-          >
-            ↻
-          </button>
-        </p>
-      </section>
-
-      <section className="card wx-today">
-        <WeatherIcon name={data.today.icon} />
-        <div>
-          <p>{data.today.summary}</p>
-          <p className="muted">
-            {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
+      <FlipTile>
+        <section className="card wx-hero">
+          <p className="wx-greeting">{data.greeting}</p>
+          <p className="muted wx-meta">
+            {data.aiPowered ? "AI briefing" : "offline estimate"}
+            {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            <button
+              className={`wx-refresh${refreshing ? " spinning" : ""}`}
+              onClick={(e) => {
+                e.stopPropagation(); // don't flip the card when refreshing
+                refresh();
+              }}
+              disabled={refreshing}
+              title="Refresh briefing (new AI call)"
+              aria-label="Refresh briefing"
+            >
+              ↻
+            </button>
           </p>
-        </div>
-        <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
-      </section>
+        </section>
+      </FlipTile>
+
+      <FlipTile>
+        <section className="card wx-today">
+          <WeatherIcon name={data.today.icon} />
+          <div>
+            <p>{data.today.summary}</p>
+            <p className="muted">
+              {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
+            </p>
+          </div>
+          <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
+        </section>
+      </FlipTile>
 
       <div className="wx-grid">
-        <section className="card"><h3>This week</h3><p>{data.week.statement}</p></section>
-        <section className="card"><h3>{new Date().toLocaleString([], { month: "long" })}</h3><p>{data.month.statement}</p></section>
+        <FlipTile><section className="card"><h3>This week</h3><p>{data.week.statement}</p></section></FlipTile>
+        <FlipTile><section className="card"><h3>{new Date().toLocaleString([], { month: "long" })}</h3><p>{data.month.statement}</p></section></FlipTile>
 
-        <section className="card">
-          <h3>Estimated production (planned PV)</h3>
-          <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
-          <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
-          <p className="muted">{data.production.reasoning}</p>
-        </section>
+        <FlipTile>
+          <section className="card">
+            <h3>Estimated production (planned PV)</h3>
+            <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
+            <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
+            <p className="muted">{data.production.reasoning}</p>
+          </section>
+        </FlipTile>
 
-        <section className="card">
-          <h3>Start of day (measured)</h3>
-          <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
-          <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
-        </section>
+        <FlipTile>
+          <section className="card">
+            <h3>Start of day (measured)</h3>
+            <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
+            <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
+          </section>
+        </FlipTile>
 
-        <section className="card">
-          <h3>End of day (predicted)</h3>
-          <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
-          <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
-          <p className="muted">{data.endOfDay.note}</p>
-        </section>
+        <FlipTile>
+          <section className="card">
+            <h3>End of day (predicted)</h3>
+            <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
+            <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
+            <p className="muted">{data.endOfDay.note}</p>
+          </section>
+        </FlipTile>
 
-        <section className="card">
-          <h3>Estimated savings</h3>
-          <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
-          <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
-        </section>
+        <FlipTile>
+          <section className="card">
+            <h3>Estimated savings</h3>
+            <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
+            <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
+          </section>
+        </FlipTile>
       </div>
     </div>
   );

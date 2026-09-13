@@ -242,6 +242,17 @@ EPIPE noise on every client disconnect).
   (connect-read-disconnect per cycle instead of a permanent connection).
 - Deployment/update flow documented in README "Deploy (Docker, production)".
 
+## FlipTile — generic flippable tile (2026-09-13)
+
+- `web/src/components/FlipTile.jsx`: click/tap/Enter/Space flips the tile 180°
+  (CSS 3D, both faces in one grid cell so height comes from the front). The
+  BACK face is an empty same-size card for now — per-tile back content is a
+  planned iteration.
+- Wrapped around: Dashboard source cards, Live `.cards` + `.phase-card`s,
+  all Welcome cards. Fronts keep their existing markup/classes.
+- Interactive children must `stopPropagation()` on click or they also flip
+  (done for the Welcome ↻ refresh button).
+
 ## Consumption-by-source tiles (2026-09-12)
 
 - The Dashboard contains ONLY this section (old tiles — totals row, day
