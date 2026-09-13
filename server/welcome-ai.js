@@ -25,11 +25,12 @@ function dailyImportRows(sn, monthsBack = 2) {
   return rows;
 }
 
-function avgImportByWeekday(rows) {
+function avgImportByWeekday(rows, firstDate) {
   const cutoff = localDate(new Date(Date.now() - 56 * 86400000));
   const acc = {}; // Mon -> {s, c}
   for (const r of rows) {
     if (r.date < cutoff || r.date >= localDate()) continue; // exclude today's partial row
+    if (r.date === firstDate) continue; // the linking day is always partial
     const wd = WEEKDAYS[new Date(`${r.date}T12:00:00`).getDay()];
     (acc[wd] ??= { s: 0, c: 0 }).s += r.importKwh;
     acc[wd].c++;
@@ -66,11 +67,17 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
 
   const imports = sn ? dailyImportRows(sn) : [];
   const ym = localDate().slice(0, 7);
-  const mtd = imports.filter((r) => r.date.startsWith(ym) && r.date < localDate());
+  // 0-import rows are 0-filled pre-link days (cloud history starts at linking,
+  // 2026-09-07), not real measurements — exclude them from every average.
+  // Revisit once PV exists (a legit ~0-import day is possible then).
+  const realImports = imports.filter((r) => r.importKwh > 0);
+  const firstDate = realImports[0]?.date ?? null; // the linking day — partial
+  const fullDays = realImports.filter((r) => r.date !== firstDate);
+  const mtd = fullDays.filter((r) => r.date.startsWith(ym) && r.date < localDate());
   const yearRows = sn
-    ? getCloudTrend(sn, "year", String(now.getFullYear())).rows.map((r) => ({
-        label: r.time, importKwh: round1(r.import_energy),
-      }))
+    ? getCloudTrend(sn, "year", String(now.getFullYear())).rows
+        .map((r) => ({ label: r.time, importKwh: round1(r.import_energy) }))
+        .filter((r) => r.importKwh > 0)
     : [];
 
   const batt = deps.getLiveBattery();
@@ -89,7 +96,10 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
     week: dayRows,
     solarClimatology: pvgis,
     consumption: {
-      avgImportKwhByWeekday: avgImportByWeekday(imports),
+      avgImportKwhByWeekday: avgImportByWeekday(realImports, firstDate),
+      avgImportKwhPerDay: fullDays.length
+        ? round1(fullDays.reduce((a, r) => a + r.importKwh, 0) / fullDays.length)
+        : null,
       monthToDateAvgImportKwh: mtd.length ? round1(mtd.reduce((a, r) => a + r.importKwh, 0) / mtd.length) : null,
       yearMonthlyAvgImportKwh: yearRows,
       todayImportKwhSoFar: round1(todayImportKwh),
@@ -147,6 +157,7 @@ const SYSTEM_PROMPT = `You write the morning energy briefing for a home dashboar
 Hard rules:
 - Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
 - The PV system is PLANNED, not installed: production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
+- Power-flow priority (Self-Consumption mode with a smart meter, per the storage manual): PV power FIRST covers the home's current consumption; only the SURPLUS charges the battery; export to the grid happens last. Compare estimated PV output with the home's baseline consumption (consumption averages / 24 h): with a small PV system and a high baseline, most PV power goes DIRECTLY to the house and little reaches the battery — never claim the opposite.
 - Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
 
