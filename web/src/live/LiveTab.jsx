@@ -34,7 +34,9 @@ export default function LiveTab() {
   }, []);
 
   const snapshot = live?.snapshot;
-  const grid = snapshot?.primary?.totalPower;
+  const cloudGrid = snapshot == null ? live?.cloud : null;
+  const grid = snapshot?.primary?.totalPower ?? cloudGrid?.power ?? null;
+  const gridFromCloud = snapshot?.primary?.totalPower == null && cloudGrid != null;
   const phases = snapshot?.primary?.phases;
   const battery = flow?.battery;
   const pv = flow?.pv;
@@ -71,7 +73,10 @@ export default function LiveTab() {
         </FlipTile>
         <FlipTile>
           <div className="card">
-            <div className="card-label">Grid {grid != null && (grid >= 0 ? "import" : "export")}</div>
+            <div className="card-label">
+              Grid {grid != null && (grid >= 0 ? "import" : "export")}
+              {gridFromCloud ? " · cloud" : ""}
+            </div>
             <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
               {grid != null ? `${Math.abs(grid)} W` : "—"}
             </div>

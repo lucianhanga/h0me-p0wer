@@ -71,7 +71,14 @@ let lastApiActivity = 0;
 
 app.get("/api/live", (req, res) => {
   lastApiActivity = Date.now();
-  res.json(poller.getState());
+  const state = poller.getState();
+  // Modbus down: attach the newest closed cloud interval so the UI can show
+  // cloud-sourced grid power instead of nothing (like the Anker app).
+  if (!state.snapshot) {
+    const c = getCloudGridLive();
+    if (c) state.cloud = { power: c.power, ts: c.ts };
+  }
+  res.json(state);
 });
 
 // Connectivity health for the Live tab badges.
@@ -99,10 +106,37 @@ app.get("/api/battery/live", (req, res) => {
 // So: bank→home = outputW (never plus pvW), and PV-to-home only exists when
 // the inverter is actually outputting. The old `pvToHome = pvW − chargeW`
 // double-counted PV and invented a PV→home flow while the bank was charging.
+// Newest CLOSED 20-min cloud interval for today (grid total W) — the
+// fallback source when the meter's Modbus server is unreachable.
+function getCloudGridLive() {
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  if (!sn) return null;
+  const CLOUD_INTERVAL_MS = 20 * 60 * 1000;
+  const rows = getCloudDayPower(sn, localDate(), localDate());
+  for (let i = rows.length - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r.power == null) continue;
+    if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // interval still open
+    return { power: r.power, ts: r.ts + CLOUD_INTERVAL_MS };
+  }
+  return null;
+}
+
 app.get("/api/flow", (req, res) => {
   lastApiActivity = Date.now();
-  const grid = poller.snapshot?.primary?.totalPower ?? null;
-  const gridTs = poller.snapshot?.timestamp ?? null;
+  let grid = poller.snapshot?.primary?.totalPower ?? null;
+  let gridTs = poller.snapshot?.timestamp ?? null;
+  let gridSource = "meter";
+  // Modbus down (e.g. meter's TCP server hung): fall back to the cloud, like
+  // the Anker app — the meter's 20-min day trend, newest CLOSED interval.
+  if (grid == null) {
+    const c = getCloudGridLive();
+    if (c) {
+      grid = c.power;
+      gridTs = c.ts;
+      gridSource = "cloud";
+    }
+  }
   const b = latestBattery ?? getLatestBattery();
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
@@ -120,6 +154,7 @@ app.get("/api/flow", (req, res) => {
         import: grid != null ? Math.max(grid, 0) : null,
         export: grid != null ? Math.max(-grid, 0) : null,
         ts: gridTs,
+        source: gridSource,
       },
       battery: b
         ? { soc: b.soc, discharge: b.outputW, charge: chargeW, name: b.name ?? "Solarbank", ts: b.ts ?? null }
@@ -1193,6 +1228,26 @@ setInterval(() => {
   lastBatterySync = Date.now();
   syncBattery();
 }, 5000).unref();
+
+// While Modbus is down, keep today's cloud day-trend fresh (1 call / 2 min —
+// far inside the endpoint's rate limit) so the /api/flow + /api/live fallback
+// stays recent. The 15-min cycle covers the normal case.
+setInterval(async () => {
+  if (poller.getState().connected || !anker.configured) return;
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  if (!sn) return;
+  try {
+    const data = await anker.getDeviceEnergyAnalysis({
+      deviceSn: sn,
+      type: "day",
+      startTime: localDate(),
+      endTime: "",
+    });
+    saveCloudTrend(sn, "day", localDate(), data?.data_trend ?? []);
+  } catch (err) {
+    console.warn(`[cloud-sync] meter-down today refresh failed: ${err.message}`);
+  }
+}, 2 * 60 * 1000).unref();
 
 poller.start();
 
