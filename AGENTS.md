@@ -342,6 +342,12 @@ EPIPE noise on every client disconnect).
   averages feed it CLEAN data: 0-filled pre-link days (`importKwh <= 0`) and the
   always-partial linking day are excluded — otherwise the AI reasons against a
   bogus ~0 baseline and inverts the house/battery split.
+- **Voice Q&A** (🎤 in the header, `web/src/components/AskButton.jsx`): browser
+  `SpeechRecognition` STT → `POST /api/ask` → ONE structured AI call corrects
+  the transcript AND answers (`{correctedQuestion, answer}` json_schema), fed
+  with the welcome context + live grid power (`getLivePower` dep). Answer panel:
+  corrected question, answer, read-aloud button. Mic-denied and no-key states
+  have friendly errors; STT-less browsers hide the button.
 - **Read-aloud (TTS)**: every Welcome tile has its own 🔊
   (`web/src/components/SpeakButton.jsx`) reading only that tile's content —
   browser `speechSynthesis` (the **Kimi API has no TTS/ASR**, so nothing

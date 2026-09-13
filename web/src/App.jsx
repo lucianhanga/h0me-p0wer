@@ -3,6 +3,7 @@ import LiveTab from "./live/LiveTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
+import AskButton from "./components/AskButton.jsx";
 
 const PAGES = [
   { key: "welcome", label: "Welcome" },
@@ -68,6 +69,7 @@ export default function App() {
     <div className="app">
       <header>
         <h1>h0me-p0wer</h1>
+        <AskButton />
         <nav>
           {PAGES.map((p) => (
             <button

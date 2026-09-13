@@ -36,6 +36,61 @@ nav {
   flex-wrap: wrap;
 }
 
+/* Voice Q&A: mic button in the header + answer panel under it. */
+.ask-btn {
+  padding: 0.15rem 0.5rem;
+  min-height: 0;
+  font-size: 1rem;
+  line-height: 1.4;
+  align-self: center;
+}
+
+.ask-btn.listening {
+  border-color: #e05c5c;
+  color: #e05c5c;
+  animation: ask-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes ask-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+
+.ask-panel {
+  position: fixed;
+  top: 64px;
+  left: 1rem;
+  right: 1rem;
+  max-width: 560px;
+  margin: 0 auto;
+  z-index: 20;
+  box-shadow: 0 8px 30px #000a;
+}
+
+.ask-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.5rem;
+  min-height: 0;
+  padding: 0 0.4rem;
+  background: transparent;
+  border-color: transparent;
+  color: #8b98a5;
+  font-size: 1.1rem;
+}
+
+.ask-question {
+  color: #8b98a5;
+  font-style: italic;
+  margin: 0 0 0.5rem;
+  padding-right: 1.5rem;
+}
+
+.ask-answer {
+  margin: 0 0 0.5rem;
+}
+
 .app-version {
   color: #8b98a5;
   font-size: 0.75rem;
