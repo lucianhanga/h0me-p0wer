@@ -201,6 +201,13 @@ EPIPE noise on every client disconnect).
   the documented ceiling, hence on-demand only), **10 s floor when idle**.
   MQTT push (~3-5 s) layers on top as the fast channel (same one the Anker
   app uses for its live view — it does NOT poll REST for that).
+- **Modbus-down fallback (2026-09-13)**: when the meter's TCP server refuses
+  connections (seen: hung after an app session — Anker app keeps working via
+  cloud, local 502 dies; fix in the field: re-enable Modbus TCP or power-cycle
+  the meter), `/api/flow` and `/api/live` fall back to the newest CLOSED
+  20-min cloud interval (`getCloudGridLive`, flagged `source: "cloud"` with
+  the interval-end timestamp), and today's day-trend syncs every 2 min
+  instead of 15. Grid card shows "· cloud".
 
 ## Battery realtime via MQTT (2026-09-10)
 
