@@ -104,10 +104,14 @@ export default function LiveTab() {
           <div className="card">
             <div className="card-label">Solar PV</div>
             <div className="card-value" style={{ color: "#5fce80" }}>
-              {pv ? `${pv.toHome} W` : "—"}
+              {pv ? `${pv.production} W` : "—"}
             </div>
             <div className="card-label">
-              {pv && pv.production > 0 ? "sending to house" : "no production"}
+              {pv && pv.production > 0
+                ? battery?.charge > 0
+                  ? "charging the battery"
+                  : "via the battery"
+                : "no production"}
             </div>
           </div>
         </FlipTile>
