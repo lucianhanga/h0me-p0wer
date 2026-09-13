@@ -345,9 +345,15 @@ EPIPE noise on every client disconnect).
 - **Voice Q&A** (🎤 in the header, `web/src/components/AskButton.jsx`): browser
   `SpeechRecognition` STT → `POST /api/ask` → ONE structured AI call corrects
   the transcript AND answers (`{correctedQuestion, answer}` json_schema), fed
-  with the welcome context + live grid power (`getLivePower` dep). Answer panel:
-  corrected question, answer, read-aloud button. Mic-denied and no-key states
-  have friendly errors; STT-less browsers hide the button.
+  with the welcome context + live grid power (`getLivePower` dep). Answer shows
+  in a **modal overlay** (`.ask-backdrop`, tap outside/× to close) and is
+  **read aloud immediately** (`SyncedSpeech` autoPlay) with **karaoke-style
+  word highlighting** driven by the utterance's `onboundary` charIndex
+  (`.speak-active`). Speech control is shared (`speakText`/`stopSpeech` in
+  `SpeakButton.jsx`) so the button state tracks auto-started playback.
+  Mic-denied and no-key states have friendly errors; STT-less browsers hide
+  the button. Plain-HTTP LAN origins get NO mic prompt (secure-context rule —
+  `chrome://flags#unsafely-treat-insecure-origin-as-secure` is the workaround).
 - **Read-aloud (TTS)**: every Welcome tile has its own 🔊
   (`web/src/components/SpeakButton.jsx`) reading only that tile's content —
   browser `speechSynthesis` (the **Kimi API has no TTS/ASR**, so nothing

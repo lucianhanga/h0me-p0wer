@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import SpeakButton from "./SpeakButton.jsx";
+import SyncedSpeech from "./SyncedSpeech.jsx";
 
 // Voice Q&A button (header, next to the title): press → browser STT
 // (SpeechRecognition) → POST /api/ask → the AI corrects the transcript and
@@ -102,24 +102,25 @@ export default function AskButton() {
         🎤
       </button>
       {open && (
-        <div className="ask-panel card">
-          <button className="ask-close" onClick={close} aria-label="Close">×</button>
-          {state === "listening" && (
-            <p className="muted">Listening… {transcript && <em>{transcript}</em>}</p>
-          )}
-          {state === "thinking" && (
-            <p className="muted">
-              “{transcript}” — thinking…
-            </p>
-          )}
-          {state === "error" && <p className="muted">{error}</p>}
-          {state === "done" && result && (
-            <>
-              <p className="ask-question">“{result.correctedQuestion}”</p>
-              <p className="ask-answer">{result.answer}</p>
-              <SpeakButton id="ask-answer" text={result.answer} />
-            </>
-          )}
+        <div className="ask-backdrop" onClick={close}>
+          <div className="ask-panel card" onClick={(e) => e.stopPropagation()}>
+            <button className="ask-close" onClick={close} aria-label="Close">×</button>
+            {state === "listening" && (
+              <p className="muted">Listening… {transcript && <em>{transcript}</em>}</p>
+            )}
+            {state === "thinking" && (
+              <p className="muted">
+                “{transcript}” — thinking…
+              </p>
+            )}
+            {state === "error" && <p className="muted">{error}</p>}
+            {state === "done" && result && (
+              <>
+                <p className="ask-question">“{result.correctedQuestion}”</p>
+                <SyncedSpeech id="ask-answer" text={result.answer} autoPlay />
+              </>
+            )}
+          </div>
         </div>
       )}
     </>
