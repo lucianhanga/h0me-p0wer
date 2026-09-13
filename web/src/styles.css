@@ -215,11 +215,19 @@ section {
 }
 
 .card {
+  position: relative; /* anchor for the corner speak button */
   background: #1a2128;
   border: 1px solid #2a3238;
   border-radius: 8px;
   padding: 1rem 1.25rem;
   min-width: 180px;
+}
+
+/* Per-tile speak button, top-right corner. */
+.wx-refresh.speak-corner {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
 }
 
 .card-label {
