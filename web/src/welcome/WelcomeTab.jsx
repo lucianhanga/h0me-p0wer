@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
+import SpeakButton from "../components/SpeakButton.jsx";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -41,7 +42,6 @@ export default function WelcomeTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
   const hasData = useRef(false); // survives the []-closure for keep-last-good
   const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
 
@@ -80,42 +80,6 @@ export default function WelcomeTab() {
     }
   }
 
-  // Read the briefing aloud with the browser's built-in TTS (Web Speech API —
-  // no key, no backend; phone OS voices). Toggles to stop while speaking.
-  function speak() {
-    if (!synth) return;
-    if (speaking) {
-      synth.cancel();
-      setSpeaking(false);
-      return;
-    }
-    const month = new Date().toLocaleString([], { month: "long" });
-    const text = [
-      data.greeting,
-      data.today.summary,
-      `This week: ${data.week.statement}`,
-      `${month}: ${data.month.statement}`,
-      data.endOfDay.note,
-      `Estimated savings today: about ${data.savings.todayEur} euros.`,
-    ]
-      .filter(Boolean)
-      .join(" ");
-    const u = new SpeechSynthesisUtterance(text);
-    // Prefer an English voice (Android Chrome ships Google voices); the
-    // briefing language is English per AI_LANGUAGE.
-    const voices = synth.getVoices();
-    const voice =
-      voices.find((v) => /^en[-_]/i.test(v.lang) && /google/i.test(v.name)) ??
-      voices.find((v) => /^en[-_]/i.test(v.lang));
-    if (voice) {
-      u.voice = voice;
-      u.lang = voice.lang;
-    }
-    u.onend = u.onerror = () => setSpeaking(false);
-    setSpeaking(true);
-    synth.speak(u);
-  }
-
   if (error) return <p className="muted">Welcome — {error}</p>;
   if (!data) return <p className="muted">Preparing your briefing…</p>;
   const gt = data.groundTruth ?? {};
@@ -139,25 +103,18 @@ export default function WelcomeTab() {
             >
               ↻
             </button>
-            {synth && (
-              <button
-                className="wx-refresh wx-speak"
-                onClick={(e) => {
-                  e.stopPropagation(); // don't flip the card when speaking
-                  speak();
-                }}
-                title={speaking ? "Stop reading" : "Read the briefing aloud"}
-                aria-label={speaking ? "Stop reading" : "Read the briefing aloud"}
-              >
-                {speaking ? "⏹" : "🔊"}
-              </button>
-            )}
+            <SpeakButton id="hero" text={data.greeting} />
           </p>
         </section>
       </FlipTile>
 
       <FlipTile>
         <section className="card wx-today">
+          <SpeakButton
+            id="today"
+            className="speak-corner"
+            text={`${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun. Sunrise at ${gt.sunrise}, sunset at ${gt.sunset}.`}
+          />
           <WeatherIcon name={data.today.icon} />
           <div>
             <p>{data.today.summary}</p>
@@ -170,11 +127,28 @@ export default function WelcomeTab() {
       </FlipTile>
 
       <div className="wx-grid">
-        <FlipTile><section className="card"><h3>This week</h3><p>{data.week.statement}</p></section></FlipTile>
-        <FlipTile><section className="card"><h3>{new Date().toLocaleString([], { month: "long" })}</h3><p>{data.month.statement}</p></section></FlipTile>
+        <FlipTile>
+          <section className="card">
+            <SpeakButton id="week" className="speak-corner" text={`This week: ${data.week.statement}`} />
+            <h3>This week</h3>
+            <p>{data.week.statement}</p>
+          </section>
+        </FlipTile>
+        <FlipTile>
+          <section className="card">
+            <SpeakButton id="month" className="speak-corner" text={`${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`} />
+            <h3>{new Date().toLocaleString([], { month: "long" })}</h3>
+            <p>{data.month.statement}</p>
+          </section>
+        </FlipTile>
 
         <FlipTile>
           <section className="card">
+            <SpeakButton
+              id="production"
+              className="speak-corner"
+              text={`Estimated production: ${data.production.todayKwh} kilowatt-hours today, about ${data.production.weekKwh} this week and ${data.production.monthKwh} this month. ${data.production.reasoning}`}
+            />
             <h3>Estimated production (planned PV)</h3>
             <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
             <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
@@ -184,6 +158,11 @@ export default function WelcomeTab() {
 
         <FlipTile>
           <section className="card">
+            <SpeakButton
+              id="startOfDay"
+              className="speak-corner"
+              text={`Start of day: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
+            />
             <h3>Start of day (measured)</h3>
             <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
             <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
@@ -192,6 +171,11 @@ export default function WelcomeTab() {
 
         <FlipTile>
           <section className="card">
+            <SpeakButton
+              id="endOfDay"
+              className="speak-corner"
+              text={`End of day prediction: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house. ${data.endOfDay.note}`}
+            />
             <h3>End of day (predicted)</h3>
             <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
             <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
@@ -201,6 +185,11 @@ export default function WelcomeTab() {
 
         <FlipTile>
           <section className="card">
+            <SpeakButton
+              id="savings"
+              className="speak-corner"
+              text={`Estimated savings: about ${data.savings.todayEur} euros today and ${data.savings.monthEur} euros this month. ${data.savings.note}`}
+            />
             <h3>Estimated savings</h3>
             <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
             <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
