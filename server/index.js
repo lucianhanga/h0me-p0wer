@@ -25,6 +25,7 @@ import {
   getSnapshotRows,
   getAnyDeviceSn,
   getBatterySn,
+  getEarliestCloudDay,
   saveBatterySnapshot,
   getLatestBattery,
   getBatteryHistory,
@@ -705,6 +706,151 @@ app.get("/api/stats/overview", (req, res) => {
       week: weekRows,
       month: monthRowsCur,
       year: yearRows,
+    },
+  });
+});
+
+// Single-period consumption-by-source for the dashboard tiles' time
+// navigation (offset ≥ 1 = that many periods back; offset 0 is served by
+// /api/stats/overview). All from the local DB. Shape matches a byPeriod
+// entry plus label/hasData/hasEarlier so the card can stop at the data edge.
+app.get("/api/stats/period", (req, res) => {
+  const type = ["day", "week", "month", "year"].includes(req.query.type) ? req.query.type : "day";
+  const offset = Math.max(1, Math.min(Number(req.query.offset ?? 1) || 1, 400));
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  const battSn = latestBattery?.sn ?? getBatterySn(sn);
+  const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const eur = (kwh) => r2(kwh * tariff);
+  const earliest = getEarliestCloudDay(sn);
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+
+  // Battery discharge/charge kWh for one date (battery cloud day-trend).
+  function battKwh(dateStr) {
+    if (!battSn) return 0;
+    let dis = 0;
+    for (const r of getCloudTrend(battSn, "day", dateStr).rows) {
+      if (r.power == null) continue;
+      const kwh = (r.power * (20 / 60)) / 1000;
+      if (kwh >= 0) dis += kwh;
+    }
+    return r2(dis);
+  }
+  // Grid import kWh + per-interval bars for one date (meter cloud day-trend).
+  function dayGrid(dateStr) {
+    let imp = 0;
+    const bars = [];
+    const battByHm = new Map();
+    if (battSn) {
+      for (const r of getCloudDayPower(battSn, dateStr, dateStr)) {
+        if (r.power == null) continue;
+        const hm = new Date(r.ts).toTimeString().slice(0, 5);
+        battByHm.set(hm, Math.max(0, (r.power * (20 / 60)) / 1000));
+      }
+    }
+    for (const r of getCloudDayPower(sn, dateStr, dateStr)) {
+      if (r.power == null) continue;
+      const kwh = (Math.max(r.power, 0) * (20 / 60)) / 1000;
+      imp += kwh;
+      bars.push({
+        label: r.ts,
+        grid: r2(kwh),
+        batt: r2(battByHm.get(new Date(r.ts).toTimeString().slice(0, 5)) ?? 0),
+        pv: 0,
+      });
+    }
+    return { imp: r2(imp), bars };
+  }
+  function monthRows(ym) {
+    if (!sn) return [];
+    return getCloudTrend(sn, "month", ym).rows.map((r) => ({
+      label: r.time,
+      importKwh: r.import_energy ?? 0,
+    }));
+  }
+  const dayBars = (rows) =>
+    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: battKwh(r.label), pv: 0 }));
+
+  let label;
+  let gridKwh = 0;
+  let battKwhSum = 0;
+  let bars = [];
+  let periodStart = null; // yyyy-MM-dd of the period's first day (for hasEarlier)
+
+  if (type === "day") {
+    const d = new Date(dayStart.getTime() - offset * 86400000);
+    const dateStr = localDate(d);
+    periodStart = dateStr;
+    label = offset === 1 ? "Yesterday" : dateStr;
+    const g = dayGrid(dateStr);
+    gridKwh = g.imp;
+    bars = g.bars;
+    battKwhSum = battKwh(dateStr);
+  } else if (type === "week") {
+    // Rolling 7-day window shifted back by whole weeks (matches the offset-0
+    // tile's semantics).
+    const end = new Date(dayStart.getTime() - (offset - 1) * 7 * 86400000);
+    const start = new Date(end.getTime() - 7 * 86400000);
+    periodStart = localDate(start);
+    const lastDay = localDate(new Date(end.getTime() - 86400000));
+    label = `${periodStart.slice(5)} – ${lastDay.slice(5)}`;
+    const rows = [];
+    for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
+      const ds = localDate(d);
+      const ym = ds.slice(0, 7);
+      const row = monthRows(ym).find((r) => r.label === ds);
+      rows.push({ label: ds, importKwh: row?.importKwh ?? 0 });
+    }
+    gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
+    bars = dayBars(rows);
+    battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+  } else if (type === "month") {
+    const d = new Date(dayStart.getFullYear(), dayStart.getMonth() - offset, 1);
+    const ym = localDate(d).slice(0, 7);
+    periodStart = `${ym}-01`;
+    label = d.toLocaleDateString("en", { month: "long", year: "numeric" });
+    const rows = monthRows(ym);
+    gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
+    bars = dayBars(rows);
+    battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+  } else {
+    const year = dayStart.getFullYear() - offset;
+    periodStart = `${year}-01-01`;
+    label = String(year);
+    const yearRows = sn
+      ? getCloudTrend(sn, "year", String(year)).rows.map((r) => ({
+          label: r.time,
+          importKwh: r.import_energy ?? 0,
+        }))
+      : [];
+    gridKwh = r2(yearRows.reduce((a, r) => a + r.importKwh, 0));
+    bars = yearRows.map((r) => {
+      const [y, m] = r.label.split("-").map(Number);
+      let batt = 0;
+      for (let day = 1; day <= new Date(y, m, 0).getDate(); day++) {
+        batt += battKwh(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+      }
+      return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: 0 };
+    });
+    battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+  }
+
+  const hasData = gridKwh > 0 || battKwhSum > 0;
+  res.json({
+    ok: true,
+    data: {
+      label,
+      hasData,
+      hasEarlier: earliest != null && periodStart != null && periodStart > earliest,
+      homeKwh: r2(gridKwh + battKwhSum),
+      gridKwh,
+      battKwh: battKwhSum,
+      pvKwh: 0,
+      gridEur: eur(gridKwh),
+      battEur: eur(battKwhSum),
+      pvEur: 0,
+      bars,
     },
   });
 });

@@ -155,6 +155,16 @@ export function getAnyDeviceSn() {
   return selectAnySn.get()?.sn ?? null;
 }
 
+// First day with cloud history (when the meter was linked) — dashboard time
+// navigation stops there.
+const selectEarliestDay = db.prepare(`
+  SELECT MIN(period_start) AS d FROM cloud_history WHERE device_sn = ? AND period_type = 'day'
+`);
+
+export function getEarliestCloudDay(sn) {
+  return selectEarliestDay.get(sn ?? "")?.d ?? null;
+}
+
 // Battery SN = the cloud_history device SN that is not the meter.
 const selectBatterySn = db.prepare(`
   SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE device_sn != ? LIMIT 1

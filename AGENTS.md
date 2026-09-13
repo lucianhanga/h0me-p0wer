@@ -271,6 +271,12 @@ EPIPE noise on every client disconnect).
   rows + battery day-trends), Year = per month (battery summed from day-trends,
   ~365 local queries per call). ECharts axis tooltip shows the day's split.
   Data: `byPeriod.*.bars` in `/api/stats/overview`.
+- **Time navigation**: ‹ › in each card's title row (`/api/stats/period?
+  type=day|week|month|year&offset=N`, offset ≥ 1; offset 0 = overview data).
+  Day = that date's cloud day-trend (20-min bars), week = rolling 7-day window
+  shifted by whole weeks, month/year = calendar. `hasData`/`hasEarlier` stop
+  navigation at the data edge (`getEarliestCloudDay`, meter linked 2026-09-06
+  — e.g. August/2025 are unreachable). Buttons `stopPropagation` (no flip).
   From `/api/stats/overview` → `byPeriod`: today from the `flows` trapezoid,
   week/month battery from the battery's cloud day-trends (`disKwh`), year
   battery = day-trend sum (complete — battery is new). Accounting: house =
