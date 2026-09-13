@@ -1,6 +1,8 @@
 // Orchestrates the Welcome briefing: deterministic data gathering (cached
 // per TTL), ONE structured AI call, stale-on-error, deterministic fallback
-// when the AI is unavailable. The route never throws and never leaks config.
+// when the AI is unavailable. A background scheduler keeps the cache warm so
+// opening the tab never waits for the AI; the route's lazy refresh is only
+// the fallback. The route never throws and never leaks config.
 import { kvGet, kvSet } from "./db.js";
 import {
   parseWelcomeConfig, geocode, fetchWeather, fetchPvgis,
@@ -8,10 +10,18 @@ import {
 import { buildContext, callWelcomeAI, buildFallback } from "./welcome-ai.js";
 
 const AI_TTL_MS = 6 * 3600 * 1000; // max 4 AI calls/day
+// Fallback payloads self-heal: retry the AI after 15 min instead of letting
+// one outage block AI briefings for the full 6 h TTL.
+const FALLBACK_TTL_MS = 15 * 60 * 1000;
 const CACHE_KEY = "welcome:latest";
+// How often the scheduler checks staleness (a no-op while the cache is fresh).
+const SCHEDULER_TICK_MS = 10 * 60 * 1000;
+// Post-startup delay before the first scheduled refresh — lets the meter and
+// battery syncs produce data for the start-of-day snapshot.
+const STARTUP_DELAY_MS = 45 * 1000;
 
 export function registerWelcomeRoute(app, deps) {
-  let inflight = null; // dedupe concurrent refreshes
+  let inflight = null; // dedupe concurrent refreshes (route + scheduler)
 
   async function refresh(config) {
     const geo = await geocode(config.address);
@@ -57,6 +67,44 @@ export function registerWelcomeRoute(app, deps) {
     return payload;
   }
 
+  function ttlFor(cached) {
+    return cached?.value?.aiPowered === false ? FALLBACK_TTL_MS : AI_TTL_MS;
+  }
+
+  function freshCache() {
+    const cached = kvGet(CACHE_KEY);
+    return cached && Date.now() - cached.fetchedAt < ttlFor(cached) ? cached : null;
+  }
+
+  // Refresh only when the cache is missing or past its TTL. Shared by the
+  // scheduler and the route; failures leave any old cache in place.
+  async function refreshIfStale(config) {
+    if (freshCache()) return;
+    inflight ??= refresh(config).finally(() => (inflight = null));
+    await inflight;
+  }
+
+  function loadConfig() {
+    try {
+      return parseWelcomeConfig();
+    } catch {
+      return null; // misconfiguration — the route reports it, scheduler stays quiet
+    }
+  }
+
+  // Background scheduler: keeps the briefing warm with the same TTL budget
+  // (≤ 4 AI calls/day). unref'd so it never blocks shutdown.
+  setTimeout(() => {
+    const config = loadConfig();
+    if (!config) return;
+    refreshIfStale(config).catch((err) => console.warn(`[welcome] scheduled refresh failed: ${err.message}`));
+  }, STARTUP_DELAY_MS).unref();
+  setInterval(() => {
+    const config = loadConfig();
+    if (!config) return;
+    refreshIfStale(config).catch((err) => console.warn(`[welcome] scheduled refresh failed: ${err.message}`));
+  }, SCHEDULER_TICK_MS).unref();
+
   app.get("/api/welcome", async (req, res) => {
     let config;
     try {
@@ -67,16 +115,12 @@ export function registerWelcomeRoute(app, deps) {
     if (!config) {
       return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
     }
+    const fresh = freshCache();
+    if (fresh) return res.json({ ok: true, data: fresh.value });
     const cached = kvGet(CACHE_KEY);
-    // Fallback payloads self-heal: retry the AI after 15 min instead of
-    // letting one outage block AI briefings for the full 6 h TTL.
-    const ttl = cached?.value?.aiPowered === false ? 15 * 60 * 1000 : AI_TTL_MS;
-    if (cached && Date.now() - cached.fetchedAt < ttl) {
-      return res.json({ ok: true, data: cached.value });
-    }
     try {
-      inflight ??= refresh(config).finally(() => (inflight = null));
-      return res.json({ ok: true, data: await inflight });
+      await refreshIfStale(config);
+      return res.json({ ok: true, data: kvGet(CACHE_KEY).value });
     } catch (err) {
       console.warn(`[welcome] refresh failed: ${err.message}`);
       if (cached) return res.json({ ok: true, data: { ...cached.value, stale: true } });
