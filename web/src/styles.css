@@ -452,6 +452,35 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
+/* Title row with ‹ › period navigation. */
+.src-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.src-title span {
+  flex: 1;
+}
+
+.src-nav {
+  padding: 0 0.35rem;
+  min-height: 0;
+  background: transparent;
+  border-color: transparent;
+  color: #8b98a5;
+  font-size: 0.95rem;
+  line-height: 1.2;
+}
+
+.src-nav:hover:not(:disabled) {
+  color: #e8ecef;
+}
+
+.src-nav:disabled {
+  opacity: 0.3;
+}
+
 .src-eur {
   color: #8b98a5;
   font-size: 0.75rem;

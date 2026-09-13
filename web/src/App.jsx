@@ -9,7 +9,6 @@ const PAGES = [
   { key: "live", label: "Live" },
   { key: "graph", label: "Graph" },
   { key: "dashboard", label: "Dashboard" },
-  { key: "history", label: "History" },
 ];
 
 export default function App() {
@@ -89,18 +88,10 @@ export default function App() {
           <LiveTab />
         ) : page === "graph" ? (
           <GraphTab />
-        ) : page === "dashboard" ? (
-          <Dashboard />
         ) : (
-          <Placeholder name={page} />
+          <Dashboard />
         )}
       </main>
     </div>
   );
-}
-
-// Remaining parked tabs: old components live untouched in web/src/parked/,
-// just not bundled.
-function Placeholder({ name }) {
-  return <p className="muted">{name} — coming soon</p>;
 }
