@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import SpeakButton, { speakText, stopSpeech } from "./SpeakButton.jsx";
+import SpeakButton, { speakText, stopSpeech, speechSupported } from "./SpeakButton.jsx";
 
-// Answer text with karaoke-style sync: while it is read aloud, the word at
-// the voice's current position is highlighted (SpeechSynthesis onboundary).
-// autoPlay starts the reading immediately on mount — no button press needed
-// (the shared coordination makes the button show ⏹ in sync).
-export default function SyncedSpeech({ id, text, autoPlay = false, className = "" }) {
-  const [char, setChar] = useState(null);
+// Answer text written AS it is spoken: words appear one by one at the voice's
+// pace (SpeechSynthesis onboundary), the current word highlighted; the full
+// text stays once the reading ends. autoPlay starts reading immediately —
+// onSpeechEnd fires when the utterance finishes (drives the auto-close).
+export default function SyncedSpeech({ id, text, autoPlay = false, className = "", onSpeechEnd = null }) {
+  const [char, setChar] = useState(null); // boundary charIndex while speaking
+  const [finished, setFinished] = useState(!speechSupported);
 
   const words = useMemo(() => {
     const out = [];
@@ -17,7 +18,17 @@ export default function SyncedSpeech({ id, text, autoPlay = false, className = "
   }, [text]);
 
   useEffect(() => {
-    if (autoPlay && text) speakText(id, text, { onWord: setChar });
+    function onWord(c) {
+      if (c == null) {
+        setChar(null);
+        setFinished(true);
+        onSpeechEnd?.();
+      } else {
+        setFinished(false);
+        setChar(c);
+      }
+    }
+    if (autoPlay && text) speakText(id, text, { onWord });
     return () => stopSpeech(); // panel closed / answer replaced mid-speech
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, text, autoPlay]);
@@ -26,17 +37,31 @@ export default function SyncedSpeech({ id, text, autoPlay = false, className = "
     char == null
       ? -1
       : words.findIndex((w, k) => char >= w.i && (k === words.length - 1 || char < words[k + 1].i));
+  const revealed = finished ? words.length : activeIdx + 1;
 
   return (
     <div className={className}>
       <p className="ask-answer">
-        {words.map((w, k) => (
+        {words.slice(0, revealed).map((w, k) => (
           <span key={k} className={k === activeIdx ? "speak-active" : undefined}>
             {w.w}{" "}
           </span>
         ))}
       </p>
-      <SpeakButton id={id} text={text} onBoundary={setChar} />
+      <SpeakButton
+        id={id}
+        text={text}
+        onBoundary={(c) => {
+          if (c == null) {
+            setChar(null);
+            setFinished(true);
+            onSpeechEnd?.();
+          } else {
+            setFinished(false);
+            setChar(c);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -247,11 +247,17 @@ errors: first recover the intended question (correctedQuestion), then answer it.
 Hard rules:
 - Answer ONLY from the provided JSON context (location, weather, consumption,
   battery, PV estimates, live power, tariff). Never invent figures.
+- Keep it SHORT: at most 2-3 plain sentences, strictly on the question's
+  subject. No background, no extra context unless asked.
+- Scope: home energy only (power, grid, battery, solar/PV, weather for the
+  home, costs). If the question is about anything else, or the context has no
+  data to answer it, say honestly that you don't know or can't answer that —
+  do NOT guess and do NOT answer off-topic questions.
 - The PV system is PLANNED, not installed: production numbers are PVGIS-based
   estimates. Power-flow priority: PV covers the house FIRST, surplus to the
   battery, grid last.
-- Plain spoken-style language (the answer may be read aloud), ≤ 6 sentences,
-  numbers rounded sensibly. Language for both fields: see language field.`;
+- Spoken-style language (the answer is read aloud), numbers rounded sensibly.
+  Language for both fields: see language field.`;
 
 export async function callAskAI(config, context, question) {
   const user = JSON.stringify({ language: config.ai.language, question, ...context });

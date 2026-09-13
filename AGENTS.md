@@ -347,9 +347,13 @@ EPIPE noise on every client disconnect).
   the transcript AND answers (`{correctedQuestion, answer}` json_schema), fed
   with the welcome context + live grid power (`getLivePower` dep). Answer shows
   in a **modal overlay** (`.ask-backdrop`, tap outside/× to close) and is
-  **read aloud immediately** (`SyncedSpeech` autoPlay) with **karaoke-style
-  word highlighting** driven by the utterance's `onboundary` charIndex
-  (`.speak-active`). Speech control is shared (`speakText`/`stopSpeech` in
+  **read aloud immediately** (`SyncedSpeech` autoPlay) with the text **written
+  word-by-word at the voice's pace** (only spoken words visible, current one
+  highlighted via `onboundary`; full text stays after the reading ends). The
+  prompt keeps answers SHORT (2-3 sentences, on-subject) and makes the AI say
+  it doesn't know for off-topic/answerless questions (home-energy scope only).
+  **Dead-man auto-close**: 3 s after the reading ends the overlay closes;
+  every tap on it re-arms the 3 s (no speech support → timer starts at once). Speech control is shared (`speakText`/`stopSpeech` in
   `SpeakButton.jsx`) so the button state tracks auto-started playback.
   Mic-denied and no-key states have friendly errors; STT-less browsers hide
   the button. Plain-HTTP LAN origins get NO mic prompt (secure-context rule —
