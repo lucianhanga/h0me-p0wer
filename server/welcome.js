@@ -130,4 +130,27 @@ export function registerWelcomeRoute(app, deps) {
       return res.json({ ok: false, error: "Welcome data unavailable — check server logs." });
     }
   });
+
+  // Manual refresh (tab's refresh button): regenerates immediately, bypassing
+  // the TTL — the 6h budget governs the scheduler; this is user-initiated.
+  app.post("/api/welcome/refresh", async (req, res) => {
+    let config;
+    try {
+      config = parseWelcomeConfig();
+    } catch (err) {
+      return res.json({ ok: false, error: err.message });
+    }
+    if (!config) {
+      return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
+    }
+    try {
+      inflight ??= refresh(config).finally(() => (inflight = null));
+      return res.json({ ok: true, data: await inflight });
+    } catch (err) {
+      console.warn(`[welcome] manual refresh failed: ${err.message}`);
+      const cached = kvGet(CACHE_KEY);
+      if (cached) return res.json({ ok: true, data: { ...cached.value, stale: true } });
+      return res.json({ ok: false, error: "Welcome data unavailable — check server logs." });
+    }
+  });
 }

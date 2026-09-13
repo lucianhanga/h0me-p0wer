@@ -39,6 +39,7 @@ function SunArc({ sunrise, sunset }) {
 export default function WelcomeTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const hasData = useRef(false); // survives the []-closure for keep-last-good
 
   useEffect(() => {
@@ -59,6 +60,19 @@ export default function WelcomeTab() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
+  // Forced regeneration (server makes a real AI call — can take ~20-30 s).
+  async function refresh() {
+    setRefreshing(true);
+    try {
+      const j = await fetch("/api/welcome/refresh", { method: "POST" }).then((r) => r.json());
+      if (j.ok) { hasData.current = true; setData(j.data); setError(null); }
+    } catch {
+      // keep last good
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (error) return <p className="muted">Welcome — {error}</p>;
   if (!data) return <p className="muted">Preparing your briefing…</p>;
   const gt = data.groundTruth ?? {};
@@ -69,6 +83,15 @@ export default function WelcomeTab() {
         <p className="muted wx-meta">
           {data.aiPowered ? "AI briefing" : "offline estimate"}
           {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          <button
+            className={`wx-refresh${refreshing ? " spinning" : ""}`}
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh briefing (new AI call)"
+            aria-label="Refresh briefing"
+          >
+            ↻
+          </button>
         </p>
       </section>
 
