@@ -149,7 +149,7 @@ export default function WelcomeTab() {
               className="speak-corner"
               text={`Estimated production: ${data.production.todayKwh} kilowatt-hours today, about ${data.production.weekKwh} this week and ${data.production.monthKwh} this month. ${data.production.reasoning}`}
             />
-            <h3>Estimated production (planned PV)</h3>
+            <h3>{gt.pvLiveToday ? "Production" : "Estimated production (planned PV)"}</h3>
             <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
             <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
             <p className="muted">{data.production.reasoning}</p>

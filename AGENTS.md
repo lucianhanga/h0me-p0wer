@@ -132,7 +132,11 @@ EPIPE noise on every client disconnect).
 
 - Meter SN syncs from the live Modbus reading (not hardcoded). Cloud sync waits
   for the first snapshot before starting.
-- Solar (secondary CT) reads 0 — no solar CT connected at the moment.
+- **PV is LIVE since 2026-09-13**: 2×500 W (SSW, 17°) connected to the
+  Solarbank's DC inputs (pv1_w/pv2_w report per-string watts). The Welcome/Ask
+  AI detects it via `pvLiveToday` (any pv_w > 0 today) and switches from
+  "planned PV estimates" to actuals; the production card title follows.
+  (The meter's secondary CT still reads 0 — PV is measured at the battery.)
 - npm's `allow-scripts` blocks esbuild's postinstall on fresh installs:
   `npm approve-scripts esbuild && npm rebuild esbuild` if Vite misbehaves.
 - Git identity is repo-local: `lucianhanga` + GitHub noreply email.
@@ -169,14 +173,18 @@ EPIPE noise on every client disconnect).
   `battery.ts`/`pv.ts` = battery reading; grid's is an ISO string, battery's
   ms epoch) — the flow diagram shows it under each active edge's watt label.
 - Live page: SVG `FlowDiagram` (PV/Grid/Home/Battery nodes, animated dashed
-  edges in flow direction, 5 s refresh).
+  edges in flow direction, 5 s refresh). **Topology matches the hardware
+  (2026-09-13): the panels feed the Solarbank's DC input and the house is fed
+  ONLY through the unit's built-in inverter — NO direct PV→Home edge.**
+  Edges: PV→Battery (all production), Battery→Home (cell discharge +
+  `pvToHome` inverter pass-through), Home→Battery (charge), Grid↔Home.
 - Chart: `pv` series (from `battery_snapshots.pv_w`) on the battery y-axis.
 - `/api/stats/overview` → `flows`: today's kWh per flow (trapezoid over
   snapshots/battery_snapshots). Dashboard tiles: Home today, PV today.
-- Battery sync is every 30 s (1 scen_info call; siteId cached after first).
-  Once the first REST sync yields the battery SN, `server/mqtt.js`
-  (`AnkerMqtt`) takes over with realtime MQTT push (see below); REST stays as
-  fallback whenever MQTT is disconnected.
+- Battery sync: **REST `scen_info` unconditionally every 10 s** (6 calls/min,
+  well inside the ~10-12/min rate limit) as the granularity floor; MQTT push
+  (~3-5 s when it delivers) layers on top. Once the first REST sync yields the
+  battery SN, `server/mqtt.js` (`AnkerMqtt`) takes over as the fast channel.
 
 ## Battery realtime via MQTT (2026-09-10)
 

@@ -2,7 +2,7 @@
 // here comes from local DB rows or the fetched weather/PVGIS payloads — the
 // AI (welcome-ai call below) only interprets these numbers, never invents
 // them.
-import { getCloudTrend, getSnapshotRows, getFirstBatteryAfter } from "./db.js";
+import { getCloudTrend, getSnapshotRows, getFirstBatteryAfter, getBatteryHistory } from "./db.js";
 import { localDate } from "./welcome-sources.js";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -83,6 +83,12 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
   const batt = deps.getLiveBattery();
   const sunriseToday = daily.sunrise?.[0] ? new Date(daily.sunrise[0]).getTime() : dayStart.getTime();
   const sunriseBatt = getFirstBatteryAfter(sunriseToday);
+  // PV went live 2026-09-13: panels are connected to the Solarbank (DC) and
+  // report pv_w. "Installed" = any production seen today (night reads 0 too).
+  const pvMaxToday = getBatteryHistory(dayStart.getTime(), now.getTime()).reduce(
+    (m, r) => Math.max(m, r.pv_w ?? 0),
+    0,
+  );
 
   return {
     location: { address: config.address, lat: geo.lat, lon: geo.lon, displayName: geo.displayName },
@@ -105,8 +111,15 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
       todayImportKwhSoFar: round1(todayImportKwh),
     },
     battery: batt
-      ? { socNow: batt.soc, outputW: batt.outputW, chargeW: batt.chargeW, sunriseSoc: sunriseBatt?.soc ?? null }
-      : { socNow: null, outputW: null, chargeW: null, sunriseSoc: sunriseBatt?.soc ?? null },
+      ? {
+          socNow: batt.soc,
+          outputW: batt.outputW,
+          chargeW: batt.chargeW,
+          pvNowW: batt.pvW ?? null,
+          pvLiveToday: pvMaxToday > 0,
+          sunriseSoc: sunriseBatt?.soc ?? null,
+        }
+      : { socNow: null, outputW: null, chargeW: null, pvNowW: null, pvLiveToday: pvMaxToday > 0, sunriseSoc: sunriseBatt?.soc ?? null },
   };
 }
 
@@ -156,7 +169,7 @@ export const WELCOME_SCHEMA = {
 const SYSTEM_PROMPT = `You write the morning energy briefing for a home dashboard.
 Hard rules:
 - Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
-- The PV system is PLANNED, not installed: production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
+- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (report actuals: pvNowW, charge flows) — otherwise it is still PLANNED and production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
 - Power-flow priority (Self-Consumption mode with a smart meter, per the storage manual): PV power FIRST covers the home's current consumption; only the SURPLUS charges the battery; export to the grid happens last. Compare estimated PV output with the home's baseline consumption (consumption averages / 24 h): with a small PV system and a high baseline, most PV power goes DIRECTLY to the house and little reaches the battery — never claim the opposite.
 - Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
@@ -253,9 +266,7 @@ Hard rules:
   home, costs). If the question is about anything else, or the context has no
   data to answer it, say honestly that you don't know or can't answer that —
   do NOT guess and do NOT answer off-topic questions.
-- The PV system is PLANNED, not installed: production numbers are PVGIS-based
-  estimates. Power-flow priority: PV covers the house FIRST, surplus to the
-  battery, grid last.
+- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (use the actual figures) — otherwise it is PLANNED and production numbers are PVGIS-based estimates. Power-flow priority: PV covers the house FIRST, surplus to the battery, grid last.
 - Spoken-style language (the answer is read aloud), numbers rounded sensibly.
   Language for both fields: see language field.`;
 

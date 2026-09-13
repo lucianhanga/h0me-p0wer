@@ -1143,9 +1143,11 @@ function startBatteryMqtt() {
 
 async function syncBattery() {
   if (!anker.configured) return;
-  // MQTT streaming active and delivering — REST is only the fallback for when
-  // it's down or silently stalled (no telemetry for 2 min).
-  if (batteryMqtt?.isFresh()) return;
+  // REST runs unconditionally every 10 s (6 scen_info calls/min — well inside
+  // the ~10-12/min rate limit). MQTT push (~3-5 s) stays the fast channel on
+  // top when it delivers; REST guarantees the granularity floor since the
+  // broker sometimes goes quiet or bursts only sporadically (seen: pairs
+  // every ~90 s overnight, ~36 s gaps by day).
   try {
     const info = await anker.getBatteryInfo();
     if (info) {
@@ -1158,8 +1160,10 @@ async function syncBattery() {
     console.warn(`[battery] sync failed: ${err.message}`);
   }
 }
-setTimeout(syncBattery, 60 * 1000);
-setInterval(syncBattery, 30 * 1000).unref();
+setTimeout(syncBattery, 10 * 1000);
+// 10 s REST fallback (6 scen_info calls/min — well inside the ~10-12/min
+// rate limit); MQTT push (~3-5 s) stays the primary channel when fresh.
+setInterval(syncBattery, 10 * 1000).unref();
 
 poller.start();
 

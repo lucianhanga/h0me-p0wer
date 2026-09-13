@@ -56,6 +56,7 @@ export function registerWelcomeRoute(app, deps) {
         tempMin: context.today?.tempMin ?? null,
         tempMax: context.today?.tempMax ?? null,
         week: context.week,
+        pvLiveToday: context.battery.pvLiveToday ?? false,
       },
       startOfDay: {
         sunrise: context.sun.sunrise,
