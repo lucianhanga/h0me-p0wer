@@ -65,7 +65,12 @@ const anker = new AnkerClient(
 const app = express();
 app.use(express.json());
 
+// Presence signal for demand-driven cloud polling: a frontend is "watching"
+// when a WS client is connected or it recently polled the live endpoints.
+let lastApiActivity = 0;
+
 app.get("/api/live", (req, res) => {
+  lastApiActivity = Date.now();
   res.json(poller.getState());
 });
 
@@ -88,19 +93,25 @@ app.get("/api/battery/live", (req, res) => {
 });
 
 // Computed power flows between grid / battery / PV / home.
-// Approximation rules (documented in AGENTS.md):
-// - grid import/export comes straight from the meter (signed total).
-// - PV split: bat_charge_power counts all charging regardless of source, so
-//   pvToBattery = min(pvW, chargeW) and pvToHome = pvW - pvToBattery.
-// - home consumption = grid import + battery discharge + PV direct.
+// Model (validated against live data 2026-09-13): the Solarbank's
+// output_power is the inverter's TOTAL AC output to the house — PV
+// pass-through is already inside it (its own to_home field ≈ output_power).
+// So: bank→home = outputW (never plus pvW), and PV-to-home only exists when
+// the inverter is actually outputting. The old `pvToHome = pvW − chargeW`
+// double-counted PV and invented a PV→home flow while the bank was charging.
 app.get("/api/flow", (req, res) => {
+  lastApiActivity = Date.now();
   const grid = poller.snapshot?.primary?.totalPower ?? null;
   const gridTs = poller.snapshot?.timestamp ?? null;
   const b = latestBattery ?? getLatestBattery();
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
+  const outputW = b?.outputW ?? 0;
   const pvToBattery = Math.min(pvW, chargeW);
-  const pvToHome = Math.max(0, pvW - pvToBattery);
+  // PV watts reaching the house INSIDE the inverter output (informational):
+  // PV splits exactly into cells + pass-through (pvW = chargeW + pvThrough),
+  // and the pass-through only exists while the inverter is outputting.
+  const pvToHome = outputW > 0 ? Math.max(0, pvW - chargeW) : 0;
   res.json({
     ok: true,
     data: {
@@ -116,7 +127,7 @@ app.get("/api/flow", (req, res) => {
       pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null },
       home: {
         consumption:
-          grid != null ? Math.max(grid, 0) + (b?.outputW ?? 0) + pvToHome : null,
+          grid != null ? Math.max(grid, 0) + outputW : null,
       },
     },
   });
@@ -186,13 +197,12 @@ app.get("/api/timeseries", (req, res) => {
   const CLOUD_INTERVAL_MS = 20 * 60 * 1000;
 
   // Source 1b: battery (Solarbank) snapshots every 30 s — signed power:
-  // discharge positive, charge negative; plus PV input watts. Read one
-  // interval past the left edge so batt/pv interpolation has a left anchor
-  // when the window starts inside a battery-data gap (at night rows arrive
-  // in pairs ~15 min apart — the same edge-anchor rule as the cloud pass).
+  // discharge positive, charge negative; plus PV input watts. battOut is the
+  // unsigned inverter output (home = grid + battOut; PV is inside it).
   for (const r of getBatteryHistory(from - CLOUD_INTERVAL_MS, to)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     add(bt, "batt", (r.output_w ?? 0) - (r.charge_w ?? 0));
+    add(bt, "battOut", r.output_w ?? 0);
     add(bt, "pv", r.pv_w ?? 0);
   }
 
@@ -242,7 +252,10 @@ app.get("/api/timeseries", (req, res) => {
         if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
         if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
         const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-        if (!acc.get(bt)?.batt) add(bt, "batt", r.power);
+        if (!acc.get(bt)?.batt) {
+          add(bt, "batt", r.power);
+          add(bt, "battOut", Math.max(r.power, 0)); // signed trend: discharge+
+        }
       }
     }
   }
@@ -298,8 +311,12 @@ app.get("/api/timeseries", (req, res) => {
       const grid = v0 + (v1 - v0) * frac;
       add(t, "grid", grid);
       const existing = acc.get(t) ?? {};
+      const o0 = acc.get(bt0).battOut;
+      const o1 = acc.get(bt1).battOut;
       if (!existing.batt && b0 && b1)
         add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
+      if (!existing.battOut && o0 && o1)
+        add(t, "battOut", o0.s / o0.c + (o1.s / o1.c - o0.s / o0.c) * frac);
       if (!existing.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
       if (sh0 && sh1) {
         add(t, "l1", grid * (sh0[0] + (sh1[0] - sh0[0]) * frac));
@@ -325,8 +342,12 @@ app.get("/api/timeseries", (req, res) => {
       if (t < from || t > to) continue;
       const frac = (t - bt0) / (bt1 - bt0);
       const b = acc.get(t) ?? {};
+      const o0 = acc.get(bt0).battOut;
+      const o1 = acc.get(bt1).battOut;
       if (!b.batt && b0 && b1)
         add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
+      if (!b.battOut && o0 && o1)
+        add(t, "battOut", o0.s / o0.c + (o1.s / o1.c - o0.s / o0.c) * frac);
       if (!b.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
     }
   }
@@ -371,6 +392,7 @@ app.get("/api/timeseries", (req, res) => {
       l3: b ? round(b.l3) : null,
       solar: b ? round(b.solar) : null,
       batt: b ? round(b.batt) : null,
+      battOut: b ? round(b.battOut) : null,
       pv: b ? round(b.pv) : null,
     });
   }
@@ -570,8 +592,11 @@ app.get("/api/stats/overview", (req, res) => {
     dischargedKwh += (((battRows[i - 1].output_w + battRows[i].output_w) / 2) * dt) / 1000;
     chargedKwh += (((battRows[i - 1].charge_w + battRows[i].charge_w) / 2) * dt) / 1000;
     pvKwh += (((battRows[i - 1].pv_w + battRows[i].pv_w) / 2) * dt) / 1000;
-    const pvHome0 = Math.max(0, battRows[i - 1].pv_w - battRows[i - 1].charge_w);
-    const pvHome1 = Math.max(0, battRows[i].pv_w - battRows[i].charge_w);
+    // PV reaching the house = pv_w − charge_w (the part not charging), only
+    // while the inverter outputs (output_power already includes the PV
+    // pass-through — see /api/flow for the validated model).
+    const pvHome0 = battRows[i - 1].output_w > 0 ? Math.max(0, battRows[i - 1].pv_w - battRows[i - 1].charge_w) : 0;
+    const pvHome1 = battRows[i].output_w > 0 ? Math.max(0, battRows[i].pv_w - battRows[i].charge_w) : 0;
     pvToHomeKwh += (((pvHome0 + pvHome1) / 2) * dt) / 1000;
   }
   const battLatest = latestBattery ?? getLatestBattery();
@@ -593,7 +618,7 @@ app.get("/api/stats/overview", (req, res) => {
     battDischargedKwh: battery?.dischargedKwh ?? 0,
     battChargedKwh: battery?.chargedKwh ?? 0,
     pvKwh: Math.round(pvKwh * 100) / 100,
-    homeKwh: Math.round((importKwh + dischargedKwh + pvToHomeKwh) * 100) / 100,
+    homeKwh: Math.round((importKwh + dischargedKwh) * 100) / 100,
   };
 
   // Costs from kWh × tariff. Battery discharge = avoided grid import, so its
@@ -1143,11 +1168,6 @@ function startBatteryMqtt() {
 
 async function syncBattery() {
   if (!anker.configured) return;
-  // REST runs unconditionally every 10 s (6 scen_info calls/min — well inside
-  // the ~10-12/min rate limit). MQTT push (~3-5 s) stays the fast channel on
-  // top when it delivers; REST guarantees the granularity floor since the
-  // broker sometimes goes quiet or bursts only sporadically (seen: pairs
-  // every ~90 s overnight, ~36 s gaps by day).
   try {
     const info = await anker.getBatteryInfo();
     if (info) {
@@ -1160,10 +1180,19 @@ async function syncBattery() {
     console.warn(`[battery] sync failed: ${err.message}`);
   }
 }
-setTimeout(syncBattery, 10 * 1000);
-// 10 s REST fallback (6 scen_info calls/min — well inside the ~10-12/min
-// rate limit); MQTT push (~3-5 s) stays the primary channel when fresh.
-setInterval(syncBattery, 10 * 1000).unref();
+// Demand-driven cadence: while a frontend is watching (WS client connected
+// or live endpoints polled in the last 15 s) pull scen_info every 5 s — the
+// Anker app itself gets its live view over MQTT push, so this REST cadence
+// only bridges broker gaps; 12 calls/min is the documented ceiling, hence
+// only on demand. Idle floor: every 10 s unconditionally.
+let lastBatterySync = 0;
+setInterval(() => {
+  const watching = wss.clients.size > 0 || Date.now() - lastApiActivity < 15000;
+  const minInterval = watching ? 5000 : 10000;
+  if (Date.now() - lastBatterySync < minInterval) return;
+  lastBatterySync = Date.now();
+  syncBattery();
+}, 5000).unref();
 
 poller.start();
 
