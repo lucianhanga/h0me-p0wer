@@ -187,6 +187,27 @@ h3 {
   margin: 1.2rem 0 0.4rem;
 }
 
+/* Collapsible section header (Live tab Details) — looks like h3, behaves
+   like a button. */
+.details-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+  min-height: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin: 1.2rem 0 0.4rem;
+}
+
+.details-toggle .chevron {
+  color: #8b98a5;
+  font-weight: 400;
+}
+
 section {
   margin-bottom: 2.5rem;
 }
