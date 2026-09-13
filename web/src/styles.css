@@ -665,7 +665,7 @@ pre {
 
 /* Welcome tab */
 .welcome .wx-hero { margin-bottom: 1rem; }
-.wx-greeting { font-size: 1.15rem; margin: 0 0 0.25rem; }
+.wx-greeting { font-size: 1.15rem; margin: 0 0 0.25rem; padding-right: 2rem; }
 .wx-meta { font-size: 0.75rem; margin: 0; }
 
 /* Refresh button in the meta line — small ghost button, spins in-flight. */
