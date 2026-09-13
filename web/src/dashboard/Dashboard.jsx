@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import FlipTile from "../components/FlipTile.jsx";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -47,27 +48,29 @@ const SRC_ROWS = [
 function SourceCard({ title, data }) {
   const savedEur = Math.round((data.battEur + data.pvEur) * 100) / 100;
   return (
-    <div className="tile">
-      <div className="tile-title">{title}</div>
-      <div className="src-home">{data.homeKwh} kWh</div>
-      <div className="src-rows">
-        {SRC_ROWS.map((r) => (
-          <div className="src-row" key={r.key}>
-            <span className="src-dot" style={{ background: r.color }} />
-            <span>{r.label}</span>
-            <span className="src-value">
-              {data[r.key]} kWh
-              <span className="src-eur">
-                · €{data[r.eur]}
-                {r.saved ? " saved" : ""}
+    <FlipTile>
+      <div className="tile">
+        <div className="tile-title">{title}</div>
+        <div className="src-home">{data.homeKwh} kWh</div>
+        <div className="src-rows">
+          {SRC_ROWS.map((r) => (
+            <div className="src-row" key={r.key}>
+              <span className="src-dot" style={{ background: r.color }} />
+              <span>{r.label}</span>
+              <span className="src-value">
+                {data[r.key]} kWh
+                <span className="src-eur">
+                  · €{data[r.eur]}
+                  {r.saved ? " saved" : ""}
+                </span>
               </span>
-            </span>
-          </div>
-        ))}
+            </div>
+          ))}
+        </div>
+        <div className="src-money">
+          spent €{data.gridEur} · saved €{savedEur}
+        </div>
       </div>
-      <div className="src-money">
-        spent €{data.gridEur} · saved €{savedEur}
-      </div>
-    </div>
+    </FlipTile>
   );
 }

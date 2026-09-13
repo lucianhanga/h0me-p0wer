@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlowDiagram from "../FlowDiagram.jsx";
+import FlipTile from "../components/FlipTile.jsx";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Polls the backend every 5 s (flow/meter) and
@@ -60,75 +61,91 @@ export default function LiveTab() {
       <FlowDiagram />
 
       <div className="cards">
-        <div className="card card-hero">
-          <div className="card-label">House</div>
-          <div className="card-value">
-            {flow?.home?.consumption != null ? `${flow.home.consumption} W` : "—"}
+        <FlipTile>
+          <div className="card card-hero">
+            <div className="card-label">House</div>
+            <div className="card-value">
+              {flow?.home?.consumption != null ? `${flow.home.consumption} W` : "—"}
+            </div>
           </div>
-        </div>
-        <div className="card">
-          <div className="card-label">Grid {grid != null && (grid >= 0 ? "import" : "export")}</div>
-          <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
-            {grid != null ? `${Math.abs(grid)} W` : "—"}
+        </FlipTile>
+        <FlipTile>
+          <div className="card">
+            <div className="card-label">Grid {grid != null && (grid >= 0 ? "import" : "export")}</div>
+            <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
+              {grid != null ? `${Math.abs(grid)} W` : "—"}
+            </div>
           </div>
-        </div>
-        <div className="card">
-          <div className="card-label">Battery</div>
-          <div className="card-value" style={{ color: "#c084fc" }}>
-            {battery
-              ? battery.discharge > 0
-                ? `${battery.discharge} W`
-                : battery.charge > 0
-                  ? `${battery.charge} W`
-                  : "idle"
-              : "—"}
+        </FlipTile>
+        <FlipTile>
+          <div className="card">
+            <div className="card-label">Battery</div>
+            <div className="card-value" style={{ color: "#c084fc" }}>
+              {battery
+                ? battery.discharge > 0
+                  ? `${battery.discharge} W`
+                  : battery.charge > 0
+                    ? `${battery.charge} W`
+                    : "idle"
+                : "—"}
+            </div>
+            <div className="card-label">
+              {battery
+                ? battery.discharge > 0
+                  ? `sending to house · ${battery.soc}%`
+                  : battery.charge > 0
+                    ? `loading · ${battery.soc}%`
+                    : `idle · ${battery.soc}%`
+                : "offline"}
+            </div>
           </div>
-          <div className="card-label">
-            {battery
-              ? battery.discharge > 0
-                ? `sending to house · ${battery.soc}%`
-                : battery.charge > 0
-                  ? `loading · ${battery.soc}%`
-                  : `idle · ${battery.soc}%`
-              : "offline"}
+        </FlipTile>
+        <FlipTile>
+          <div className="card">
+            <div className="card-label">Solar PV</div>
+            <div className="card-value" style={{ color: "#5fce80" }}>
+              {pv ? `${pv.toHome} W` : "—"}
+            </div>
+            <div className="card-label">
+              {pv && pv.production > 0 ? "sending to house" : "no production"}
+            </div>
           </div>
-        </div>
-        <div className="card">
-          <div className="card-label">Solar PV</div>
-          <div className="card-value" style={{ color: "#5fce80" }}>
-            {pv ? `${pv.toHome} W` : "—"}
-          </div>
-          <div className="card-label">
-            {pv && pv.production > 0 ? "sending to house" : "no production"}
-          </div>
-        </div>
+        </FlipTile>
       </div>
 
       <h3>Details</h3>
       <h4>Grid</h4>
       <div className="phase-cards">
         {(phases ?? [null, null, null]).map((p, i) => (
-          <div className="phase-card" key={i}>
-            <span className="phase-name">L{i + 1}</span>
-            <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
-            <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-          </div>
+          <FlipTile key={i}>
+            <div className="phase-card">
+              <span className="phase-name">L{i + 1}</span>
+              <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
+              <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
+            </div>
+          </FlipTile>
         ))}
       </div>
       <h4>Solar PV</h4>
       <div className="phase-cards">
-        <div className="phase-card">
-          <span className="phase-name">PV total</span>
-          <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
-        </div>
-        <div className="phase-card">
-          <span className="phase-name">PV1</span>
-          <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
-        </div>
-        <div className="phase-card">
-          <span className="phase-name">PV2</span>
-          <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
-        </div>
+        <FlipTile>
+          <div className="phase-card">
+            <span className="phase-name">PV total</span>
+            <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+          </div>
+        </FlipTile>
+        <FlipTile>
+          <div className="phase-card">
+            <span className="phase-name">PV1</span>
+            <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
+          </div>
+        </FlipTile>
+        <FlipTile>
+          <div className="phase-card">
+            <span className="phase-name">PV2</span>
+            <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
+          </div>
+        </FlipTile>
       </div>
       {snapshot && (
         <p className="muted">
