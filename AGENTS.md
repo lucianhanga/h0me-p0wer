@@ -252,6 +252,12 @@ EPIPE noise on every client disconnect).
   all Welcome cards. Fronts keep their existing markup/classes.
 - Interactive children must `stopPropagation()` on click or they also flip
   (done for the Welcome ↻ refresh button).
+- **Drag guard**: FlipTile ignores "clicks" that moved >10px since pointer-down
+  — required for swipe tab navigation (below) not to flip tiles mid-swipe.
+- **Swipe left/right switches tabs** (`App.jsx`, touchstart/touchend on
+  document, 60px threshold, horizontal must dominate vertical 1.5×). Gestures
+  starting on `.chart-box, button, a, select, input` are IGNORED so the
+  graph's drag-to-pan and buttons keep working. Verified via CDP touch events.
 
 ## Consumption-by-source tiles (2026-09-12)
 
