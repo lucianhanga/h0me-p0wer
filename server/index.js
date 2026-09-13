@@ -662,6 +662,31 @@ app.get("/api/stats/overview", (req, res) => {
     p.pvEur = eur(p.pvKwh);
   }
 
+  // Stacked-bar data for the tiles' flip sides: per-bucket kWh split by
+  // source (grid / battery / PV). Today = 30-min buckets from the profile;
+  // week/month = per day (cloud month rows + battery day-trends); year =
+  // per month (grid from year rows, battery summed from day-trends).
+  byPeriod.today.bars = profile.map((p) => ({
+    label: p.t,
+    grid: r2((Math.max(p.power, 0) * 0.5) / 1000),
+    batt: r2((Math.max(p.batt ?? 0, 0) * 0.5) / 1000),
+    pv: 0,
+  }));
+  const dayBars = (rows) =>
+    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: 0 }));
+  byPeriod.week.bars = dayBars(weekRows);
+  byPeriod.month.bars = dayBars(monthRowsCur);
+  byPeriod.year.bars = yearRows.map((r) => {
+    const [y, m] = r.label.split("-").map(Number);
+    let batt = 0;
+    const d = new Date(dayStartMs);
+    const lastDay = m === d.getMonth() + 1 ? d.getDate() : new Date(y, m, 0).getDate();
+    for (let day = 1; day <= lastDay; day++) {
+      batt += battKwhForDay(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`).disKwh;
+    }
+    return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: 0 };
+  });
+
   res.json({
     ok: true,
     data: {
