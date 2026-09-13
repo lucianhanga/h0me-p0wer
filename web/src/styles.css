@@ -184,7 +184,10 @@ section {
     font-size: 2.2rem;
   }
 
-  .card {
+  /* Must out-specify the base `.card { min-width: 180px }`, which comes
+     LATER in this file and would otherwise win the tie (phones got a 465px
+     viewport from it — the "zoomed-in Live tab" bug). */
+  .cards .card {
     min-width: 0;
     padding: 0.75rem 1rem;
   }

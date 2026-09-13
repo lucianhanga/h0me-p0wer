@@ -337,6 +337,11 @@ EPIPE noise on every client disconnect).
 - Tiles: period grid uses `minmax(min(320px,100%),1fr)` so it never overflows.
 - **CSS comments are `/* */` only** — a `//` comment once silently swallowed
   the `.tiles` rule (tiles rendered full-width stacked).
+- **Media-query overrides must come AFTER (or out-specify) the base rule**:
+  the phone `.card { min-width: 0 }` sat BEFORE the base
+  `.card { min-width: 180px }` in the file and lost the equal-specificity
+  tie → cards forced a 465px layout viewport on phones ("Live tab zoomed
+  in", fixed 2026-09-13 with `.cards .card`).
 
 ## Previous: overview dashboard (epic #8, done 2026-09-09)
 - Two pages via state-based nav in `App.jsx` (no router): **Live** (original
