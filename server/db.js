@@ -237,6 +237,39 @@ export function pruneBattery() {
   db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
 }
 
+// --- PV daily rollup (production / to-home / to-battery per date) ----------
+// Computed lazily from battery_snapshots (48 h retention) and kept forever —
+// this is what makes week/month/year PV possible without a cloud PV channel.
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS pv_daily (
+    date TEXT PRIMARY KEY,
+    produced REAL NOT NULL,
+    to_home REAL NOT NULL,
+    to_batt REAL NOT NULL
+  )
+`);
+
+const upsertPvDaily = db.prepare(
+  `INSERT OR REPLACE INTO pv_daily (date, produced, to_home, to_batt) VALUES (?, ?, ?, ?)`,
+);
+const selectPvDaily = db.prepare(
+  `SELECT * FROM pv_daily WHERE date >= ? AND date <= ? ORDER BY date ASC`,
+);
+const selectPvDailyDates = db.prepare(`SELECT date FROM pv_daily`);
+
+export function savePvDaily(date, produced, toHome, toBatt) {
+  upsertPvDaily.run(date, produced, toHome, toBatt);
+}
+
+export function getPvDaily(fromDate, toDate) {
+  return selectPvDaily.all(fromDate, toDate);
+}
+
+export function getPvDailyDates() {
+  return new Set(selectPvDailyDates.all().map((r) => r.date));
+}
+
 // --- Unified time series (for the stock-chart style visualization) ---------
 
 // 5-second Modbus samples averaged into buckets of bucketMs.

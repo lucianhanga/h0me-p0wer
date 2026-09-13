@@ -167,7 +167,29 @@ EPIPE noise on every client disconnect).
 - Caveat: battery savings assume discharge replaces grid import at the same
   price — fine once PV exists; overstated if the battery was grid-charged.
 
-## Energy flow visualization (epic #30, done 2026-09-10)
+## Energy distribution model + display (2026-09-13)
+
+- **Validated against the Anker app's own numbers**: `scen_info` →
+  `statistics` = today's PV kWh/CO₂/€ (the app's Produced row);
+  `grid_info.grid_to_home_power` == our meter import; the app's Home Load =
+  `grid_to_home + to_home_load` == our `home = grid + outputW` — exact match.
+- **Dashboard (`byPeriod`)**: `battKwh` is CELLS-only (`discharged − pvToHome`
+  — the inverter output includes PV pass-through; counting both double-counts
+  PV). `pvKwh` = PV-to-house (gated `pvW − chargeW`). Balance now holds to
+  the cent: `home = grid + batt + pv` for every period.
+- **`pv_daily` rollup** (db.js): per finished day `{produced, to_home,
+  to_batt}` trapezoid over `battery_snapshots` (48 h retention), recomputed
+  hourly for the last 2 days — makes week/month/year PV possible despite the
+  cloud having no PV channel. (Anker's solarbank week/month/year
+  energy_analysis only has discharge power series + static to-date totals;
+  period PV production is NOT available from the cloud.)
+- **Chart (Home Assistant / OpenSolar best practice)**: sources stacked
+  positive (L1-L3 grid, `Battery out` = cells, FULL `PV` production), sink
+  below zero (`Battery in` = charge, negated). Conservation reads at a
+  glance: production exceeding Home visibly drops into the charge sink.
+  `battCells` is derived per row (`battOut − pvHome`); `battChg` is a new
+  timeseries field (charge_w, cloud fallback `max(−power, 0)`). Home line =
+  `grid + battOut` unchanged.
 
 - **Flow model (validated against live PV data + Anker docs, 2026-09-13)** —
   the Solarbank has ONE DC bus: panels + cells in, inverter out

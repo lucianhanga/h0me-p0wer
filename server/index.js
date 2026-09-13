@@ -30,6 +30,9 @@ import {
   getLatestBattery,
   getBatteryHistory,
   pruneBattery,
+  savePvDaily,
+  getPvDaily,
+  getPvDailyDates,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -120,6 +123,59 @@ function getCloudGridLive() {
     return { power: r.power, ts: r.ts + CLOUD_INTERVAL_MS };
   }
   return null;
+}
+
+// PV energy for one finished day from battery_snapshots, split per the
+// validated model: produced (Σ pvW), to_home (gated pvW − chargeW through
+// the inverter), to_batt (min(pvW, chargeW) into the cells).
+function pvKwhForDay(dateStr) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const start = new Date(`${dateStr}T00:00:00`).getTime();
+  const rows = getBatteryHistory(start, start + 86400000);
+  let produced = 0;
+  let toHome = 0;
+  let toBatt = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
+    if (dt > 0.5) continue;
+    produced += (((rows[i - 1].pv_w + rows[i].pv_w) / 2) * dt) / 1000;
+    const th0 = rows[i - 1].output_w > 0 ? Math.max(0, rows[i - 1].pv_w - rows[i - 1].charge_w) : 0;
+    const th1 = rows[i].output_w > 0 ? Math.max(0, rows[i].pv_w - rows[i].charge_w) : 0;
+    toHome += (((th0 + th1) / 2) * dt) / 1000;
+    const tb0 = Math.min(rows[i - 1].pv_w, rows[i - 1].charge_w);
+    const tb1 = Math.min(rows[i].pv_w, rows[i].charge_w);
+    toBatt += (((tb0 + tb1) / 2) * dt) / 1000;
+  }
+  return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
+}
+
+// Persist PV energy for recent finished days (raw samples live only 48 h —
+// recompute the last two days each run so values settle as data arrives).
+function rollupPvDaily() {
+  const today = localDate();
+  for (let back = 1; back <= 2; back++) {
+    const dateStr = localDate(new Date(Date.now() - back * 86400000));
+    if (dateStr >= today) continue;
+    const v = pvKwhForDay(dateStr);
+    savePvDaily(dateStr, v.produced, v.toHome, v.toBatt);
+  }
+}
+
+// Stored PV totals over a date range (finished days only; today is added
+// live by the caller).
+function pvStoredTotals(fromDate, toDate) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const today = localDate();
+  let produced = 0;
+  let toHome = 0;
+  let toBatt = 0;
+  for (const r of getPvDaily(fromDate, toDate)) {
+    if (r.date >= today) continue;
+    produced += r.produced;
+    toHome += r.to_home;
+    toBatt += r.to_batt;
+  }
+  return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
 }
 
 app.get("/api/flow", (req, res) => {
@@ -238,6 +294,7 @@ app.get("/api/timeseries", (req, res) => {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     add(bt, "batt", (r.output_w ?? 0) - (r.charge_w ?? 0));
     add(bt, "battOut", r.output_w ?? 0);
+    add(bt, "battChg", r.charge_w ?? 0);
     add(bt, "pv", r.pv_w ?? 0);
   }
 
@@ -290,6 +347,7 @@ app.get("/api/timeseries", (req, res) => {
         if (!acc.get(bt)?.batt) {
           add(bt, "batt", r.power);
           add(bt, "battOut", Math.max(r.power, 0)); // signed trend: discharge+
+          add(bt, "battChg", Math.max(-r.power, 0)); // charge is negative power
         }
       }
     }
@@ -348,10 +406,14 @@ app.get("/api/timeseries", (req, res) => {
       const existing = acc.get(t) ?? {};
       const o0 = acc.get(bt0).battOut;
       const o1 = acc.get(bt1).battOut;
+      const c0 = acc.get(bt0).battChg;
+      const c1 = acc.get(bt1).battChg;
       if (!existing.batt && b0 && b1)
         add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
       if (!existing.battOut && o0 && o1)
         add(t, "battOut", o0.s / o0.c + (o1.s / o1.c - o0.s / o0.c) * frac);
+      if (!existing.battChg && c0 && c1)
+        add(t, "battChg", c0.s / c0.c + (c1.s / c1.c - c0.s / c0.c) * frac);
       if (!existing.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
       if (sh0 && sh1) {
         add(t, "l1", grid * (sh0[0] + (sh1[0] - sh0[0]) * frac));
@@ -379,10 +441,14 @@ app.get("/api/timeseries", (req, res) => {
       const b = acc.get(t) ?? {};
       const o0 = acc.get(bt0).battOut;
       const o1 = acc.get(bt1).battOut;
+      const c0 = acc.get(bt0).battChg;
+      const c1 = acc.get(bt1).battChg;
       if (!b.batt && b0 && b1)
         add(t, "batt", b0.s / b0.c + (b1.s / b1.c - b0.s / b0.c) * frac);
       if (!b.battOut && o0 && o1)
         add(t, "battOut", o0.s / o0.c + (o1.s / o1.c - o0.s / o0.c) * frac);
+      if (!b.battChg && c0 && c1)
+        add(t, "battChg", c0.s / c0.c + (c1.s / c1.c - c0.s / c0.c) * frac);
       if (!b.pv && p0 && p1) add(t, "pv", p0.s / p0.c + (p1.s / p1.c - p0.s / p0.c) * frac);
     }
   }
@@ -428,6 +494,7 @@ app.get("/api/timeseries", (req, res) => {
       solar: b ? round(b.solar) : null,
       batt: b ? round(b.batt) : null,
       battOut: b ? round(b.battOut) : null,
+      battChg: b ? round(b.battChg) : null,
       pv: b ? round(b.pv) : null,
     });
   }
@@ -692,23 +759,28 @@ app.get("/api/stats/overview", (req, res) => {
     today: {
       homeKwh: flows.homeKwh,
       gridKwh: flows.gridImportKwh,
-      battKwh: flows.battDischargedKwh,
+      // "From battery" = CELLS only: the inverter's output includes the PV
+      // pass-through, so subtract it or PV energy counts twice.
+      battKwh: r2(dischargedKwh - pvToHomeKwh),
       pvKwh: r2(pvToHomeKwh),
     },
     week: {
       gridKwh: r2(weekImport),
       battKwh: r2(weekRows.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
-      pvKwh: 0,
+      pvKwh: r2(pvStoredTotals(weekRows[0]?.label ?? localDate(), localDate()).toHome + r2(pvToHomeKwh)),
     },
     month: {
       gridKwh: r2(monthImport),
       battKwh: r2(monthRowsCur.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
-      pvKwh: 0,
+      pvKwh: r2(pvStoredTotals(`${ym}-01`, localDate()).toHome + r2(pvToHomeKwh)),
     },
     year: {
       gridKwh: r2(yearImport),
       battKwh: battYear,
-      pvKwh: 0,
+      pvKwh: r2(
+        pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, localDate()).toHome +
+          r2(pvToHomeKwh),
+      ),
     },
   };
   for (const p of [byPeriod.week, byPeriod.month, byPeriod.year]) {
@@ -1170,12 +1242,15 @@ poller.onSnapshot((state) => {
   }
 });
 
-// Prune samples older than the retention window once an hour.
+// Prune samples older than the retention window once an hour; also roll up
+// PV daily energy (raw battery samples age out after 48 h).
 pruneOld();
 pruneBattery();
+rollupPvDaily();
 setInterval(() => {
   pruneOld();
   pruneBattery();
+  rollupPvDaily();
 }, 3600 * 1000).unref();
 
 // Battery (Solarbank) live data: MQTT push (~3-5 s, same channel as the Anker
