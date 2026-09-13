@@ -284,7 +284,10 @@ EPIPE noise on every client disconnect).
 - 5th tab "Welcome" is the DEFAULT route. `GET /api/welcome` (server/welcome.js)
   gathers deterministic facts → ONE OpenAI-compatible AI call
   (`response_format: json_schema`), cached 6 h (max 4 calls/day), stale-on-error,
-  deterministic fallback (`aiPowered: false`) when the AI is down.
+  deterministic fallback (`aiPowered: false`, 15-min self-heal TTL) when the AI
+  is down. A **background scheduler** (45 s after startup, then every 10 min)
+  refreshes the cache when stale — opening the tab never waits for the AI; the
+  route's lazy refresh is only the fallback. Same TTL budget (≤ 4 calls/day).
 - Config (`.env`): `HOME_ADDRESS` (geocoded once via Nominatim, cached in the
   `welcome_store` KV table), `PV_PEAK_KWP`/`PV_ORIENTATION` (16-point cardinal,
   mapped to PVGIS aspect = compass−180)/`PV_TILT_DEG`/`PV_PANEL_TYPE`,
