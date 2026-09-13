@@ -26,8 +26,10 @@ const SERIES = [
   { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "home" },
   { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "home" },
   { key: "batt", name: "Battery", color: "#c084fc", width: 1, stack: "home" },
-  { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
-  // Explicit home-consumption line (grid + battery + PV) over everything.
+  // PV is NOT stacked: the Solarbank's output already includes the PV
+  // pass-through, so stacking pv on top would double-count it (2026-09-13).
+  { key: "pv", name: "PV", color: "#5fce80", width: 1 },
+  // Explicit home-consumption line (grid + battery inverter output).
   { key: "home", name: "Home", color: "#e8ecef", width: 2 },
 ];
 
@@ -201,7 +203,9 @@ export default function GraphTab() {
               ? rows.map((r) =>
                   r.grid == null
                     ? [r.t, null]
-                    : [r.t, (r.grid ?? 0) + (r.batt ?? 0) + (r.pv ?? 0)],
+                    // home = grid + inverter output (battOut; PV is inside
+                    // it — never add pv on top, model validated 2026-09-13).
+                    : [r.t, (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0)],
                 )
               : rows.map((r) => [r.t, r[s.key]]),
         })),

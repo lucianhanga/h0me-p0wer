@@ -169,25 +169,38 @@ EPIPE noise on every client disconnect).
 
 ## Energy flow visualization (epic #30, done 2026-09-10)
 
-- `GET /api/flow` — computed flows: grid import/export (meter), battery
-  discharge/charge, PV split (`pvToBattery = min(pvW, chargeW)`,
-  `pvToHome = pvW − pvToBattery`), `home = gridImport + battDischarge + pvToHome`.
-  Each group carries its own source timestamp (`grid.ts` = meter snapshot,
-  `battery.ts`/`pv.ts` = battery reading; grid's is an ISO string, battery's
-  ms epoch) — the flow diagram shows it under each active edge's watt label.
+- **Flow model (validated against live PV data + Anker docs, 2026-09-13)** —
+  the Solarbank has ONE DC bus: panels + cells in, inverter out
+  (**AC output capped at 800 W** — Germany's balcony feed-in limit; seen as
+  outW = 799–801 W flat while pvW varies). Measured exact invariants:
+  - `pvW = chargeW + pvThrough` (PV splits exactly; charge-only rows show
+    pvW == chargeW, split rows pvW == chargeW + outW)
+  - `outW == to_home_w` = inverter AC out = pvThrough + cellDischarge
+  - **PV→home** = `outW > 0 ? pvW − chargeW : 0` (zero while charging!)
+  - **PV→battery** = `min(pvW, chargeW)` · **cells→home** = `outW − (pvW − chargeW)`
+  - **home = grid + outW** — NEVER `grid + outW + pvW`: PV is INSIDE the
+    inverter output; adding it double-counts (the pre-PV-era approximation
+    `pvToHome = pvW − chargeW` ungated invented a PV→home flow while charging).
+- `GET /api/flow` — computed flows per above. Each group carries its own
+  source timestamp (`grid.ts` ISO string, battery's ms epoch) — shown under
+  each active edge's watt label in the diagram.
 - Live page: SVG `FlowDiagram` (PV/Grid/Home/Battery nodes, animated dashed
-  edges in flow direction, 5 s refresh). **Topology matches the hardware
-  (2026-09-13): the panels feed the Solarbank's DC input and the house is fed
-  ONLY through the unit's built-in inverter — NO direct PV→Home edge.**
-  Edges: PV→Battery (all production), Battery→Home (cell discharge +
-  `pvToHome` inverter pass-through), Home→Battery (charge), Grid↔Home.
-- Chart: `pv` series (from `battery_snapshots.pv_w`) on the battery y-axis.
+  edges in flow direction, 5 s refresh). **Topology matches the hardware:
+  ALL PV enters the battery unit; the house is fed ONLY through the inverter
+  — no PV→Home edge.** Edges: PV→Battery (pvW), Battery→Home (outW),
+  Home→Battery (chargeW), Grid↔Home.
+- Chart: `pv` series (informational, NOT stacked — stacking it would
+  double-count); `battOut` (unsigned inverter output) in `/api/timeseries`
+  so Home = `grid + max(battOut, 0)` — exact even for simultaneous
+  charge+discharge. `batt` stays signed (output − charge) for the stack.
 - `/api/stats/overview` → `flows`: today's kWh per flow (trapezoid over
-  snapshots/battery_snapshots). Dashboard tiles: Home today, PV today.
-- Battery sync: **REST `scen_info` unconditionally every 10 s** (6 calls/min,
-  well inside the ~10-12/min rate limit) as the granularity floor; MQTT push
-  (~3-5 s when it delivers) layers on top. Once the first REST sync yields the
-  battery SN, `server/mqtt.js` (`AnkerMqtt`) takes over as the fast channel.
+  snapshots/battery_snapshots; pvToHomeKwh uses the gated split above,
+  homeKwh = import + discharge).
+- Battery sync: **REST `scen_info` every 5 s while a frontend is watching**
+  (WS client connected or /api/live|flow polled < 15 s ago; 12 calls/min =
+  the documented ceiling, hence on-demand only), **10 s floor when idle**.
+  MQTT push (~3-5 s) layers on top as the fast channel (same one the Anker
+  app uses for its live view — it does NOT poll REST for that).
 
 ## Battery realtime via MQTT (2026-09-10)
 

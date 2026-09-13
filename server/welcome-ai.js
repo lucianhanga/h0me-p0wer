@@ -170,7 +170,7 @@ const SYSTEM_PROMPT = `You write the morning energy briefing for a home dashboar
 Hard rules:
 - Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
 - PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (report actuals: pvNowW, charge flows) — otherwise it is still PLANNED and production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
-- Power-flow priority (Self-Consumption mode with a smart meter, per the storage manual): PV power FIRST covers the home's current consumption; only the SURPLUS charges the battery; export to the grid happens last. Compare estimated PV output with the home's baseline consumption (consumption averages / 24 h): with a small PV system and a high baseline, most PV power goes DIRECTLY to the house and little reaches the battery — never claim the opposite.
+- Power flows (Solarbank 2 E1600 Plus, built-in inverter): ALL PV enters the battery unit; the house is fed ONLY through the unit's inverter, and the inverter's output already includes any PV pass-through — never present PV as flowing directly to the house. The bank decides dynamically (at low SOC it often charges from PV while the house runs on grid) — describe the MEASURED flows in the context, don't assume a fixed priority.
 - Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
 
