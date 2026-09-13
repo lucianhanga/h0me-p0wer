@@ -225,3 +225,60 @@ export function buildFallback(config, context) {
     },
   };
 }
+
+// --- Voice Q&A (/api/ask): correct the STT transcript + answer with context --
+
+const ASK_SCHEMA = {
+  name: "ask",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["correctedQuestion", "answer"],
+    properties: {
+      correctedQuestion: { type: "string" },
+      answer: { type: "string" },
+    },
+  },
+};
+
+const ASK_SYSTEM_PROMPT = `You are the voice assistant of a home-energy dashboard.
+The user's question comes from speech recognition and may contain transcription
+errors: first recover the intended question (correctedQuestion), then answer it.
+Hard rules:
+- Answer ONLY from the provided JSON context (location, weather, consumption,
+  battery, PV estimates, live power, tariff). Never invent figures.
+- The PV system is PLANNED, not installed: production numbers are PVGIS-based
+  estimates. Power-flow priority: PV covers the house FIRST, surplus to the
+  battery, grid last.
+- Plain spoken-style language (the answer may be read aloud), ≤ 6 sentences,
+  numbers rounded sensibly. Language for both fields: see language field.`;
+
+export async function callAskAI(config, context, question) {
+  const user = JSON.stringify({ language: config.ai.language, question, ...context });
+  const body = (responseFormat) => ({
+    model: config.ai.model,
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: ASK_SYSTEM_PROMPT },
+      { role: "user", content: user },
+    ],
+    response_format: responseFormat,
+  });
+  const url = `${config.ai.baseUrl}/chat/completions`;
+  const headers = { Authorization: `Bearer ${config.ai.apiKey}`, "Content-Type": "application/json" };
+  const parse = (j) => {
+    const r = JSON.parse(j.choices[0].message.content);
+    for (const k of ASK_SCHEMA.schema.required) {
+      if (typeof r[k] !== "string" || !r[k]) throw new Error(`AI reply missing "${k}"`);
+    }
+    return r;
+  };
+  try {
+    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_schema", json_schema: ASK_SCHEMA })) });
+    return parse(j);
+  } catch (err) {
+    console.warn(`[ask] structured AI call failed (${err.message}) — retrying with json_object`);
+    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_object" })) });
+    return parse(j);
+  }
+}

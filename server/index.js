@@ -890,6 +890,7 @@ app.get("/api/cloud/bind-devices", cloudRoute(() => anker.getBindDevices()));
 registerWelcomeRoute(app, {
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
 });
 app.get(
   "/api/cloud/energy",

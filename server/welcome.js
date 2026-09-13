@@ -7,7 +7,7 @@ import { kvGet, kvSet } from "./db.js";
 import {
   parseWelcomeConfig, geocode, fetchWeather, fetchPvgis,
 } from "./welcome-sources.js";
-import { buildContext, callWelcomeAI, buildFallback } from "./welcome-ai.js";
+import { buildContext, callWelcomeAI, buildFallback, callAskAI } from "./welcome-ai.js";
 
 const AI_TTL_MS = 6 * 3600 * 1000; // max 4 AI calls/day
 // Fallback payloads self-heal: retry the AI after 15 min instead of letting
@@ -131,6 +131,42 @@ export function registerWelcomeRoute(app, deps) {
     }
   });
 
+  // Voice Q&A: the browser STT transcript is corrected AND answered in one
+  // structured AI call, fed with the full context (location, weather, PV
+  // climatology, consumption, battery) plus live grid power.
+  app.post("/api/ask", async (req, res) => {
+    const question = String(req.body?.question ?? "").slice(0, 1000).trim();
+    if (!question) return res.json({ ok: false, error: "Empty question." });
+    let config;
+    try {
+      config = parseWelcomeConfig();
+    } catch (err) {
+      return res.json({ ok: false, error: err.message });
+    }
+    if (!config) {
+      return res.json({ ok: false, error: "Welcome tab not configured (HOME_ADDRESS missing)." });
+    }
+    if (!config.ai.apiKey) {
+      return res.json({ ok: false, error: "No AI configured (AI_API_KEY missing)." });
+    }
+    try {
+      const geo = await geocode(config.address);
+      const [weather, pvgis] = await Promise.all([
+        fetchWeather(geo.lat, geo.lon),
+        fetchPvgis(geo.lat, geo.lon, config.pv),
+      ]);
+      const context = buildContext({ config, geo, weather, pvgis, deps });
+      const live = {
+        liveGridW: deps.getLivePower?.() ?? null,
+        liveBattery: context.battery,
+      };
+      const answer = await callAskAI(config, { ...context, live }, question);
+      return res.json({ ok: true, data: answer });
+    } catch (err) {
+      console.warn(`[ask] failed: ${err.message}`);
+      return res.json({ ok: false, error: "Couldn't get an answer right now — try again in a moment." });
+    }
+  });
   // Manual refresh (tab's refresh button): regenerates immediately, bypassing
   // the TTL — the 6h budget governs the scheduler; this is user-initiated.
   app.post("/api/welcome/refresh", async (req, res) => {
