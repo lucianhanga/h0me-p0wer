@@ -9,6 +9,7 @@ export default function LiveTab() {
   const [live, setLive] = useState(null); // /api/live (meter snapshot)
   const [flow, setFlow] = useState(null); // /api/flow
   const [health, setHealth] = useState(null); // /api/health
+  const [detailsOpen, setDetailsOpen] = useState(false); // Details section: collapsed by default
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -122,45 +123,55 @@ export default function LiveTab() {
         </FlipTile>
       </div>
 
-      <h3>Details</h3>
-      <h4>Grid</h4>
-      <div className="phase-cards">
-        {(phases ?? [null, null, null]).map((p, i) => (
-          <FlipTile key={i}>
-            <div className="phase-card">
-              <span className="phase-name">L{i + 1}</span>
-              <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
-              <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-            </div>
-          </FlipTile>
-        ))}
-      </div>
-      <h4>Solar PV</h4>
-      <div className="phase-cards">
-        <FlipTile>
-          <div className="phase-card">
-            <span className="phase-name">PV total</span>
-            <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+      <button
+        className="details-toggle"
+        onClick={() => setDetailsOpen((o) => !o)}
+        aria-expanded={detailsOpen}
+      >
+        Details <span className="chevron">{detailsOpen ? "▾" : "▸"}</span>
+      </button>
+      {detailsOpen && (
+        <>
+          <h4>Grid</h4>
+          <div className="phase-cards">
+            {(phases ?? [null, null, null]).map((p, i) => (
+              <FlipTile key={i}>
+                <div className="phase-card">
+                  <span className="phase-name">L{i + 1}</span>
+                  <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
+                  <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
+                </div>
+              </FlipTile>
+            ))}
           </div>
-        </FlipTile>
-        <FlipTile>
-          <div className="phase-card">
-            <span className="phase-name">PV1</span>
-            <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
+          <h4>Solar PV</h4>
+          <div className="phase-cards">
+            <FlipTile>
+              <div className="phase-card">
+                <span className="phase-name">PV total</span>
+                <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+              </div>
+            </FlipTile>
+            <FlipTile>
+              <div className="phase-card">
+                <span className="phase-name">PV1</span>
+                <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
+              </div>
+            </FlipTile>
+            <FlipTile>
+              <div className="phase-card">
+                <span className="phase-name">PV2</span>
+                <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
+              </div>
+            </FlipTile>
           </div>
-        </FlipTile>
-        <FlipTile>
-          <div className="phase-card">
-            <span className="phase-name">PV2</span>
-            <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
-          </div>
-        </FlipTile>
-      </div>
-      {snapshot && (
-        <p className="muted">
-          {snapshot.meter.model} · {snapshot.meter.type} · SW {snapshot.meter.swVersion} · last
-          update {new Date(snapshot.timestamp).toLocaleTimeString()}
-        </p>
+          {snapshot && (
+            <p className="muted">
+              {snapshot.meter.model} · {snapshot.meter.type} · SW {snapshot.meter.swVersion} · last
+              update {new Date(snapshot.timestamp).toLocaleTimeString()}
+            </p>
+          )}
+        </>
       )}
     </div>
   );

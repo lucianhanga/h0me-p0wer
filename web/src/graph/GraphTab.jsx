@@ -15,6 +15,8 @@ const SERIES = [
   // by local 5 s samples, gridMin/gridMax show the real per-bucket fluctuation
   // of the grid total (= phase sum); cloud-only history stays flat. Both share
   // the name "Grid range" so ONE legend entry toggles them together.
+  // Resolution-aware (applyRows): collapsed to the mean above 5-min buckets —
+  // at coarse zoom the absolute min/max aliases into unrepresentative needles.
   { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   // ONE stack: phases at the bottom (L1+L2+L3 = grid total), then Battery
@@ -195,6 +197,11 @@ export default function GraphTab() {
     let fetchSeq = 0; // stale-response guard: only the newest fetch may apply
 
     function applyRows(rows) {
+      // Resolution-aware envelope (best practice): per-bucket min/max is
+      // informative at fine zoom but renders as unrepresentative needles at
+      // coarse buckets (sparse ~30 s sampling aliases cycling loads). Above
+      // 5 min buckets it collapses to the mean — the trend is the story.
+      const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
       chart.setOption({
         series: SERIES.map((s) => ({
           name: s.name ?? s.key,
@@ -207,7 +214,9 @@ export default function GraphTab() {
                     // it — never add pv on top, model validated 2026-09-13).
                     : [r.t, (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0)],
                 )
-              : rows.map((r) => [r.t, r[s.key]]),
+              : (s.key === "gridMin" || s.key === "gridMax") && !envelopeOn
+                ? rows.map((r) => [r.t, r.grid])
+                : rows.map((r) => [r.t, r[s.key]]),
         })),
       });
     }
