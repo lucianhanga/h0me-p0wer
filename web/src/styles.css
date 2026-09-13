@@ -458,6 +458,15 @@ pre {
   margin-left: 0.3rem;
 }
 
+/* Card footer: total spent (grid) vs total saved (battery + PV). */
+.src-money {
+  margin-top: 0.6rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #2a3238;
+  color: #8b98a5;
+  font-size: 0.8rem;
+}
+
 /* Battery SOC gauge (HA battery-card pattern) */
 .soc-row {
   display: flex;
