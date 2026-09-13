@@ -87,6 +87,7 @@ export default function WelcomeTab() {
     <div className="welcome">
       <FlipTile>
         <section className="card wx-hero">
+          <SpeakButton id="hero" className="speak-corner" text={data.greeting} />
           <p className="wx-greeting">{data.greeting}</p>
           <p className="muted wx-meta">
             {data.aiPowered ? "AI briefing" : "offline estimate"}
@@ -103,7 +104,6 @@ export default function WelcomeTab() {
             >
               ↻
             </button>
-            <SpeakButton id="hero" text={data.greeting} />
           </p>
         </section>
       </FlipTile>
