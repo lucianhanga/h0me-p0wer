@@ -45,6 +45,7 @@ const SRC_ROWS = [
 ];
 
 function SourceCard({ title, data }) {
+  const savedEur = Math.round((data.battEur + data.pvEur) * 100) / 100;
   return (
     <div className="tile">
       <div className="tile-title">{title}</div>
@@ -63,6 +64,9 @@ function SourceCard({ title, data }) {
             </span>
           </div>
         ))}
+      </div>
+      <div className="src-money">
+        spent €{data.gridEur} · saved €{savedEur}
       </div>
     </div>
   );
