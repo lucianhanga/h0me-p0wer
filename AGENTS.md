@@ -244,8 +244,11 @@ EPIPE noise on every client disconnect).
 
 ## Consumption-by-source tiles (2026-09-12)
 
-- Dashboard top section: 4 period cards (Today/Week/Month/Year) × 4 values
-  (house total, from grid, from battery, from PV — chart colors, spartan).
+- The Dashboard contains ONLY this section (old tiles — totals row, day
+  profile, week/month/year kWh bars, battery SOC tile — removed 2026-09-13;
+  `DayTile`/`KwhBarsTile`/`MiniChart` deleted, git history has them).
+- 4 period cards (Today/Week/Month/Year) × 4 values (house total, from grid,
+  from battery, from PV — chart colors, spartan).
   From `/api/stats/overview` → `byPeriod`: today from the `flows` trapezoid,
   week/month battery from the battery's cloud day-trends (`disKwh`), year
   battery = day-trend sum (complete — battery is new). Accounting: house =
