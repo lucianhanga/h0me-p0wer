@@ -41,7 +41,9 @@ export default function WelcomeTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const hasData = useRef(false); // survives the []-closure for keep-last-good
+  const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
 
   useEffect(() => {
     let alive = true;
@@ -58,7 +60,11 @@ export default function WelcomeTab() {
     }
     load();
     const t = setInterval(load, 5 * 60 * 1000);
-    return () => { alive = false; clearInterval(t); };
+    return () => {
+      alive = false;
+      clearInterval(t);
+      synth?.cancel(); // don't keep talking after leaving the tab
+    };
   }, []);
 
   // Forced regeneration (server makes a real AI call — can take ~20-30 s).
@@ -72,6 +78,42 @@ export default function WelcomeTab() {
     } finally {
       setRefreshing(false);
     }
+  }
+
+  // Read the briefing aloud with the browser's built-in TTS (Web Speech API —
+  // no key, no backend; phone OS voices). Toggles to stop while speaking.
+  function speak() {
+    if (!synth) return;
+    if (speaking) {
+      synth.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const month = new Date().toLocaleString([], { month: "long" });
+    const text = [
+      data.greeting,
+      data.today.summary,
+      `This week: ${data.week.statement}`,
+      `${month}: ${data.month.statement}`,
+      data.endOfDay.note,
+      `Estimated savings today: about ${data.savings.todayEur} euros.`,
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const u = new SpeechSynthesisUtterance(text);
+    // Prefer an English voice (Android Chrome ships Google voices); the
+    // briefing language is English per AI_LANGUAGE.
+    const voices = synth.getVoices();
+    const voice =
+      voices.find((v) => /^en[-_]/i.test(v.lang) && /google/i.test(v.name)) ??
+      voices.find((v) => /^en[-_]/i.test(v.lang));
+    if (voice) {
+      u.voice = voice;
+      u.lang = voice.lang;
+    }
+    u.onend = u.onerror = () => setSpeaking(false);
+    setSpeaking(true);
+    synth.speak(u);
   }
 
   if (error) return <p className="muted">Welcome — {error}</p>;
@@ -97,6 +139,19 @@ export default function WelcomeTab() {
             >
               ↻
             </button>
+            {synth && (
+              <button
+                className="wx-refresh wx-speak"
+                onClick={(e) => {
+                  e.stopPropagation(); // don't flip the card when speaking
+                  speak();
+                }}
+                title={speaking ? "Stop reading" : "Read the briefing aloud"}
+                aria-label={speaking ? "Stop reading" : "Read the briefing aloud"}
+              >
+                {speaking ? "⏹" : "🔊"}
+              </button>
+            )}
           </p>
         </section>
       </FlipTile>

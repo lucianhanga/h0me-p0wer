@@ -342,6 +342,11 @@ EPIPE noise on every client disconnect).
   averages feed it CLEAN data: 0-filled pre-link days (`importKwh <= 0`) and the
   always-partial linking day are excluded — otherwise the AI reasons against a
   bogus ~0 baseline and inverts the house/battery split.
+- **Read-aloud (TTS)**: 🔊 button in the hero meta line uses the browser's
+  `speechSynthesis` (Web Speech API) — the **Kimi API has no TTS/ASR** (per its
+  docs), so no server-side speech. Phone OS voices read greeting + summary +
+  week/month + end-of-day + savings; toggles to stop, cancels on unmount,
+  prefers a Google en-* voice (Android Chrome), stopPropagation vs the flip.
 - **Open-Meteo `shortwave_radiation_sum` is MJ/m², not kWh/m²** — the context
   divides by 3.6 into kWh/m². That unit trap cost a fix round.
 - Cold start with Open-Meteo down → generic error state (no partial render);
