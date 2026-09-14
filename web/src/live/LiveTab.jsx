@@ -61,25 +61,34 @@ export default function LiveTab() {
       </p>
 
       <h3>Power Flow</h3>
-      <FlowDiagram />
+      {flow && (
+        <p className="muted flow-meta">
+          updated {new Date(flow.obtainedAt ?? flow.ts).toLocaleTimeString()} · grid:{" "}
+          {flow.grid.source === "meter" ? "meter direct" : "online"} · battery: online
+        </p>
+      )}
+      <FlowDiagram flow={flow} />
 
       <div className="cards">
         <FlipTile>
-          <div className="card card-hero">
+          <div className="card">
             <div className="card-label">House</div>
             <div className="card-value">
               {flow?.home?.consumption != null ? `${flow.home.consumption} W` : "—"}
             </div>
+            <div className="card-label">total consumption</div>
           </div>
         </FlipTile>
         <FlipTile>
           <div className="card">
             <div className="card-label">
               Grid {grid != null && (grid >= 0 ? "import" : "export")}
-              {gridFromCloud ? " · cloud" : ""}
             </div>
             <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
               {grid != null ? `${Math.abs(grid)} W` : "—"}
+            </div>
+            <div className="card-label">
+              {gridFromCloud ? "via cloud" : grid != null ? "meter direct" : "—"}
             </div>
           </div>
         </FlipTile>

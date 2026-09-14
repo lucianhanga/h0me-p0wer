@@ -265,15 +265,6 @@ section {
     gap: 0.5rem;
   }
 
-  /* Hero metric: the number you actually glance at, full width + bigger. */
-  .card-hero {
-    grid-column: 1 / -1;
-  }
-
-  .card-hero .card-value {
-    font-size: 2.2rem;
-  }
-
   /* Must out-specify the base `.card { min-width: 180px }`, which comes
      LATER in this file and would otherwise win the tie (phones got a 465px
      viewport from it — the "zoomed-in Live tab" bug). */
@@ -512,9 +503,16 @@ pre {
 /* Consumption-by-source cards (dashboard top section) */
 .src-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: 0.75rem;
   margin: 1rem 0;
+}
+
+/* Desktop: exactly 4-across (auto-fit would do 3+1 inside the 960px .app). */
+@media (min-width: 1024px) {
+  .src-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
 .src-home {
@@ -548,6 +546,13 @@ pre {
   margin-left: auto;
   color: #e8ecef;
   font-variant-numeric: tabular-nums;
+  /* Narrow cards (e.g. phone landscape): the € part wraps as a unit instead
+     of overflowing the card edge. */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0 0.3rem;
+  text-align: right;
 }
 
 /* Title row with ‹ › period navigation. */
@@ -584,7 +589,7 @@ pre {
 .src-eur {
   color: #8b98a5;
   font-size: 0.75rem;
-  margin-left: 0.3rem;
+  white-space: nowrap;
 }
 
 /* Card footer: total spent (grid) vs total saved (battery + PV). */
@@ -600,6 +605,12 @@ pre {
   text-align: right;
   font-size: 0.75rem;
   margin-top: -0.5rem;
+}
+
+/* Single page-level freshness line (Live tab Power Flow). */
+.flow-meta {
+  font-size: 0.75rem;
+  margin: -0.2rem 0 0.4rem;
 }
 
 /* Flippable tile (generic FlipTile): front = the tile content, back = empty

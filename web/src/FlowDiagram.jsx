@@ -1,22 +1,9 @@
-import { useEffect, useState } from "react";
-
 // Live power-flow diagram (HA energy-dashboard / Anker app pattern):
 // PV on top, Grid left, Home center, Battery right. Edges animate in the
 // direction of flow and are labeled with live watts; idle edges fade out.
-export default function FlowDiagram() {
-  const [flow, setFlow] = useState(null);
-
-  useEffect(() => {
-    const load = () =>
-      fetch("/api/flow")
-        .then((r) => r.json())
-        .then((res) => res.ok && setFlow(res.data))
-        .catch(() => {});
-    load();
-    const timer = setInterval(load, 5000);
-    return () => clearInterval(timer);
-  }, []);
-
+// Data comes as a prop from LiveTab so the diagram and the tiles below it
+// always show the SAME payload (no separate fetches drifting apart).
+export default function FlowDiagram({ flow }) {
   if (!flow) return <p className="muted">loading…</p>;
 
   const { grid, battery, pv, home } = flow;
@@ -60,24 +47,25 @@ export default function FlowDiagram() {
     },
   };
 
-  // Edge: [from, to, watts, color, id, sourceTs] — sourceTs is the timestamp
-  // of the data source feeding that edge (meter snapshot or battery reading).
-  // The four arcs (per the Anker app's own flow view): PV→Battery (loading),
-  // PV→Home (inverter pass-through), Battery→Home (cells, unloading),
-  // Grid→Home (+ Home→Grid on export, Home→Battery if grid-charging).
+  // Edge: [from, to, watts, color, id] — values only. Timestamps live at the
+  // page level (all values update together from one call), sources are shown
+  // there too. The four arcs (per the Anker app's flow view): PV→Battery
+  // (loading), PV→Home (inverter pass-through), Battery→Home (cells,
+  // unloading), Grid→Home (+ Home→Grid on export, Home→Battery if
+  // grid-charging).
   const edges = [
-    [N.pv, N.batt, pv.toBattery ?? 0, "#5fce80", "pv-batt", pv.ts],
-    [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home", pv.ts],
-    [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home", grid.ts, grid.source !== "meter" ? "cloud" : null],
-    [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid", grid.ts, grid.source !== "meter" ? "cloud" : null],
-    [N.batt, N.home, battToHome, "#c084fc", "batt-home", battery?.ts],
-    [N.home, N.batt, homeToBatt, "#c084fc", "home-batt", battery?.ts],
+    [N.pv, N.batt, pv.toBattery ?? 0, "#5fce80", "pv-batt"],
+    [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home"],
+    [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home"],
+    [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid"],
+    [N.batt, N.home, battToHome, "#c084fc", "batt-home"],
+    [N.home, N.batt, homeToBatt, "#c084fc", "home-batt"],
   ];
 
   return (
     <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label="power flow">
-      {edges.map(([a, b, w, color, id, ts, note]) => (
-        <Edge key={id} a={a} b={b} watts={w} color={color} ts={ts} note={note} />
+      {edges.map(([a, b, w, color, id]) => (
+        <Edge key={id} a={a} b={b} watts={w} color={color} />
       ))}
       {Object.values(N).map((n) => (
         <g key={n.label}>
@@ -103,14 +91,13 @@ export default function FlowDiagram() {
   );
 }
 
-function Edge({ a, b, watts, color, ts, note }) {
+function Edge({ a, b, watts, color }) {
   if (!watts) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   const vertical = a.x === b.x;
-  const updated = ts ? new Date(ts).toLocaleTimeString() : null;
   return (
     <g>
       <line
@@ -133,18 +120,6 @@ function Edge({ a, b, watts, color, ts, note }) {
       >
         {Math.round(watts)} W
       </text>
-      {updated && (
-        <text
-          x={vertical ? mx + 8 : mx}
-          y={vertical ? my + 9 : my + 11}
-          fill="#8b98a5"
-          fontSize="8"
-          textAnchor={vertical ? "start" : "middle"}
-        >
-          {updated}
-          {note ? ` · ${note}` : ""}
-        </text>
-      )}
     </g>
   );
 }
