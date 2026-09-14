@@ -71,11 +71,12 @@ app.use(express.json());
 
 app.get("/api/live", (req, res) => {
   const state = poller.getState();
-  // Modbus down: attach the newest closed cloud interval so the UI can show
-  // cloud-sourced grid power instead of nothing (like the Anker app).
+  // Modbus down: attach the shared grid fallback so the UI shows the SAME
+  // cloud value as /api/flow (source: cloud-live → live scen_info, cloud →
+  // newest closed 20-min interval).
   if (!state.snapshot) {
-    const c = getCloudGridLive();
-    if (c) state.cloud = { power: c.power, ts: c.ts };
+    const gl = getGridLive();
+    if (gl.power != null) state.cloud = gl;
   }
   res.json(state);
 });
@@ -152,28 +153,34 @@ function pvStoredTotals(fromDate, toDate) {
   return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
 }
 
-app.get("/api/flow", (req, res) => {
-  let grid = poller.snapshot?.primary?.totalPower ?? null;
-  let gridTs = poller.snapshot?.timestamp ?? null;
-  let gridSource = "meter";
-  const b = latestBattery ?? getLatestBattery();
-  // Modbus down: fall back to the cloud like the Anker app. Prefer the LIVE
-  // scen_info grid channel (fresh, synced every 3 s on demand); the 20-min
-  // trend is the last resort.
-  if (grid == null) {
-    if (b?.gridToHomeW != null && b.ts != null && Date.now() - b.ts < 60000) {
-      grid = b.gridToHomeW - (b.pvToGridW ?? 0); // import minus PV feed-in
-      gridTs = new Date(b.ts).toISOString();
-      gridSource = "cloud-live";
-    } else {
-      const c = getCloudGridLive();
-      if (c) {
-        grid = c.power;
-        gridTs = c.ts;
-        gridSource = "cloud";
-      }
-    }
+// One shared grid source for /api/flow AND /api/live (they must agree —
+// seen 2026-09-14: the tile read the 20-min trend while the diagram read
+// live scen_info). Priority: fresh meter snapshot → live scen_info grid
+// channel (<60 s old) → newest closed 20-min cloud interval.
+function getGridLive() {
+  const snap = poller.getState().snapshot; // freshness-gated in getState()
+  if (snap) {
+    return { power: snap.primary?.totalPower ?? null, ts: snap.timestamp, source: "meter" };
   }
+  const b = latestBattery ?? getLatestBattery();
+  if (b?.gridToHomeW != null && b.ts != null && Date.now() - b.ts < 60000) {
+    return {
+      power: b.gridToHomeW - (b.pvToGridW ?? 0), // import minus PV feed-in
+      ts: new Date(b.ts).toISOString(),
+      source: "cloud-live",
+    };
+  }
+  const c = getCloudGridLive();
+  if (c) return { power: c.power, ts: c.ts, source: "cloud" };
+  return { power: null, ts: null, source: "meter" };
+}
+
+app.get("/api/flow", (req, res) => {
+  const gl = getGridLive();
+  const grid = gl.power;
+  const gridTs = gl.ts;
+  const gridSource = gl.source;
+  const b = latestBattery ?? getLatestBattery();
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
   const outputW = b?.outputW ?? 0;
@@ -186,6 +193,7 @@ app.get("/api/flow", (req, res) => {
     ok: true,
     data: {
       ts: Date.now(),
+      obtainedAt: new Date().toISOString(), // when the server obtained these values
       grid: {
         import: grid != null ? Math.max(grid, 0) : null,
         export: grid != null ? Math.max(-grid, 0) : null,
@@ -205,9 +213,10 @@ app.get("/api/flow", (req, res) => {
             gridCharge: Math.max(0, chargeW - pvToBattery),
             name: b.name ?? "Solarbank",
             ts: b.ts ?? null,
+            source: "online", // battery data is always cloud (REST/MQTT)
           }
         : null,
-      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null },
+      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null, source: b ? "online" : null },
       home: {
         consumption:
           // Cloud-live: the app's own Home Load (grid_to_home + to_home).
