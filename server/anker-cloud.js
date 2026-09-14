@@ -260,6 +260,7 @@ export class AnkerClient {
     if (!sb) return null;
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
     const info = scene.solarbank_info;
+    const gridInfo = scene.grid_info ?? {};
     return {
       ts: Date.now(),
       sn: sb.device_sn,
@@ -271,6 +272,12 @@ export class AnkerClient {
       pv1W: num(info?.solar_power_1), // per-string PV (PV1/PV2 on E1600)
       pv2W: num(info?.solar_power_2),
       toHomeW: num(info?.to_home_load),
+      // Grid/home channels (grid_info): live values usable when the meter's
+      // Modbus is down — gridToHome = import, pvToGrid = PV export, and the
+      // app's Home Load = grid_to_home + to_home_load.
+      gridToHomeW: num(gridInfo.grid_to_home_power),
+      pvToGridW: num(gridInfo.photovoltaic_to_grid_power),
+      homeLoadW: num(scene.home_load_power),
       siteId: this.siteId,
     };
   }

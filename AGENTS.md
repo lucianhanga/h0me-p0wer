@@ -209,10 +209,20 @@ EPIPE noise on every client disconnect).
   source timestamp (`grid.ts` ISO string, battery's ms epoch) — shown under
   each active edge's watt label in the diagram.
 - Live page: SVG `FlowDiagram` (PV/Grid/Home/Battery nodes, animated dashed
-  edges in flow direction, 5 s refresh). **Topology matches the hardware:
-  ALL PV enters the battery unit; the house is fed ONLY through the inverter
-  — no PV→Home edge.** Edges: PV→Battery (pvW), Battery→Home (outW),
-  Home→Battery (chargeW), Grid↔Home.
+  edges in flow direction, 5 s refresh). **Arcs (2026-09-14, per the Anker
+  app's flow view): PV→Battery (`toBattery`), PV→Home (`toHome`), Battery→Home
+  (`cells` = outW − pvToHome), Home→Battery (`gridCharge`, grid-sourced
+  charge, rare), Grid↔Home.** The Home↔Battery pair is ONE arc showing the
+  dominant direction (both can read > 0 briefly while PV splits at the DC
+  bus — overlapping opposite arcs looked wrong). Battery node shows
+  `soc% ⚡ chargeW` loading / `soc% ⏏ cellsW` unloading. Grid edges carry a
+  "· cloud" note when not meter-sourced.
+- **Modbus-down**: `/api/flow` prefers the LIVE `scen_info` grid channel
+  (`grid_info.grid_to_home_power`, synced every **3 s on demand** while the
+  meter is down and a frontend watches — user-requested, above the
+  ~10-12/min guideline, failures just log) → `source: "cloud-live"`, then the
+  20-min trend (`source: "cloud"`). Home Load then comes from
+  `home_load_power` directly.
 - Chart: `pv` series (informational, NOT stacked — stacking it would
   double-count); `battOut` (unsigned inverter output) in `/api/timeseries`
   so Home = `grid + max(battOut, 0)` — exact even for simultaneous

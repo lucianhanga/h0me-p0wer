@@ -20,8 +20,21 @@ export default function FlowDiagram() {
   if (!flow) return <p className="muted">loading…</p>;
 
   const { grid, battery, pv, home } = flow;
-  const battDischarge = battery?.discharge ?? 0;
-  const battCharge = battery?.charge ?? 0;
+  const cells = battery?.cells ?? 0; // cells → house (Battery→Home arc)
+  const gridCharge = battery?.gridCharge ?? 0; // grid → cells (Home→Battery arc, rare)
+  // ONE arc between house and battery: the dominant direction only (the two
+  // can briefly both read > 0 while PV splits at the DC bus — overlapping
+  // opposite arcs looked wrong, reported 2026-09-14).
+  const battToHome = cells >= gridCharge ? cells : 0;
+  const homeToBatt = gridCharge > cells ? gridCharge : 0;
+  const charging = (pv.toBattery ?? 0) + gridCharge > 0;
+  const battState = battery
+    ? charging
+      ? ` ⚡ ${Math.round((pv.toBattery ?? 0) + gridCharge)} W`
+      : cells > 0
+        ? ` ⏏ ${Math.round(cells)} W`
+        : ""
+    : "";
 
   // Node positions (viewBox 440x260)
   const N = {
@@ -42,30 +55,29 @@ export default function FlowDiagram() {
     batt: {
       x: 385, y: 150,
       label: battery?.name ?? "Battery",
-      sub: battery ? `${battery.soc}%` : "—",
+      sub: battery ? `${battery.soc}%${battState}` : "—",
       color: "#c084fc",
     },
   };
 
   // Edge: [from, to, watts, color, id, sourceTs] — sourceTs is the timestamp
   // of the data source feeding that edge (meter snapshot or battery reading).
-  // Topology (Solarbank 2 E1600 Plus, built-in inverter): ALL PV flows into
-  // the battery unit; the house is fed ONLY through the unit's inverter, and
-  // output_power is the inverter's TOTAL AC output (PV pass-through inside).
-  // Bank→Home = outputW only — when the bank charges with output 0, NO edge
-  // to the house is active (matches the Anker app exactly).
+  // The four arcs (per the Anker app's own flow view): PV→Battery (loading),
+  // PV→Home (inverter pass-through), Battery→Home (cells, unloading),
+  // Grid→Home (+ Home→Grid on export, Home→Battery if grid-charging).
   const edges = [
-    [N.pv, N.batt, pv.production, "#5fce80", "pv-batt", pv.ts],
-    [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home", grid.ts],
-    [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid", grid.ts],
-    [N.batt, N.home, battDischarge, "#c084fc", "batt-home", battery?.ts],
-    [N.home, N.batt, battCharge, "#c084fc", "home-batt", battery?.ts],
+    [N.pv, N.batt, pv.toBattery ?? 0, "#5fce80", "pv-batt", pv.ts],
+    [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home", pv.ts],
+    [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home", grid.ts, grid.source !== "meter" ? "cloud" : null],
+    [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid", grid.ts, grid.source !== "meter" ? "cloud" : null],
+    [N.batt, N.home, battToHome, "#c084fc", "batt-home", battery?.ts],
+    [N.home, N.batt, homeToBatt, "#c084fc", "home-batt", battery?.ts],
   ];
 
   return (
     <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label="power flow">
-      {edges.map(([a, b, w, color, id, ts]) => (
-        <Edge key={id} a={a} b={b} watts={w} color={color} ts={ts} />
+      {edges.map(([a, b, w, color, id, ts, note]) => (
+        <Edge key={id} a={a} b={b} watts={w} color={color} ts={ts} note={note} />
       ))}
       {Object.values(N).map((n) => (
         <g key={n.label}>
@@ -91,7 +103,7 @@ export default function FlowDiagram() {
   );
 }
 
-function Edge({ a, b, watts, color, ts }) {
+function Edge({ a, b, watts, color, ts, note }) {
   if (!watts) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
@@ -130,6 +142,7 @@ function Edge({ a, b, watts, color, ts }) {
           textAnchor={vertical ? "start" : "middle"}
         >
           {updated}
+          {note ? ` · ${note}` : ""}
         </text>
       )}
     </g>
