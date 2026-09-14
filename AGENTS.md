@@ -41,6 +41,11 @@ EPIPE noise on every client disconnect).
   positive = grid import).
 - Modbus TCP must be enabled in the Anker app (meter → Settings → Three-Party
   Control Settings). Meter blocks ICMP ping — test with TCP connect on 502.
+  **Stale snapshots are nulled in `MeterPoller.getState()`** (older than
+  max(60 s, 3× poll interval)) — before this, a lingering snapshot after
+  failed reads masqueraded as live "meter" data for minutes (seen on the
+  Docker instance 2026-09-14: frozen 907 W, source "meter", timestamp aging).
+  The null is what triggers the `/api/flow` + `/api/live` cloud fallback.
 
 ### Anker cloud
 - Base `https://ankerpower-api-eu.anker.com`. Login `POST /passport/login`:

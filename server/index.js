@@ -111,6 +111,8 @@ app.get("/api/battery/live", (req, res) => {
 // double-counted PV and invented a PV→home flow while the bank was charging.
 // Newest CLOSED 20-min cloud interval for today (grid total W) — the
 // fallback source when the meter's Modbus server is unreachable.
+// (Snapshot freshness itself is enforced in MeterPoller.getState — a stale
+// snapshot is nulled there, which is what triggers this fallback.)
 function getCloudGridLive() {
   const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
   if (!sn) return null;
