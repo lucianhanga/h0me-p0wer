@@ -384,14 +384,19 @@ EPIPE noise on every client disconnect).
 
 - 5th tab "Welcome" is the DEFAULT route. `GET /api/welcome` (server/welcome.js)
   gathers deterministic facts → ONE OpenAI-compatible AI call
-  (`response_format: json_schema`), cached 6 h (max 4 calls/day), stale-on-error,
-  deterministic fallback (`aiPowered: false`, 15-min self-heal TTL) when the AI
-  is down. A **background scheduler** (45 s after startup, then every 10 min)
-  refreshes the cache when stale — opening the tab never waits for the AI; the
-  route's lazy refresh is only the fallback. Same TTL budget (≤ 4 calls/day).
-  The tab has a manual ↻ refresh button → `POST /api/welcome/refresh` — forces
-  regeneration on demand (bypasses the TTL; the budget governs only the
-  scheduler).
+  (`response_format: json_schema`), **at fixed local slots 6:00–22:00 every
+  2 h** (9 calls/day, each updated with the day's actuals: localTime +
+  pvProducedTodayKwh in the context; stale = older than the most recent slot
+  boundary), deterministic fallback (`aiPowered: false`, 15-min self-heal TTL)
+  when the AI is down. A background scheduler (45 s after startup, 1-min tick)
+  refreshes at the slots — opening the tab never waits for the AI. The prompt
+  adapts to the slot: morning = day ahead, afternoon = progress + remaining,
+  evening = wrap-up + tomorrow. Manual ↻ refresh stays on demand.
+- **Background-first data model (2026-09-14)**: the server always pulls —
+  meter Modbus loop + unconditional 10 s `scen_info` (6 calls/min, inside the
+  ~10-12/min guideline; carries live grid values via `grid_info` when Modbus
+  is down) + MQTT on top. Clients just read what's in memory/DB; there is NO
+  client-presence gating anymore.
 - Config (`.env`): `HOME_ADDRESS` (geocoded once via Nominatim, cached in the
   `welcome_store` KV table), `PV_PEAK_KWP`/`PV_ORIENTATION` (16-point cardinal,
   mapped to PVGIS aspect = compass−180)/`PV_TILT_DEG`/`PV_PANEL_TYPE`,

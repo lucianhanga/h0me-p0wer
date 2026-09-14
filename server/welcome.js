@@ -9,13 +9,26 @@ import {
 } from "./welcome-sources.js";
 import { buildContext, callWelcomeAI, buildFallback, callAskAI } from "./welcome-ai.js";
 
-const AI_TTL_MS = 6 * 3600 * 1000; // max 4 AI calls/day
+// Fixed briefing times (local clock): every 2 h from 6:00 to 22:00 — 9 AI
+// calls/day, each updated with the day's actuals so far. Stale = cache older
+// than the most recent slot boundary (handles restarts naturally).
+const SLOTS_H = [6, 8, 10, 12, 14, 16, 18, 20, 22];
+function lastSlotMs(now = new Date()) {
+  const d = new Date(now);
+  d.setMinutes(0, 0, 0);
+  for (let i = SLOTS_H.length - 1; i >= 0; i--) {
+    d.setHours(SLOTS_H[i]);
+    if (d.getTime() <= now.getTime()) return d.getTime();
+  }
+  d.setHours(SLOTS_H[SLOTS_H.length - 1]);
+  return d.getTime() - 86400000; // before 6:00 → yesterday's 22:00
+}
 // Fallback payloads self-heal: retry the AI after 15 min instead of letting
-// one outage block AI briefings for the full 6 h TTL.
+// one outage block AI briefings until the next slot.
 const FALLBACK_TTL_MS = 15 * 60 * 1000;
 const CACHE_KEY = "welcome:latest";
 // How often the scheduler checks staleness (a no-op while the cache is fresh).
-const SCHEDULER_TICK_MS = 10 * 60 * 1000;
+const SCHEDULER_TICK_MS = 60 * 1000;
 // Post-startup delay before the first scheduled refresh — lets the meter and
 // battery syncs produce data for the start-of-day snapshot.
 const STARTUP_DELAY_MS = 45 * 1000;
@@ -68,13 +81,14 @@ export function registerWelcomeRoute(app, deps) {
     return payload;
   }
 
-  function ttlFor(cached) {
-    return cached?.value?.aiPowered === false ? FALLBACK_TTL_MS : AI_TTL_MS;
-  }
-
   function freshCache() {
     const cached = kvGet(CACHE_KEY);
-    return cached && Date.now() - cached.fetchedAt < ttlFor(cached) ? cached : null;
+    if (!cached) return null;
+    // Fresh = generated at/after the most recent briefing slot; a fallback
+    // payload additionally expires after 15 min so the AI self-heals sooner.
+    if (cached.fetchedAt < lastSlotMs()) return null;
+    if (cached.value?.aiPowered === false && Date.now() - cached.fetchedAt > FALLBACK_TTL_MS) return null;
+    return cached;
   }
 
   // Refresh only when the cache is missing or past its TTL. Shared by the
@@ -93,8 +107,8 @@ export function registerWelcomeRoute(app, deps) {
     }
   }
 
-  // Background scheduler: keeps the briefing warm with the same TTL budget
-  // (≤ 4 AI calls/day). unref'd so it never blocks shutdown.
+  // Background scheduler: keeps the briefing warm at the fixed slots.
+  // unref'd so it never blocks shutdown.
   setTimeout(() => {
     const config = loadConfig();
     if (!config) return;

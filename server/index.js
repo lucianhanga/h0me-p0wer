@@ -13,6 +13,7 @@ import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
+import { pvKwhForDay } from "./welcome-ai.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -68,12 +69,7 @@ const anker = new AnkerClient(
 const app = express();
 app.use(express.json());
 
-// Presence signal for demand-driven cloud polling: a frontend is "watching"
-// when a WS client is connected or it recently polled the live endpoints.
-let lastApiActivity = 0;
-
 app.get("/api/live", (req, res) => {
-  lastApiActivity = Date.now();
   const state = poller.getState();
   // Modbus down: attach the newest closed cloud interval so the UI can show
   // cloud-sourced grid power instead of nothing (like the Anker app).
@@ -127,30 +123,6 @@ function getCloudGridLive() {
   return null;
 }
 
-// PV energy for one finished day from battery_snapshots, split per the
-// validated model: produced (Σ pvW), to_home (gated pvW − chargeW through
-// the inverter), to_batt (min(pvW, chargeW) into the cells).
-function pvKwhForDay(dateStr) {
-  const r2 = (v) => Math.round(v * 100) / 100;
-  const start = new Date(`${dateStr}T00:00:00`).getTime();
-  const rows = getBatteryHistory(start, start + 86400000);
-  let produced = 0;
-  let toHome = 0;
-  let toBatt = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
-    if (dt > 0.5) continue;
-    produced += (((rows[i - 1].pv_w + rows[i].pv_w) / 2) * dt) / 1000;
-    const th0 = rows[i - 1].output_w > 0 ? Math.max(0, rows[i - 1].pv_w - rows[i - 1].charge_w) : 0;
-    const th1 = rows[i].output_w > 0 ? Math.max(0, rows[i].pv_w - rows[i].charge_w) : 0;
-    toHome += (((th0 + th1) / 2) * dt) / 1000;
-    const tb0 = Math.min(rows[i - 1].pv_w, rows[i - 1].charge_w);
-    const tb1 = Math.min(rows[i].pv_w, rows[i].charge_w);
-    toBatt += (((tb0 + tb1) / 2) * dt) / 1000;
-  }
-  return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
-}
-
 // Persist PV energy for recent finished days (raw samples live only 48 h —
 // recompute the last two days each run so values settle as data arrives).
 function rollupPvDaily() {
@@ -181,7 +153,6 @@ function pvStoredTotals(fromDate, toDate) {
 }
 
 app.get("/api/flow", (req, res) => {
-  lastApiActivity = Date.now();
   let grid = poller.snapshot?.primary?.totalPower ?? null;
   let gridTs = poller.snapshot?.timestamp ?? null;
   let gridSource = "meter";
@@ -1316,22 +1287,12 @@ async function syncBattery() {
     console.warn(`[battery] sync failed: ${err.message}`);
   }
 }
-// Demand-driven cadence: while a frontend is watching (WS client connected
-// or live endpoints polled in the last 15 s) pull scen_info every 5 s — and
-// every 3 s when the meter's Modbus is down, since scen_info's grid_info then
-// carries the LIVE grid values (user-requested; ~20 req/min exceeds the
-// ~10-12/min guideline so this stays demand-gated — failures just log and
-// the data goes a few seconds stale). The Anker app itself gets its live
-// view over MQTT push; REST only bridges broker gaps. Idle floor: 10 s.
-let lastBatterySync = 0;
-setInterval(() => {
-  const watching = wss.clients.size > 0 || Date.now() - lastApiActivity < 15000;
-  const meterDown = !poller.getState().connected;
-  const minInterval = meterDown && watching ? 3000 : watching ? 5000 : 10000;
-  if (Date.now() - lastBatterySync < minInterval) return;
-  lastBatterySync = Date.now();
-  syncBattery();
-}, 3000).unref();
+// Background-first (2026-09-14): the server always pulls — clients just read
+// what's in memory/DB. Unconditional 10 s scen_info cadence (6 calls/min,
+// safely inside the ~10-12/min guideline); MQTT push layers on top as the
+// fast channel. (The Anker app itself gets its live view over MQTT.)
+setTimeout(syncBattery, 10 * 1000);
+setInterval(syncBattery, 10 * 1000).unref();
 
 // While Modbus is down, keep today's cloud day-trend fresh (1 call / 2 min —
 // far inside the endpoint's rate limit) so the /api/flow + /api/live fallback

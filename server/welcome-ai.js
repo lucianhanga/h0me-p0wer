@@ -25,6 +25,31 @@ function dailyImportRows(sn, monthsBack = 2) {
   return rows;
 }
 
+// PV energy for a date (or day-so-far) from battery_snapshots, split per the
+// validated model: produced (Σ pvW), to_home (gated pvW − chargeW through
+// the inverter), to_batt (min(pvW, chargeW) into the cells). Shared by the
+// daily rollup (index.js) and the welcome/ask context.
+export function pvKwhForDay(dateStr) {
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const start = new Date(`${dateStr}T00:00:00`).getTime();
+  const rows = getBatteryHistory(start, start + 86400000);
+  let produced = 0;
+  let toHome = 0;
+  let toBatt = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
+    if (dt > 0.5) continue;
+    produced += (((rows[i - 1].pv_w + rows[i].pv_w) / 2) * dt) / 1000;
+    const th0 = rows[i - 1].output_w > 0 ? Math.max(0, rows[i - 1].pv_w - rows[i - 1].charge_w) : 0;
+    const th1 = rows[i].output_w > 0 ? Math.max(0, rows[i].pv_w - rows[i].charge_w) : 0;
+    toHome += (((th0 + th1) / 2) * dt) / 1000;
+    const tb0 = Math.min(rows[i - 1].pv_w, rows[i - 1].charge_w);
+    const tb1 = Math.min(rows[i].pv_w, rows[i].charge_w);
+    toBatt += (((tb0 + tb1) / 2) * dt) / 1000;
+  }
+  return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
+}
+
 function avgImportByWeekday(rows, firstDate) {
   const cutoff = localDate(new Date(Date.now() - 56 * 86400000));
   const acc = {}; // Mon -> {s, c}
@@ -93,6 +118,8 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
   return {
     location: { address: config.address, lat: geo.lat, lon: geo.lon, displayName: geo.displayName },
     date: localDate(),
+    localTime: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
+    pvProducedTodayKwh: pvKwhForDay(localDate()).produced,
     weekday: WEEKDAYS[now.getDay()],
     monthName: MONTHS[now.getMonth()],
     tariffEurPerKwh: config.tariff,
@@ -166,10 +193,11 @@ export const WELCOME_SCHEMA = {
   },
 };
 
-const SYSTEM_PROMPT = `You write the morning energy briefing for a home dashboard.
+const SYSTEM_PROMPT = `You write the energy briefing for a home dashboard.
 Hard rules:
 - Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
-- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (report actuals: pvNowW, charge flows) — otherwise it is still PLANNED and production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
+- Adapt to the provided localTime: morning (before 12:00) = the day ahead; afternoon (12-18) = the day so far (pvProducedTodayKwh, grid import so far) + what remains of it; evening (after 18:00) = wrap up the day and look at tomorrow (the week's first forecast day after today).
+- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (report actuals: pvNowW, pvProducedTodayKwh, charge flows) — otherwise it is still PLANNED and production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
 - Power flows (Solarbank 2 E1600 Plus, built-in inverter): ALL PV enters the battery unit; the house is fed ONLY through the unit's inverter, and the inverter's output already includes any PV pass-through — never present PV as flowing directly to the house. The bank decides dynamically (at low SOC it often charges from PV while the house runs on grid) — describe the MEASURED flows in the context, don't assume a fixed priority.
 - Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
@@ -266,6 +294,8 @@ Hard rules:
   home, costs). If the question is about anything else, or the context has no
   data to answer it, say honestly that you don't know or can't answer that —
   do NOT guess and do NOT answer off-topic questions.
+- The context carries the current localTime — interpret "now", "today",
+  "tonight", "this morning" against it.
 - PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (use the actual figures) — otherwise it is PLANNED and production numbers are PVGIS-based estimates. Power-flow priority: PV covers the house FIRST, surplus to the battery, grid last.
 - Spoken-style language (the answer is read aloud), numbers rounded sensibly.
   Language for both fields: see language field.`;
