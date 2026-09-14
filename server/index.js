@@ -183,17 +183,24 @@ app.get("/api/flow", (req, res) => {
   let grid = poller.snapshot?.primary?.totalPower ?? null;
   let gridTs = poller.snapshot?.timestamp ?? null;
   let gridSource = "meter";
-  // Modbus down (e.g. meter's TCP server hung): fall back to the cloud, like
-  // the Anker app — the meter's 20-min day trend, newest CLOSED interval.
+  const b = latestBattery ?? getLatestBattery();
+  // Modbus down: fall back to the cloud like the Anker app. Prefer the LIVE
+  // scen_info grid channel (fresh, synced every 3 s on demand); the 20-min
+  // trend is the last resort.
   if (grid == null) {
-    const c = getCloudGridLive();
-    if (c) {
-      grid = c.power;
-      gridTs = c.ts;
-      gridSource = "cloud";
+    if (b?.gridToHomeW != null && b.ts != null && Date.now() - b.ts < 60000) {
+      grid = b.gridToHomeW - (b.pvToGridW ?? 0); // import minus PV feed-in
+      gridTs = new Date(b.ts).toISOString();
+      gridSource = "cloud-live";
+    } else {
+      const c = getCloudGridLive();
+      if (c) {
+        grid = c.power;
+        gridTs = c.ts;
+        gridSource = "cloud";
+      }
     }
   }
-  const b = latestBattery ?? getLatestBattery();
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
   const outputW = b?.outputW ?? 0;
@@ -213,12 +220,29 @@ app.get("/api/flow", (req, res) => {
         source: gridSource,
       },
       battery: b
-        ? { soc: b.soc, discharge: b.outputW, charge: chargeW, name: b.name ?? "Solarbank", ts: b.ts ?? null }
+        ? {
+            soc: b.soc,
+            discharge: b.outputW,
+            charge: chargeW,
+            // Cells-only output to the house (inverter total minus the PV
+            // pass-through) — the PV→Home arc carries pvToHome separately.
+            cells: Math.max(0, outputW - pvToHome),
+            // Charging sourced from the grid (chargeW beyond what PV covers)
+            // — the Home→Battery arc, normally 0.
+            gridCharge: Math.max(0, chargeW - pvToBattery),
+            name: b.name ?? "Solarbank",
+            ts: b.ts ?? null,
+          }
         : null,
       pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null },
       home: {
         consumption:
-          grid != null ? Math.max(grid, 0) + outputW : null,
+          // Cloud-live: the app's own Home Load (grid_to_home + to_home).
+          gridSource === "cloud-live" && b?.homeLoadW != null
+            ? b.homeLoadW
+            : grid != null
+              ? Math.max(grid, 0) + outputW
+              : null,
       },
     },
   });
@@ -1291,18 +1315,21 @@ async function syncBattery() {
   }
 }
 // Demand-driven cadence: while a frontend is watching (WS client connected
-// or live endpoints polled in the last 15 s) pull scen_info every 5 s — the
-// Anker app itself gets its live view over MQTT push, so this REST cadence
-// only bridges broker gaps; 12 calls/min is the documented ceiling, hence
-// only on demand. Idle floor: every 10 s unconditionally.
+// or live endpoints polled in the last 15 s) pull scen_info every 5 s — and
+// every 3 s when the meter's Modbus is down, since scen_info's grid_info then
+// carries the LIVE grid values (user-requested; ~20 req/min exceeds the
+// ~10-12/min guideline so this stays demand-gated — failures just log and
+// the data goes a few seconds stale). The Anker app itself gets its live
+// view over MQTT push; REST only bridges broker gaps. Idle floor: 10 s.
 let lastBatterySync = 0;
 setInterval(() => {
   const watching = wss.clients.size > 0 || Date.now() - lastApiActivity < 15000;
-  const minInterval = watching ? 5000 : 10000;
+  const meterDown = !poller.getState().connected;
+  const minInterval = meterDown && watching ? 3000 : watching ? 5000 : 10000;
   if (Date.now() - lastBatterySync < minInterval) return;
   lastBatterySync = Date.now();
   syncBattery();
-}, 5000).unref();
+}, 3000).unref();
 
 // While Modbus is down, keep today's cloud day-trend fresh (1 call / 2 min —
 // far inside the endpoint's rate limit) so the /api/flow + /api/live fallback
