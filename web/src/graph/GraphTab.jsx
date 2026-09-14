@@ -20,15 +20,14 @@ const SERIES = [
   { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
   // ONE stack of SOURCES feeding the house (Home Assistant energy-dashboard
-  // model): grid phases at the bottom, then battery CELLS output, then the
-  // FULL PV production on top. Battery charging draws below the baseline as
-  // a separate sink (negative "Battery in") — so every scenario reads at a
-  // glance: PV→battery (green band + purple sink), battery→house (purple
-  // band), PV→house (green band, no sink), PV→both (band + sink), and the
-  // Home line (grid + inverter output) stays the authoritative total.
-  { key: "l1", name: "L1", color: "#4f8ef7", width: 1, stack: "home" },
-  { key: "l2", name: "L2", color: "#7ab0ff", width: 1, stack: "home" },
-  { key: "l3", name: "L3", color: "#b3ccff", width: 1, stack: "home" },
+  // model): grid import (total, signed) at the bottom, then battery CELLS
+  // output, then the FULL PV production on top. Battery charging draws below
+  // the baseline as a separate sink (negative "Battery in") — so every
+  // scenario reads at a glance: PV→battery (green band + purple sink),
+  // battery→house (purple band), PV→house (green band, no sink), PV→both
+  // (band + sink), and the Home line (grid + inverter output) stays the
+  // authoritative total.
+  { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "home" },
   { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "home" },
   { key: "pv", name: "PV", color: "#5fce80", width: 1, stack: "home" },
   // Battery charging (PV→cells, or grid→cells) — rendered NEGATIVE (sink).
@@ -155,14 +154,12 @@ export default function GraphTab() {
         itemWidth: 12,
         itemHeight: 8,
         inactiveColor: "#5a6672",
-        data: ["L1", "L2", "L3", "Battery out", "Battery in", "PV", "Home", "Grid range"],
-        // All on by default: phases at the bottom of the stack, Battery out +
-        // PV on top, Battery in as the sink below zero, Home line above
-        // everything. Click legend entries to toggle.
+        data: ["Grid", "Battery out", "Battery in", "PV", "Home", "Grid range"],
+        // All on by default: grid import at the bottom of the stack,
+        // Battery out + PV on top, Battery in as the sink below zero, Home
+        // line above everything. Click legend entries to toggle.
         selected: {
-          L1: true,
-          L2: true,
-          L3: true,
+          Grid: true,
           "Battery out": true,
           "Battery in": true,
           PV: true,

@@ -184,12 +184,14 @@ EPIPE noise on every client disconnect).
   energy_analysis only has discharge power series + static to-date totals;
   period PV production is NOT available from the cloud.)
 - **Chart (Home Assistant / OpenSolar best practice)**: sources stacked
-  positive (L1-L3 grid, `Battery out` = cells, FULL `PV` production), sink
-  below zero (`Battery in` = charge, negated). Conservation reads at a
-  glance: production exceeding Home visibly drops into the charge sink.
-  `battCells` is derived per row (`battOut − pvHome`); `battChg` is a new
-  timeseries field (charge_w, cloud fallback `max(−power, 0)`). Home line =
-  `grid + battOut` unchanged.
+  positive (**Grid** import total (orange, signed — export dips below),
+  `Battery out` = cells, FULL `PV` production), sink below zero (`Battery
+  in` = charge, negated). (Phases L1-L3 were dropped from the chart
+  2026-09-14 — still in the API rows and the Live tab's Details section.)
+  Conservation reads at a glance: production exceeding Home visibly drops
+  into the charge sink. `battCells` is derived per row (`battOut − pvHome`);
+  `battChg` is a new timeseries field (charge_w, cloud fallback
+  `max(−power, 0)`). Home line = `grid + battOut` unchanged.
 
 - **Flow model (validated against live PV data + Anker docs, 2026-09-13)** —
   the Solarbank has ONE DC bus: panels + cells in, inverter out
