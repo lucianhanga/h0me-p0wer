@@ -43,11 +43,21 @@ export class MeterPoller {
       ? this.lastSuccessAt != null &&
         Date.now() - this.lastSuccessAt < 2.2 * this.pollIntervalMs
       : this.connected;
+    // A snapshot outlives the connection on purpose (so the UI doesn't flap
+    // between cycles) — but not forever: after ~3 poll cycles without a
+    // successful read it must go, or stale values masquerade as live meter
+    // data (seen 2026-09-14: 6-min-old snapshot shown as source "meter").
+    const staleMs = Math.max(60000, this.pollIntervalMs * 3);
+    const snapshot =
+      this.snapshot &&
+      Date.now() - new Date(this.snapshot.timestamp).getTime() < staleMs
+        ? this.snapshot
+        : null;
     return {
       connected: healthy,
       error: healthy ? null : this.lastError,
       hint: healthy ? null : MODBUS_HINT,
-      snapshot: this.snapshot,
+      snapshot,
     };
   }
 
