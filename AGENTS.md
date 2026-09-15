@@ -227,7 +227,10 @@ EPIPE noise on every client disconnect).
   meter is down and a frontend watches — user-requested, above the
   ~10-12/min guideline, failures just log) → `source: "cloud-live"`, then the
   20-min trend (`source: "cloud"`). Home Load then comes from
-  `home_load_power` directly.
+  `home_load_power` directly. **The same call's grid values are persisted to
+  `cloud_grid_snapshots` (every ~10 s) and merged into `/api/timeseries`**
+  (source 1c, signed import − PV feed-in) — graphs stay continuous at ~10 s
+  resolution with the meter down (user request 2026-09-15).
 - Chart: `pv` series (informational, NOT stacked — stacking it would
   double-count); `battOut` (unsigned inverter output) in `/api/timeseries`
   so Home = `grid + max(battOut, 0)` — exact even for simultaneous

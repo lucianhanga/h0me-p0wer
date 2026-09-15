@@ -237,6 +237,39 @@ export function pruneBattery() {
   db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
 }
 
+// --- Cloud-live grid samples (scen_info grid_info every 10 s) --------------
+// Persisted by the battery sync so the graph keeps grid data at ~10 s
+// resolution even when the meter's Modbus is down (user request 2026-09-15:
+// populate the DB from the most appropriate available source).
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS cloud_grid_snapshots (
+    ts INTEGER PRIMARY KEY,
+    grid_w REAL NOT NULL,
+    pv_to_grid_w REAL NOT NULL DEFAULT 0,
+    home_load_w REAL NOT NULL DEFAULT 0
+  )
+`);
+
+const insertCloudGrid = db.prepare(
+  `INSERT OR REPLACE INTO cloud_grid_snapshots (ts, grid_w, pv_to_grid_w, home_load_w) VALUES (?, ?, ?, ?)`,
+);
+const selectCloudGridRows = db.prepare(
+  `SELECT ts, grid_w, pv_to_grid_w, home_load_w FROM cloud_grid_snapshots WHERE ts >= ? AND ts <= ? ORDER BY ts ASC`,
+);
+
+export function saveCloudGridSnapshot(s) {
+  insertCloudGrid.run(s.ts, s.gridToHomeW, s.pvToGridW ?? 0, s.homeLoadW ?? 0);
+}
+
+export function getCloudGridRows(fromMs, toMs) {
+  return selectCloudGridRows.all(fromMs, toMs);
+}
+
+export function pruneCloudGrid() {
+  db.prepare(`DELETE FROM cloud_grid_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
+}
+
 // --- PV daily rollup (production / to-home / to-battery per date) ----------
 // Computed lazily from battery_snapshots (48 h retention) and kept forever —
 // this is what makes week/month/year PV possible without a cloud PV channel.

@@ -34,6 +34,9 @@ import {
   savePvDaily,
   getPvDaily,
   getPvDailyDates,
+  saveCloudGridSnapshot,
+  getCloudGridRows,
+  pruneCloudGrid,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -302,6 +305,14 @@ app.get("/api/timeseries", (req, res) => {
     add(bt, "battOut", r.output_w ?? 0);
     add(bt, "battChg", r.charge_w ?? 0);
     add(bt, "pv", r.pv_w ?? 0);
+  }
+
+  // Source 1c: cloud-live grid samples (scen_info grid_info, ~10 s) — the
+  // best available grid source when Modbus is down; signed like the meter
+  // (import − PV feed-in). Only fills buckets the meter hasn't covered.
+  for (const r of getCloudGridRows(from - CLOUD_INTERVAL_MS, to)) {
+    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+    if (!acc.get(bt)?.grid) add(bt, "grid", r.grid_w - (r.pv_to_grid_w ?? 0));
   }
 
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
@@ -1252,10 +1263,12 @@ poller.onSnapshot((state) => {
 // PV daily energy (raw battery samples age out after 48 h).
 pruneOld();
 pruneBattery();
+pruneCloudGrid();
 rollupPvDaily();
 setInterval(() => {
   pruneOld();
   pruneBattery();
+  pruneCloudGrid();
   rollupPvDaily();
 }, 3600 * 1000).unref();
 
@@ -1290,6 +1303,15 @@ async function syncBattery() {
       latestBattery = info;
       lastCloudOkAt = Date.now();
       saveBatterySnapshot(info);
+      // Grid channel from the same call — the best available source when
+      // Modbus is down; graphs merge it below local snapshots.
+      if (info.gridToHomeW != null) {
+        try {
+          saveCloudGridSnapshot(info);
+        } catch (err) {
+          console.warn("[db] failed to persist cloud grid sample:", err.message);
+        }
+      }
       startBatteryMqtt();
     }
   } catch (err) {
