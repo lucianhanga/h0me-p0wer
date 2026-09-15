@@ -34,6 +34,15 @@ const FULL_SOC = 99; // "battery full" threshold (charge limit not exposed)
 // continuously for this long — cloud wobble around a 100 W boundary
 // otherwise makes the preset chase PV while the device lags ~1 min behind.
 const STEP_UP_HOLD_MS = 3 * 60 * 1000;
+// Evening bridge (2026-09-15): during the sunset ramp-down the floor-step
+// rule lets the GRID cover the growing gap while the battery sits idle
+// waiting for PV=0. Once the day has clearly peaked (>= 300 W), it's past
+// noon, and PV fell below 70% of peak AND below house demand, switch to
+// demand mode — preset = min(demand, 800); per the preset semantics the
+// CELLS then top up the gap automatically. Same € on a flat tariff, but
+// grid import starts later and the battery reaches its reserve sooner
+// instead of idling through the ramp. The noon guard keeps the morning
+// ramp in charge mode.
 
 export class PowerPlanController {
   constructor(anker) {
@@ -125,17 +134,36 @@ export class PowerPlanController {
     };
   }
 
-  computeTarget({ pvW, demandW, soc }) {
+  computeTarget({ pvW, demandW, soc, bridge = false }) {
     const max = this.template?.max_load ?? 800;
     const step = this.template?.step ?? 10;
     const reserve = this.template?.reserved_soc ?? 0;
     let target;
     if (soc <= reserve) target = 0;
-    else if (pvW <= 0) target = Math.min(max, demandW);
+    else if (pvW <= 0 || bridge) target = Math.min(max, demandW);
     else if (soc >= FULL_SOC) target = Math.min(pvW, demandW, max);
     else target = Math.min(Math.floor(pvW / 100) * 100, demandW, max);
     target = Math.max(0, Math.floor(target / step) * step);
     return target;
+  }
+
+  // Evening bridge: true once the day peaked (>=300 W), it's past noon, and
+  // PV declined below 70% of peak and below house demand.
+  isEveningBridge(pvW, demandW) {
+    const d = new Date();
+    const dayKey = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+    if (this.peakDayKey !== dayKey) {
+      this.peakDayKey = dayKey;
+      this.pvPeakToday = 0;
+    }
+    this.pvPeakToday = Math.max(this.pvPeakToday ?? 0, pvW);
+    return (
+      d.getHours() >= 12 &&
+      this.pvPeakToday >= 300 &&
+      pvW > 0 &&
+      pvW < demandW &&
+      pvW < 0.7 * this.pvPeakToday
+    );
   }
 
   // Called on every battery sync with the latest scen_info payload.
@@ -158,7 +186,8 @@ export class PowerPlanController {
           this.saveState();
         }
       }
-      const targetW = this.computeTarget({ pvW, demandW, soc });
+      const bridge = this.isEveningBridge(pvW, demandW);
+      const targetW = this.computeTarget({ pvW, demandW, soc, bridge });
       const now = Date.now();
       const cur = this.lastWrittenPower;
       let shouldWrite = false;
@@ -208,7 +237,7 @@ export class PowerPlanController {
         }
       }
       this.lastError = null;
-      this.lastDecision = { at: now, pvW, demandW, soc, targetW, wrote, reason };
+      this.lastDecision = { at: now, pvW, demandW, soc, bridge, targetW, wrote, reason };
     } catch (err) {
       this.lastError = err.message;
       console.warn(`[power-plan] tick failed: ${err.message}`);
