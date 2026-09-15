@@ -3,10 +3,18 @@
 // Anker app. Goal: avoid the charge/discharge jojo around a fixed preset and
 // push as much PV into the house as possible — without ever exporting.
 //
-// Algorithm (agreed with the user, 2026-09-15):
+// Algorithm (agreed with the user, 2026-09-15; PV rounding waste fixed
+// 2026-09-15):
 //   PV = 0          -> discharge min(800, houseDemand)        (SOC > reserve)
-//   PV > 0          -> output min(floor(PV/100)*100, houseDemand)
-//   battery full    -> min(PV, houseDemand)  (all PV to house)
+//   PV > 0          -> output min(PV, houseDemand)  (all PV to house; target
+//                      is always <= PV here, so cells never engage — the
+//                      previous floor(PV/100)*100 rounded the preset BELOW
+//                      actual PV even when PV < houseDemand, misrouting up
+//                      to 99 W of under-demand PV to the battery for no
+//                      cycling benefit; also covers "battery full", which no
+//                      longer needs its own branch — same formula, excess PV
+//                      above houseDemand still charges the battery like
+//                      always, the device's own charge limit caps it)
 // Never above houseDemand => zero export by construction. The device itself
 // enforces its configured SOC reserve / charge limits on top.
 //
@@ -27,7 +35,6 @@ const CMD = 17;
 const WRITE_MIN_DELTA_W = 50; // rewrite when target moved at least this much
 const REFRESH_MS = 5 * 60 * 1000; // re-write smaller drifts after this long
 const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
-const FULL_SOC = 99; // "battery full" threshold (charge limit not exposed)
 // Asymmetric hysteresis (2026-09-15, preset-lag fix): step DOWN promptly —
 // a preset above current PV is served from the CELLS (the jojo this
 // controller exists to kill). Step UP only after the higher target holds
@@ -141,8 +148,7 @@ export class PowerPlanController {
     let target;
     if (soc <= reserve) target = 0;
     else if (pvW <= 0 || bridge) target = Math.min(max, demandW);
-    else if (soc >= FULL_SOC) target = Math.min(pvW, demandW, max);
-    else target = Math.min(Math.floor(pvW / 100) * 100, demandW, max);
+    else target = Math.min(pvW, demandW, max);
     target = Math.max(0, Math.floor(target / step) * step);
     return target;
   }
