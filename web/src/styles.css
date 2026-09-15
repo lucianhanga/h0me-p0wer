@@ -861,3 +861,73 @@ pre {
   .wx-icon { width: 44px; height: 44px; }
   .sun-arc { width: 160px; }
 }
+
+/* --- ROI tab ------------------------------------------------------------ */
+.roi-chart {
+  height: 300px;
+  margin: 0.5rem 0;
+}
+
+.roi-bom-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid #2a3238;
+  font-size: 0.9rem;
+}
+
+.roi-bom-name {
+  flex: 1 1 220px;
+}
+
+.roi-bom-qty {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.roi-bom-price {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.roi-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding-top: 0.6rem;
+  font-weight: 600;
+}
+
+.roi-total {
+  font-size: 1.5rem;
+  color: #5fce80;
+}
+
+/* Flags a snapshotted price that was estimated, not confirmed. */
+.roi-est {
+  color: #f7a44f;
+  font-weight: 600;
+  margin-right: 0.15rem;
+}
+
+.roi-pos {
+  color: #5fce80;
+}
+
+.roi-neg {
+  color: #e05c5c;
+}
+
+@media (max-width: 600px) {
+  .roi-chart {
+    height: 200px;
+  }
+
+  .roi-total {
+    font-size: 1.25rem;
+  }
+}

@@ -9,6 +9,8 @@ import {
   DataZoomComponent,
   DataZoomInsideComponent,
   DataZoomSliderComponent,
+  MarkLineComponent,
+  MarkPointComponent,
 } from "echarts/components";
 import { CanvasRenderer } from "echarts/renderers";
 
@@ -21,6 +23,8 @@ echarts.use([
   DataZoomComponent,
   DataZoomInsideComponent,
   DataZoomSliderComponent,
+  MarkLineComponent,
+  MarkPointComponent,
   CanvasRenderer,
 ]);
 

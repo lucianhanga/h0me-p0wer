@@ -384,6 +384,32 @@ EPIPE noise on every client disconnect).
   starting on `.chart-box, button, a, select, input` are IGNORED so the
   graph's drag-to-pan and buttons keep working. Verified via CDP touch events.
 
+## ROI tab (2026-09-15)
+
+- 5th tab "ROI" (`web/src/roi/RoiTab.jsx`, hash `#roi`): investment payback
+  for the balcony-solar setup. `GET /api/roi` (`server/roi.js`,
+  `registerRoiRoute`) is **DB-only** — no cloud calls.
+- **BOM with snapshotted prices**: `server/roi-bom.json` (committed,
+  user-editable) — `{asin, name, qty, unitPriceEur, estimated?, url,
+  priceSnapshotDate}`. The ROI math must use the PRICES PAID, never live
+  prices, so each row carries its snapshot date; `estimated: true` rows are
+  guesses (Amazon blocks price scraping) the user should correct by hand.
+  The UI flags them with "~".
+- **Savings model**: per finished day (today excluded),
+  `saved = (pv_daily.to_home + cells discharge) × TARIFF_EUR_PER_KWH`.
+  Cells discharge = battery cloud day-trend positive integral (20-min power
+  × 20/60/1000) — per the dashboard channel audit the trend is ALREADY
+  cells-only, so it never overlaps the PV channel (do NOT subtract
+  pvToHome here).
+- `installDate` = earliest day with savings data (first `pv_daily` row or
+  first battery day-trend), fallback 2026-09-07 (meter link date).
+  Payback = installDate + invested/avgDailySavings; projections for
+  1/2/3/5/10/15 years assume the measured daily average, constant tariff,
+  no degradation.
+- Amortization chart: cumulative savings (solid measured / dashed
+  projection) vs. invested markLine, break-even markPoint at the payback
+  date. Styles: `.roi-*` at the end of styles.css.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
