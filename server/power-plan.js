@@ -28,6 +28,12 @@ const WRITE_MIN_DELTA_W = 50; // rewrite when target moved at least this much
 const REFRESH_MS = 5 * 60 * 1000; // re-write smaller drifts after this long
 const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
 const FULL_SOC = 99; // "battery full" threshold (charge limit not exposed)
+// Asymmetric hysteresis (2026-09-15, preset-lag fix): step DOWN promptly —
+// a preset above current PV is served from the CELLS (the jojo this
+// controller exists to kill). Step UP only after the higher target holds
+// continuously for this long — cloud wobble around a 100 W boundary
+// otherwise makes the preset chase PV while the device lags ~1 min behind.
+const STEP_UP_HOLD_MS = 3 * 60 * 1000;
 
 export class PowerPlanController {
   constructor(anker) {
@@ -150,26 +156,51 @@ export class PowerPlanController {
       }
       const targetW = this.computeTarget({ pvW, demandW, soc });
       const now = Date.now();
-      const delta =
-        this.lastWrittenPower == null
-          ? Infinity
-          : Math.abs(targetW - this.lastWrittenPower);
-      const wrote0 =
-        delta >= WRITE_MIN_DELTA_W ||
-        (targetW !== this.lastWrittenPower &&
-          now - this.lastWriteAt >= REFRESH_MS);
-      let wrote = false;
+      const cur = this.lastWrittenPower;
+      let shouldWrite = false;
       let reason = "within deadband";
-      if (wrote0) {
+      if (cur == null) {
+        shouldWrite = true;
+        reason = "initial";
+      } else if (targetW < cur) {
+        // Step down promptly (preset above PV burns the battery).
+        this.pendingUp = null;
+        if (cur - targetW >= WRITE_MIN_DELTA_W) {
+          shouldWrite = true;
+          reason = "step down";
+        } else if (now - this.lastWriteAt >= REFRESH_MS) {
+          shouldWrite = true;
+          reason = "refresh";
+        }
+      } else if (targetW > cur) {
+        // Step up only after the higher target holds continuously.
+        if (this.pendingUp?.target !== targetW) {
+          this.pendingUp = { target: targetW, since: now };
+        }
+        const heldS = Math.round((now - this.pendingUp.since) / 1000);
+        if (
+          targetW - cur >= WRITE_MIN_DELTA_W &&
+          now - this.pendingUp.since >= STEP_UP_HOLD_MS
+        ) {
+          shouldWrite = true;
+          reason = `step up (held ${heldS}s)`;
+        } else {
+          reason = `holding up-step (${heldS}s/${STEP_UP_HOLD_MS / 1000}s)`;
+        }
+      } else {
+        this.pendingUp = null;
+      }
+      let wrote = false;
+      if (shouldWrite) {
         if (now - this.lastWriteAt >= MIN_WRITE_GAP_MS) {
           await this.writeSchedule(this.buildPresetSchedule(targetW));
           this.lastWrittenPower = targetW;
           this.lastWriteAt = now;
+          this.pendingUp = null;
           wrote = true;
-          reason = delta >= WRITE_MIN_DELTA_W ? "delta>=50W" : "refresh";
           this.saveState();
         } else {
-          reason = "waiting (min write gap)";
+          reason = `${reason} — waiting (min write gap)`;
         }
       }
       this.lastError = null;
