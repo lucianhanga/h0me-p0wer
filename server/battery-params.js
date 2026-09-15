@@ -78,6 +78,24 @@ async function fetchConfig(anker, getLiveBattery) {
   } catch (err) {
     config.error18 = err.message;
   }
+  // Fallbacks when the device exposes nothing (verified 2026-09-15 on the
+  // A17C3: param 27/18/30 all EMPTY). The SB2 schedule (param_type 6, same
+  // endpoint the power plan uses) carries `reserved_soc`; the discharge
+  // floor otherwise defaults to the observed 10 % (battery stops there
+  // overnight), charge ceiling to 100 %.
+  if (config.dischargeLowerLimitPct == null) {
+    try {
+      const sched = await readParam(anker, siteId, "6");
+      const reserved = numOrNull(sched?.reserved_soc);
+      config.dischargeLowerLimitPct = reserved != null && reserved > 0 ? reserved : 10;
+      config.limitsSource = reserved != null && reserved > 0 ? "schedule" : "default";
+    } catch {
+      config.dischargeLowerLimitPct = 10;
+      config.limitsSource = "default";
+    }
+  }
+  if (config.chargeUpperLimitPct == null) config.chargeUpperLimitPct = 100;
+  if (config.backupReservePct == null) config.backupReservePct = config.dischargeLowerLimitPct;
   return config;
 }
 
