@@ -329,6 +329,25 @@ EPIPE noise on every client disconnect).
   engaged in this branch regardless of the floor). `min(PV, houseDemand)`
   sends 100% of PV to the house whenever PV ≤ demand, and still routes only
   the true excess (PV > demand) to the battery.
+- **SOC limits now shared with the Battery tab (2026-09-15)**: the discharge
+  floor (`reserve`, blocks any output request once `soc <= reserve`) and
+  charge ceiling (`chargeCeilingPct`, informational only — see below) come
+  from `battery-params.js`'s `getBatteryLimits()` (same 6 h-cached
+  `param_type "27"` config + schedule/hardcoded fallback the Battery tab
+  reads) instead of `power-plan.js` reading `reserved_soc` off the schedule
+  payload itself. That field is typically absent on this account, so the old
+  code's `?? 0` default silently disabled the reserve guard — the battery
+  could be discharged with no floor at all. `battery-params.js` exports
+  `resolveBatteryConfig()` (the shared cache-check-fetch-fallback, also used
+  by `GET /api/battery/params`) and `getBatteryLimits()` (just the two
+  percentages). `PowerPlanController` now takes `getLiveBattery` in its
+  constructor (needed by `resolveBatteryConfig` → `ensureSiteId`) —
+  `new PowerPlanController(anker, () => latestBattery ?? getLatestBattery())`
+  in `index.js`. The charge ceiling does NOT change the PV>0 formula (target
+  is always ≤ PV there, so it never asks for more charging than PV already
+  supplies; pushing target above houseDemand to "use up" a full battery
+  would risk exporting) — it's surfaced in `lastDecision.chargeCeilingPct` /
+  `.atChargeCeiling` for visibility/debugging, not used to branch.
 - **Write discipline**: only on ≥ 50 W change, ≥ 30 s between writes,
   asymmetric hysteresis (2026-09-15): step DOWN promptly (a preset above
   current PV is served from the CELLS — the jojo this kills), step UP only

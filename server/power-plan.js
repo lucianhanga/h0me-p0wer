@@ -18,6 +18,20 @@
 // Never above houseDemand => zero export by construction. The device itself
 // enforces its configured SOC reserve / charge limits on top.
 //
+// SOC limits (2026-09-15, shared-source fix): the discharge floor ("reserve")
+// and charge ceiling ("max charging") are read from the SAME account config
+// (`battery-params.js`'s `getBatteryLimits()`, 6 h cache, param_type "27"
+// with a schedule/hardcoded fallback) the Battery tab already uses — not
+// guessed locally. Previously this controller read `reserved_soc` off the
+// schedule payload (param_type "6") directly, defaulting to 0 when absent;
+// on this account that field is typically absent, so the guard was
+// effectively disabled (battery could be discharged with no floor at all).
+// The charge ceiling doesn't change the PV>0 formula (target is always
+// <= PV there, so it never asks for MORE charging than PV already supplies;
+// raising target above houseDemand to "use up" a full battery would risk
+// exporting, which the device must never do) — it's surfaced in
+// `lastDecision.atChargeCeiling` for visibility/debugging only.
+//
 // Write path (spike-verified 2026-09-15): param_type "6", cmd 17 via
 // set_site_device_param; always TWO slots (Anker single-slot 0 W export bug).
 // Preset is only rewritten on a >= 50 W change (or as a 5-min refresh), so
@@ -26,6 +40,7 @@
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getBatteryLimits } from "./battery-params.js";
 
 const GET_EP = "power_service/v1/site/get_site_device_param";
 const SET_EP = "power_service/v1/site/set_site_device_param";
@@ -52,8 +67,9 @@ const STEP_UP_HOLD_MS = 3 * 60 * 1000;
 // ramp in charge mode.
 
 export class PowerPlanController {
-  constructor(anker) {
+  constructor(anker, getLiveBattery) {
     this.anker = anker;
+    this.getLiveBattery = getLiveBattery;
     const dbDir = path.dirname(
       process.env.DB_PATH ??
         path.join(path.dirname(fileURLToPath(import.meta.url)), "data.db"),
@@ -141,10 +157,9 @@ export class PowerPlanController {
     };
   }
 
-  computeTarget({ pvW, demandW, soc, bridge = false }) {
+  computeTarget({ pvW, demandW, soc, bridge = false, reserve = 0 }) {
     const max = this.template?.max_load ?? 800;
     const step = this.template?.step ?? 10;
-    const reserve = this.template?.reserved_soc ?? 0;
     let target;
     if (soc <= reserve) target = 0;
     else if (pvW <= 0 || bridge) target = Math.min(max, demandW);
@@ -192,8 +207,18 @@ export class PowerPlanController {
           this.saveState();
         }
       }
+      const { dischargeFloorPct, chargeCeilingPct } = await getBatteryLimits(
+        this.anker,
+        this.getLiveBattery,
+      );
       const bridge = this.isEveningBridge(pvW, demandW);
-      const targetW = this.computeTarget({ pvW, demandW, soc, bridge });
+      const targetW = this.computeTarget({
+        pvW,
+        demandW,
+        soc,
+        bridge,
+        reserve: dischargeFloorPct,
+      });
       const now = Date.now();
       const cur = this.lastWrittenPower;
       let shouldWrite = false;
@@ -243,7 +268,19 @@ export class PowerPlanController {
         }
       }
       this.lastError = null;
-      this.lastDecision = { at: now, pvW, demandW, soc, bridge, targetW, wrote, reason };
+      this.lastDecision = {
+        at: now,
+        pvW,
+        demandW,
+        soc,
+        bridge,
+        targetW,
+        wrote,
+        reason,
+        dischargeFloorPct,
+        chargeCeilingPct,
+        atChargeCeiling: soc >= chargeCeilingPct,
+      };
     } catch (err) {
       this.lastError = err.message;
       console.warn(`[power-plan] tick failed: ${err.message}`);
