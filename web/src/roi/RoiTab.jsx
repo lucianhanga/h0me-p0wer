@@ -13,11 +13,15 @@ const fmtDate = (iso) =>
   });
 
 // ROI tab: what the setup cost (snapshotted BOM), what it has saved so far
-// (measured, DB only), and when the savings cross the investment.
+// (measured, DB only), and when the savings cross the investment. All
+// forward-looking numbers come from the persisted baseline (set in stone,
+// recomputed only via the ↻ button) — the measured average is shown only as
+// a comparison.
 export default function RoiTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     const load = () => {
@@ -35,6 +39,26 @@ export default function RoiTab() {
     return () => clearInterval(timer);
   }, []);
 
+  const recomputeBaseline = () => {
+    if (
+      !confirm(
+        "Recompute the savings baseline? This replaces the fixed basis for payback and all projections (one AI call).",
+      )
+    ) {
+      return;
+    }
+    setRefreshing(true);
+    fetch("/api/roi/baseline/refresh", { method: "POST" })
+      .then((r) => r.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(res.error);
+        setData(res.data);
+        setUpdatedAt(new Date());
+      })
+      .catch((e) => alert(`Baseline recompute failed: ${e.message ?? e}`))
+      .finally(() => setRefreshing(false));
+  };
+
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
 
@@ -44,6 +68,7 @@ export default function RoiTab() {
         Math.round((new Date(`${data.paybackDate}T12:00:00`).getTime() - Date.now()) / (30.44 * DAY_MS)),
       )
     : null;
+  const baseline = data.baseline;
 
   return (
     <div>
@@ -58,20 +83,39 @@ export default function RoiTab() {
           </div>
         </div>
         <div className="tile">
-          <div className="tile-title">Avg per day</div>
-          <div className="tile-main">{fmtEur(data.avgDailySavingsEur)}</div>
-          <div className="tile-sub">measured average</div>
+          <div className="tile-title roi-baseline-head">
+            Baseline
+            <button
+              className="roi-refresh-btn"
+              onClick={recomputeBaseline}
+              disabled={refreshing}
+              title="Recompute the baseline (AI estimate) — replaces the fixed ROI basis"
+            >
+              {refreshing ? "…" : "↻"}
+            </button>
+          </div>
+          <div className="tile-main">
+            {fmtEur(baseline.avgDailySavingsEur)}
+            <span className="roi-perday">/day</span>
+          </div>
+          <div className="tile-sub">
+            set {fmtDate(baseline.createdAt.slice(0, 10))} ·{" "}
+            {baseline.source === "ai" ? "AI estimate" : "PVGIS estimate"}
+          </div>
+          <div className="tile-sub muted">
+            measured {fmtEur(data.measuredAvgDailySavingsEur)}/day over {data.measuredDays} days
+          </div>
         </div>
         <div className="tile">
           <div className="tile-title">Projected per year</div>
           <div className="tile-main">{fmtEur(data.projectedAnnualSavingsEur)}</div>
-          <div className="tile-sub">avg × 365</div>
+          <div className="tile-sub">baseline annual</div>
         </div>
         <div className="tile">
           <div className="tile-title">Payback</div>
           <div className="tile-main">{data.paybackDate ? fmtDate(data.paybackDate) : "—"}</div>
           <div className="tile-sub">
-            {monthsToPayback != null ? `in ${monthsToPayback} months` : "no savings measured yet"}
+            {monthsToPayback != null ? `in ${monthsToPayback} months` : "not within 25 years"}
           </div>
         </div>
       </div>
@@ -123,7 +167,7 @@ export default function RoiTab() {
         </p>
       </div>
 
-      <h4>Projection (at the measured daily average)</h4>
+      <h4>Projection (baseline estimate)</h4>
       <div className="tiles roi-proj">
         {data.projections.map((p) => (
           <div className="tile" key={p.years}>
@@ -137,17 +181,23 @@ export default function RoiTab() {
       </div>
 
       <p className="muted">
-        Assumptions: constant tariff €{data.tariffEurPerKwh}/kWh, no panel degradation, savings =
-        avoided grid import (PV direct-to-home + battery cells discharge), projection = measured
-        daily average over {data.measuredDays} days. Today is excluded (unfinished).
+        Assumptions: {baseline.source === "ai" ? "AI" : "PVGIS"} baseline set{" "}
+        {fmtDate(baseline.createdAt.slice(0, 10))} — {fmtEur(baseline.avgDailySavingsEur)}/day (
+        {Math.round(baseline.annualPvKwh)} kWh/yr at {Math.round(baseline.selfConsumptionRatio * 100)}%
+        self-consumption), seasonally shaped per month, constant tariff €
+        {data.tariffEurPerKwh}/kWh, no panel degradation. {baseline.reasoning} Measured comparison:
+        {" "}{fmtEur(data.measuredAvgDailySavingsEur)}/day over {data.measuredDays} days (today
+        excluded, unfinished). Savings = avoided grid import (PV direct-to-home + battery cells
+        discharge).
       </p>
     </div>
   );
 }
 
-// Cumulative savings vs. investment: solid line = measured days, dashed =
-// projection at the measured daily average; orange dashed = total invested;
-// marker = break-even (payback date).
+// Cumulative savings vs. investment: solid green = measured actuals, dashed
+// blue = seasonally-shaped forecast from the persisted baseline; orange
+// dashed = total invested; marker = break-even where the FORECAST crosses
+// the invested line.
 function AmortizationChart({ data }) {
   const ref = useRef(null);
 
@@ -156,29 +206,22 @@ function AmortizationChart({ data }) {
       new Date(`${s.date}T00:00:00`).getTime(),
       s.cumulativeEur,
     ]);
-    const last = measured.length
-      ? measured[measured.length - 1]
-      : [new Date(`${data.installDate}T00:00:00`).getTime(), 0];
-
-    // Projection horizon: a bit past payback, else one year out.
-    let endMs;
-    if (data.paybackDate) {
-      const paybackMs = new Date(`${data.paybackDate}T00:00:00`).getTime();
-      endMs = paybackMs + Math.max(30 * DAY_MS, 0.1 * (paybackMs - last[0]));
-    } else {
-      endMs = last[0] + 365 * DAY_MS;
-    }
-    const projection = [last];
-    for (let t = last[0] + DAY_MS, v = last[1]; t <= endMs; t += DAY_MS) {
-      v = Math.round((v + data.avgDailySavingsEur) * 100) / 100;
-      projection.push([t, v]);
-    }
+    const forecast = (data.forecastSeries ?? []).map((f) => [
+      new Date(`${f.date}T00:00:00`).getTime(),
+      f.cumulativeEur,
+    ]);
 
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption({
       animation: false,
       backgroundColor: "transparent",
       grid: { top: 28, right: 16, bottom: 8, left: 8, containLabel: true },
+      legend: {
+        top: 0,
+        textStyle: { color: "#8b98a5", fontSize: 10 },
+        itemWidth: 14,
+        itemHeight: 8,
+      },
       tooltip: {
         trigger: "axis",
         backgroundColor: "#1a2128",
@@ -207,12 +250,12 @@ function AmortizationChart({ data }) {
           data: measured,
         },
         {
-          name: "Projection",
+          name: "Forecast (baseline)",
           type: "line",
           showSymbol: false,
-          lineStyle: { color: "#5fce80", width: 2, type: "dashed", opacity: 0.7 },
-          itemStyle: { color: "#5fce80" },
-          data: projection,
+          lineStyle: { color: "#58a6ff", width: 2, type: "dashed", opacity: 0.8 },
+          itemStyle: { color: "#58a6ff" },
+          data: forecast,
           markLine: {
             silent: true,
             symbol: "none",
