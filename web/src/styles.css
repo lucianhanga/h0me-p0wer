@@ -868,30 +868,72 @@ pre {
   margin: 0.5rem 0;
 }
 
-.roi-bom-row {
+/* BOM card header: title left, PDF download button right. */
+.roi-bom-head {
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.5rem 0.75rem;
-  padding: 0.4rem 0;
-  border-bottom: 1px solid #2a3238;
-  font-size: 0.9rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 1rem 0 0.4rem;
 }
 
+.roi-bom-head h4 {
+  margin: 0;
+}
+
+/* Plain <a> styled like the app's buttons. */
+.roi-pdf-btn {
+  background: #1a2128;
+  color: #e8ecef;
+  border: 1px solid #2a3238;
+  border-radius: 6px;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.8rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.roi-bom-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid #2a3238;
+  font-size: 0.85rem;
+}
+
+.roi-bom-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  object-fit: cover;
+  flex: 0 0 auto;
+  background: #2a3238;
+}
+
+/* One line per item: name shrinks with ellipsis, numbers stay right-aligned. */
 .roi-bom-name {
-  flex: 1 1 220px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roi-bom-nums {
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .roi-bom-qty {
   color: #8b98a5;
-  font-size: 0.8rem;
-  white-space: nowrap;
+  font-size: 0.75rem;
+  margin-right: 0.5rem;
 }
 
 .roi-bom-price {
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
 }
 
 .roi-total-row {
