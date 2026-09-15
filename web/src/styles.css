@@ -226,6 +226,20 @@ section {
   margin: 1rem 0;
 }
 
+/* Equal card heights across each row (the Solar PV sublabel can wrap to
+   two lines, making its tile taller than the Battery tile on phones):
+   stretch the FlipTile chain with the grid row. */
+.cards .flip-tile,
+.cards .flip-inner,
+.cards .flip-front {
+  height: 100%;
+}
+
+.cards .card {
+  height: 100%;
+  box-sizing: border-box;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
