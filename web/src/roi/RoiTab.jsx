@@ -90,7 +90,7 @@ export default function RoiTab() {
         </div>
         {data.bom.map((r) => (
           <a
-            className="roi-bom-row"
+            className={`roi-bom-row${r.excluded ? " excluded" : ""}`}
             key={r.asin}
             href={r.url}
             target="_blank"
@@ -101,6 +101,7 @@ export default function RoiTab() {
             <span className="roi-bom-name">
               {r.estimated ? <span className="roi-est">~</span> : null}
               {r.name}
+              {r.excluded ? <span className="roi-excl-tag">not counted</span> : null}
             </span>
             <span className="roi-bom-nums">
               <span className="roi-bom-qty">

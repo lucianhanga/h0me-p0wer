@@ -71,8 +71,13 @@ export function registerRoiRoute(app, deps = {}) {
 
   // Printable BOM (no-dep hand-rolled PDF, images embedded from roi-images/).
   app.get("/api/roi/bom.pdf", (req, res) => {
-    const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
-    const totalInvestedEur = r2(bom.reduce((a, r) => a + r.lineTotalEur, 0));
+    const bom = loadBom().map((r) => ({
+      ...r,
+      name: r.excluded ? `${r.name} (not counted)` : r.name,
+      lineTotalEur: r2(r.qty * r.unitPriceEur),
+    }));
+    // Rows flagged `excluded` stay listed but don't count toward the total.
+    const totalInvestedEur = r2(bom.reduce((a, r) => a + (r.excluded ? 0 : r.lineTotalEur), 0));
     const snapshotDate = bom.find((r) => r.priceSnapshotDate)?.priceSnapshotDate ?? "n/a";
     const pdf = buildBomPdf({ bom, totalInvestedEur, snapshotDate });
     res.setHeader("Content-Type", "application/pdf");
@@ -83,7 +88,8 @@ export function registerRoiRoute(app, deps = {}) {
 
   app.get("/api/roi", (req, res) => {
     const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
-    const totalInvestedEur = r2(bom.reduce((a, r) => a + r.lineTotalEur, 0));
+    // Rows flagged `excluded` stay listed but don't count toward the total.
+    const totalInvestedEur = r2(bom.reduce((a, r) => a + (r.excluded ? 0 : r.lineTotalEur), 0));
     const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0.3);
 
     const meterSn = deps.getMeterSn?.() ?? getAnyDeviceSn();

@@ -911,6 +911,26 @@ pre {
   color: inherit;
 }
 
+/* Excluded rows (e.g. the metal cover): listed but not part of the
+   investment total. */
+.roi-bom-row.excluded {
+  opacity: 0.45;
+}
+
+.roi-bom-row.excluded .roi-bom-price {
+  text-decoration: line-through;
+}
+
+.roi-excl-tag {
+  color: #8b98a5;
+  font-size: 0.7rem;
+  border: 1px solid #2a3238;
+  border-radius: 4px;
+  padding: 0 0.3rem;
+  margin-left: 0.4rem;
+  white-space: nowrap;
+}
+
 .roi-bom-thumb {
   width: 28px;
   height: 28px;
