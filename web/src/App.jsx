@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
+import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
 
@@ -10,6 +11,7 @@ const PAGES = [
   { key: "live", label: "Live" },
   { key: "graph", label: "Graph" },
   { key: "dashboard", label: "Dashboard" },
+  { key: "roi", label: "ROI" },
 ];
 
 export default function App() {
@@ -90,6 +92,8 @@ export default function App() {
           <LiveTab />
         ) : page === "graph" ? (
           <GraphTab />
+        ) : page === "roi" ? (
+          <RoiTab />
         ) : (
           <Dashboard />
         )}

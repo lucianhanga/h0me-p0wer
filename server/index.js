@@ -13,6 +13,7 @@ import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
+import { registerRoiRoute } from "./roi.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
 import {
@@ -1065,6 +1066,12 @@ registerWelcomeRoute(app, {
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
   getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
+});
+
+// ROI tab: payback of the BOM investment from measured savings, DB only.
+registerRoiRoute(app, {
+  getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getBatterySn: () => latestBattery?.sn ?? getBatterySn(poller.snapshot?.meter?.sn ?? getAnyDeviceSn()),
 });
 app.get(
   "/api/cloud/energy",
