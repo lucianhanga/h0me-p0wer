@@ -60,7 +60,8 @@ const GRAPHS = [
     title: "Battery",
     legend: ["Discharging", "Charging"],
     series: [
-      { key: "battOut", name: "Discharging", color: "#c084fc", width: 1, area: true },
+      // Cells-net like G1: only one side can be nonzero (never both).
+      { key: "battCells", name: "Discharging", color: "#c084fc", width: 1, area: true },
       { key: "battChgNeg", name: "Charging", color: "#8a63d2", width: 1, area: true },
     ],
   },
