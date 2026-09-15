@@ -233,6 +233,24 @@ export function getBatteryHistory(sinceMs) {
   return selectBatterySince.all(sinceMs);
 }
 
+// Per-string PV energy for a local day (kWh), trapezoid over the 10 s
+// battery_snapshots — the cloud exposes per-string POWER (pv1_w/pv2_w) only,
+// no per-string kWh, so we integrate it ourselves.
+export function getPvStringKwhForDay(dateStr) {
+  const start = new Date(`${dateStr}T00:00:00`).getTime();
+  const rows = selectBatterySince.all(start).filter((r) => r.ts < start + 86400000);
+  let pv1 = 0;
+  let pv2 = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
+    if (dt > 0.5) continue; // skip gaps > 30 min (same rule as pvKwhForDay)
+    pv1 += ((((rows[i - 1].pv1_w ?? 0) + (rows[i].pv1_w ?? 0)) / 2) * dt) / 1000;
+    pv2 += ((((rows[i - 1].pv2_w ?? 0) + (rows[i].pv2_w ?? 0)) / 2) * dt) / 1000;
+  }
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return { pv1Kwh: r2(pv1), pv2Kwh: r2(pv2) };
+}
+
 export function pruneBattery() {
   db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
 }

@@ -251,8 +251,26 @@ EPIPE noise on every client disconnect).
   the interval-end timestamp), and today's day-trend syncs every 2 min
   instead of 15. Grid card shows "· cloud".
 
-## Power-plan controller (2026-09-15)
+## Per-string PV kWh + consistent updated stamp (2026-09-15)
 
+- The cloud exposes per-string PV **power** only (`solar_power_1/2`,
+  persisted as `pv1_w/pv2_w` in battery_snapshots) — no per-string kWh.
+  `getPvStringKwhForDay(dateStr)` (db.js) integrates it (trapezoid, gaps
+  > 30 min skipped); `/api/flow` returns `pv.pv1KwhToday/pv2KwhToday`
+  (30 s memo — the route is polled every 5 s per client) and live
+  `battery.pv1W/pv2W`. Live → Details PV1/PV2 tiles show both.
+  (Aside: scen_info `statistics` type-1 "kWh" does NOT match the locally
+  integrated day total — its window is unclear; trust the integration.)
+- **`UpdatedStamp` (`web/src/components/UpdatedStamp.jsx`)** is the single
+  "updated HH:MM:SS · sources" line, rendered as the FIRST element of every
+  tab (Live/Graph/Dashboard/Welcome) so it always sits right under the nav.
+  Don't add per-page timestamp lines elsewhere — extend the stamp's suffix.
+- Power Plan UI: collapsible (`.details-toggle`, collapsed by default,
+  "active" badge in the header). The disable/restore button was removed
+  from the UI on purpose — `POST /api/power-plan/disable` (restores the
+  saved Anker schedule) remains API-only.
+
+## Power-plan controller (2026-09-15)
 - `server/power-plan.js` (`PowerPlanController`) drives the Solarbank 2
   output preset itself instead of the static Anker-app schedule. Goal:
   kill the charge/discharge jojo around a fixed preset and maximize PV

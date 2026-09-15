@@ -208,22 +208,11 @@ h3 {
   font-weight: 400;
 }
 
-/* Power Plan card (Live tab) */
-.power-plan-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.power-plan-head h3 {
-  margin-bottom: 0;
-}
-
-.power-plan-head button {
-  min-height: 36px;
-  font-size: 0.85rem;
+/* Power Plan section (Live tab): collapsible, uses .details-toggle styles;
+   the "active" badge sits inside the toggle line. */
+.power-plan .badge {
+  font-size: 0.7rem;
+  vertical-align: middle;
 }
 
 section {
@@ -619,16 +608,12 @@ pre {
   font-size: 0.8rem;
 }
 
-.dash-updated {
+/* Consistent "updated …" line — first element of every tab, same place
+   everywhere (right under the nav). */
+.updated-stamp {
   text-align: right;
   font-size: 0.75rem;
-  margin-top: -0.5rem;
-}
-
-/* Single page-level freshness line (Live tab Power Flow). */
-.flow-meta {
-  font-size: 0.75rem;
-  margin: -0.2rem 0 0.4rem;
+  margin: -0.3rem 0 0.4rem;
 }
 
 /* Flippable tile (generic FlipTile): front = the tile content, back = empty

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import SpeakButton from "../components/SpeakButton.jsx";
+import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -85,6 +86,9 @@ export default function WelcomeTab() {
   const gt = data.groundTruth ?? {};
   return (
     <div className="welcome">
+      <UpdatedStamp at={data.generatedAt}>
+        {`${data.aiPowered ? "AI briefing" : "offline estimate"}${data.stale ? " · cached" : ""}`}
+      </UpdatedStamp>
       <FlipTile>
         <section className="card wx-hero">
           <SpeakButton id="hero" className="speak-corner" text={data.greeting} />
