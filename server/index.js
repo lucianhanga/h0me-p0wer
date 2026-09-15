@@ -31,6 +31,7 @@ import {
   saveBatterySnapshot,
   getLatestBattery,
   getBatteryHistory,
+  getPvStringKwhForDay,
   pruneBattery,
   savePvDaily,
   getPvDaily,
@@ -179,6 +180,17 @@ function getGridLive() {
   return { power: null, ts: null, source: "meter" };
 }
 
+// Per-string PV kWh for today, memoized for 30 s — /api/flow is polled every
+// 5 s per client and the trapezoid scans the whole day's battery_snapshots.
+let pvStringKwhCache = { date: null, at: 0, result: { pv1Kwh: 0, pv2Kwh: 0 } };
+function getPvStringKwhToday() {
+  const today = localDate();
+  if (pvStringKwhCache.date !== today || Date.now() - pvStringKwhCache.at > 30000) {
+    pvStringKwhCache = { date: today, at: Date.now(), result: getPvStringKwhForDay(today) };
+  }
+  return pvStringKwhCache.result;
+}
+
 app.get("/api/flow", (req, res) => {
   const gl = getGridLive();
   const grid = gl.power;
@@ -216,11 +228,23 @@ app.get("/api/flow", (req, res) => {
             // — the Home→Battery arc, normally 0.
             gridCharge: Math.max(0, chargeW - pvToBattery),
             name: b.name ?? "Solarbank",
+            pv1W: b.pv1W ?? 0,
+            pv2W: b.pv2W ?? 0,
             ts: b.ts ?? null,
             source: "online", // battery data is always cloud (REST/MQTT)
           }
         : null,
-      pv: { production: pvW, toBattery: pvToBattery, toHome: pvToHome, ts: b?.ts ?? null, source: b ? "online" : null },
+      pv: {
+        production: pvW,
+        toBattery: pvToBattery,
+        toHome: pvToHome,
+        // Per-string energy today (kWh), integrated locally from the 10 s
+        // per-string power samples — the cloud has no per-string kWh.
+        pv1KwhToday: getPvStringKwhToday().pv1Kwh,
+        pv2KwhToday: getPvStringKwhToday().pv2Kwh,
+        ts: b?.ts ?? null,
+        source: b ? "online" : null,
+      },
       home: {
         consumption:
           // Cloud-live: the app's own Home Load (grid_to_home + to_home).

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
+import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Polls the backend every 5 s (flow/meter) and
@@ -53,6 +54,11 @@ export default function LiveTab() {
 
   return (
     <div>
+      <UpdatedStamp at={flow?.obtainedAt ?? flow?.ts}>
+        {flow
+          ? `grid: ${flow.grid.source === "meter" ? "meter direct" : "online"} · battery: online`
+          : ""}
+      </UpdatedStamp>
       <p>
         <Badge ok={cloudFresh} warn={!health?.cloud?.enabled}>
           meter online
@@ -62,12 +68,6 @@ export default function LiveTab() {
       </p>
 
       <h3>Power Flow</h3>
-      {flow && (
-        <p className="muted flow-meta">
-          updated {new Date(flow.obtainedAt ?? flow.ts).toLocaleTimeString()} · grid:{" "}
-          {flow.grid.source === "meter" ? "meter direct" : "online"} · battery: online
-        </p>
-      )}
       <FlowDiagram flow={flow} />
 
       <div className="cards">
@@ -170,12 +170,18 @@ export default function LiveTab() {
               <div className="phase-card">
                 <span className="phase-name">PV1</span>
                 <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
+                <span className="phase-detail">
+                  {pv?.pv1KwhToday != null ? `${pv.pv1KwhToday} kWh today` : ""}
+                </span>
               </div>
             </FlipTile>
             <FlipTile>
               <div className="phase-card">
                 <span className="phase-name">PV2</span>
                 <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
+                <span className="phase-detail">
+                  {pv?.pv2KwhToday != null ? `${pv.pv2KwhToday} kWh today` : ""}
+                </span>
               </div>
             </FlipTile>
           </div>

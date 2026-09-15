@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
+import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -31,6 +32,7 @@ export default function Dashboard() {
 
   return (
     <div>
+      <UpdatedStamp at={updatedAt} />
       <div className="src-grid">
         <SourceCard
           type="day"
@@ -57,11 +59,6 @@ export default function Dashboard() {
           formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
         />
       </div>
-      {updatedAt && (
-        <p className="muted dash-updated">
-          updated {updatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-        </p>
-      )}
     </div>
   );
 }

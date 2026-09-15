@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import echarts from "../echarts.js";
+import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -92,6 +93,7 @@ export default function GraphTab() {
   // Per-graph UI state: stats line + which span preset is highlighted.
   const [statsArr, setStatsArr] = useState(GRAPHS.map(() => null));
   const [activeArr, setActiveArr] = useState(GRAPHS.map(() => 24 * 3600 * 1000));
+  const [lastLiveAt, setLastLiveAt] = useState(null); // last successful live tick
 
   useEffect(() => {
     // Height comes from CSS (.chart-box-sm, incl. landscape rule) so rotation
@@ -307,6 +309,7 @@ export default function GraphTab() {
           const payload = await fetchTimeseries(
             `from=${lastT + 1}&to=${Date.now()}&bucket=${rowsRef.bucketMs}`,
           );
+          setLastLiveAt(Date.now());
           if (payload && payload.data.length) {
             const cutoff = Date.now() - width * 1.5;
             const byT = new Map();
@@ -356,6 +359,7 @@ export default function GraphTab() {
 
   return (
     <div>
+      <UpdatedStamp at={lastLiveAt} />
       {GRAPHS.map((def, i) => (
         <section key={def.title}>
           <h4>{def.title}</h4>
