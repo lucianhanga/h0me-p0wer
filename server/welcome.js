@@ -133,7 +133,17 @@ export function registerWelcomeRoute(app, deps) {
     const fresh = freshCache();
     if (fresh) return res.json({ ok: true, data: fresh.value });
     const cached = kvGet(CACHE_KEY);
+    if (cached) {
+      // Never make the client wait: serve what we have (flagged stale) and
+      // refresh in the background. The blocking wait for the AI call was the
+      // recurring "Preparing your briefing…" the user reported.
+      refreshIfStale(config).catch((err) =>
+        console.warn(`[welcome] background refresh failed: ${err.message}`),
+      );
+      return res.json({ ok: true, data: { ...cached.value, stale: true } });
+    }
     try {
+      // Cold start (no cache at all): nothing to serve yet — wait once.
       await refreshIfStale(config);
       return res.json({ ok: true, data: kvGet(CACHE_KEY).value });
     } catch (err) {
