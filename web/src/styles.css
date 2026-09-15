@@ -1036,6 +1036,9 @@ pre {
   line-height: 1;
   padding: 0.15rem 0.4rem;
   cursor: pointer;
+  /* Defeat the 44px touch-target rule on phones — this is a tiny inline
+     icon button inside a tile title, not a primary action. */
+  min-height: 0;
 }
 
 .roi-refresh-btn:hover {
