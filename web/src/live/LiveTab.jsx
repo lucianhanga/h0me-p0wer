@@ -97,19 +97,19 @@ export default function LiveTab() {
             <div className="card-label">Battery</div>
             <div className="card-value" style={{ color: "#c084fc" }}>
               {battery
-                ? battery.discharge > 0
-                  ? `${battery.discharge} W`
+                ? (battery.cells ?? 0) > 0
+                  ? `⏏ −${battery.cells} W`
                   : battery.charge > 0
-                    ? `${battery.charge} W`
+                    ? `⚡ +${battery.charge} W`
                     : "idle"
                 : "—"}
             </div>
             <div className="card-label">
               {battery
-                ? battery.discharge > 0
-                  ? `sending to house · ${battery.soc}%`
+                ? (battery.cells ?? 0) > 0
+                  ? `discharging · ${battery.soc}%`
                   : battery.charge > 0
-                    ? `loading · ${battery.soc}%`
+                    ? `charging · ${battery.soc}%`
                     : `idle · ${battery.soc}%`
                 : "offline"}
             </div>
@@ -123,9 +123,11 @@ export default function LiveTab() {
             </div>
             <div className="card-label">
               {pv && pv.production > 0
-                ? battery?.charge > 0
-                  ? "charging the battery"
-                  : "via the battery"
+                ? pv.toHome > 0 && pv.toBattery > 0
+                  ? `${pv.toHome} W house · ${pv.toBattery} W battery`
+                  : pv.toBattery > 0
+                    ? "charging the battery"
+                    : "to the house"
                 : "no production"}
             </div>
           </div>
