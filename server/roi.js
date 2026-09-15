@@ -137,12 +137,18 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const meterSn = deps.getMeterSn?.() ?? getAnyDeviceSn();
   const battSn = deps.getBatterySn?.() ?? getBatterySn(meterSn);
 
-  // installDate = first day with savings data (PV rollup or battery trend).
+  // installDate = first day with savings data (PV rollup or battery trend),
+  // but NEVER before the panels went up: the actual return of THIS
+  // investment starts Sunday 2026-09-13 — earlier battery-only days are not
+  // the PV system's return and drag the measured average down (user
+  // decision 2026-09-15).
+  const PANELS_INSTALL_DATE = "2026-09-13";
   const candidates = [...getPvDailyDates()];
   if (battSn) candidates.push(...getStoredPeriodStarts(battSn, "day"));
-  const installDate = candidates.length
+  const derived = candidates.length
     ? candidates.reduce((a, b) => (a < b ? a : b))
     : FALLBACK_INSTALL_DATE;
+  const installDate = derived > PANELS_INSTALL_DATE ? derived : PANELS_INSTALL_DATE;
 
   const measured = measuredSavings(battSn, installDate, tariff);
   const measuredHint = {

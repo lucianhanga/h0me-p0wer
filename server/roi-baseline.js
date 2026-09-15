@@ -46,7 +46,7 @@ const SYSTEM_PROMPT = `You estimate the EXPECTED yearly electricity savings of a
 Inputs in the JSON context: PV system specs, PVGIS climatology (monthly + yearly kWh for this exact setup, already including 14% system loss), the grid tariff, the household's measured average grid import, the battery, and a short noisy window of measured savings.
 Hard rules:
 - annualPvKwh must NOT exceed the PVGIS yearly figure — that is the climatological ceiling for this setup; stay at or below it (shading, soiling, downtime).
-- selfConsumptionRatio: share of PV energy the household actually uses instead of buying from the grid (direct use + battery discharge). The battery is small (1.6 kWh) relative to daily consumption, so high self-consumption is realistic — but stay inside 0.3–0.95.
+- selfConsumptionRatio: share of PV energy the household actually uses instead of buying from the grid (direct use + battery discharge). This system ENFORCES zero export (0W feed-in on the inverter) and the house baseload always exceeds the 1 kWp production — every produced kWh is consumed on site, so 1.0 is the physically correct value here; only derate (down to 0.9) if you see a structural reason (e.g. battery too small for evening peaks). Stay inside 0.3–1.0.
 - annualSavingsEur must equal annualPvKwh × selfConsumptionRatio × tariffEurPerKwh.
 - monthlyDistribution: 12 shares (January…December) of the ANNUAL SAVINGS, summing to 1. It roughly follows PV production but slightly flatter (winter PV is almost fully self-consumed; summer surplus above consumption+battery is lost).
 - reasoning: 1-2 plain sentences.
@@ -113,7 +113,7 @@ function validateEstimate(est, pvgisYearlyKwh, tariff) {
     throw new Error(`implausible annualPvKwh ${est.annualPvKwh}`);
   }
   if (pvgisYearlyKwh != null) annualPvKwh = Math.min(annualPvKwh, pvgisYearlyKwh);
-  const selfConsumptionRatio = Math.min(0.95, Math.max(0.3, Number(est.selfConsumptionRatio) || 0.75));
+  const selfConsumptionRatio = Math.min(1.0, Math.max(0.3, Number(est.selfConsumptionRatio) || 1.0));
   const dist = (Array.isArray(est.monthlyDistribution) ? est.monthlyDistribution : [])
     .slice(0, 12)
     .map((v) => Math.max(0, Number(v) || 0));
@@ -137,8 +137,9 @@ function validateEstimate(est, pvgisYearlyKwh, tariff) {
   };
 }
 
-// Deterministic estimate without the AI: PVGIS annual yield, 75%
-// self-consumption, monthly shape from the PVGIS monthly averages.
+// Deterministic estimate without the AI: PVGIS annual yield, 100%
+// self-consumption (zero-export setup — everything produced is used on
+// site), monthly shape from the PVGIS monthly averages.
 function fallbackEstimate(config, pvgis) {
   const yearlyKwh = pvgis?.yearlyKwh ?? FALLBACK_YEARLY_KWH_PER_KWP * (config?.pv.peakKwp ?? 1);
   const monthly = pvgis?.monthly?.length === 12
@@ -146,9 +147,9 @@ function fallbackEstimate(config, pvgis) {
     : FALLBACK_MONTHLY_SHARE.map((s) => s * yearlyKwh);
   return {
     annualPvKwh: yearlyKwh,
-    selfConsumptionRatio: 0.75,
+    selfConsumptionRatio: 1.0,
     monthlyDistribution: monthly,
-    reasoning: "PVGIS climatology for this setup, assuming 75% self-consumption (AI unavailable).",
+    reasoning: "PVGIS climatology for this setup, 100% self-consumption (zero-export, AI unavailable).",
   };
 }
 
