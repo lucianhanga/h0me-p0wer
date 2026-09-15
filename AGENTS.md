@@ -270,6 +270,37 @@ EPIPE noise on every client disconnect).
   from the UI on purpose — `POST /api/power-plan/disable` (restores the
   saved Anker schedule) remains API-only.
 
+## Battery tab (2026-09-15)
+
+- 6th tab between Live and Graph (`web/src/battery/BatteryTab.jsx`): animated
+  pure-CSS SOC gauge (fill = SOC, green > 50 / orange 20–50 / red < 20,
+  shimmer sweep while charging/discharging, cascading chevrons) with the
+  configured discharge-lower / charge-upper limits as tick markers ON the
+  gauge, plus two spartan parameter cards. Polls every 10 s.
+- `GET /api/battery/params` (`server/battery-params.js`, wired in index.js
+  next to the other register*Route calls) aggregates:
+  - **live**: latestBattery / getLatestBattery() DB fallback (soc, outputW,
+    chargeW, pvW, pv1/2W, grid channels, gridToBatteryW, storedKwh).
+  - **config**: `get_site_device_param` **param_type "27"** (charge_upper_limit,
+    discharge_lower_limit, backup_reserve(+_switch), soc_calibration_enable)
+    — SLOW-changing, so it's cached **6 h in the kv store** (`battery_config`
+    key) to respect the endpoint's rate limit; `?refresh=1` forces a refetch,
+    stale cache is served when a refresh fails. **param_type "18"** (station
+    settings) is read with it and included only when non-empty. param_data is
+    a JSON STRING (same parse pattern as power-plan.js). NOT yet probed
+    against the real account from this branch — errors surface as
+    `error27`/`error18` fields, never as a route failure.
+  - **features**: raw scen_info `feature_switch` (0w_feed = zero-export,
+    soc_enable, multi_pv, heating, …) + charging_status/err_code/heating_power
+    — `getBatteryInfo()` in anker-cloud.js maps them (featureSwitch,
+    chargingStatus, errCode, heatingPower); the DB fallback lacks them
+    (battery_snapshots has no columns for them) → nulls, UI shows "—".
+  - **constants**: A17C3 datasheet values (1.6 kWh LFP, 800 W max AC,
+    1200 W max PV) hardcoded in battery-params.js.
+- Live scen_info shape verified on the real account (2026-09-15):
+  `charging_status` is a STRING ("0"), `err_code` a number, `heating_power`
+  a string W, `feature_switch` a bool map.
+
 ## Power-plan controller (2026-09-15)
 - `server/power-plan.js` (`PowerPlanController`) drives the Solarbank 2
   output preset itself instead of the static Anker-app schedule. Goal:

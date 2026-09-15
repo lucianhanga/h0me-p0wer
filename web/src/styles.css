@@ -1016,3 +1016,242 @@ pre {
     font-size: 1.25rem;
   }
 }
+
+
+/* --- Battery tab: animated SOC gauge + parameter grid -------------------- */
+
+.batt-gauge-card {
+  margin-bottom: 0.25rem;
+}
+
+/* The wrap is the positioning context for the min/max tick labels that sit
+   just below the gauge. */
+.batt-gauge-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.batt-gauge-body {
+  position: relative;
+  flex: 1;
+  height: 76px;
+  border: 2px solid #2a3238;
+  border-radius: 12px;
+  background: #101418;
+  overflow: hidden;
+}
+
+.batt-gauge-cap {
+  width: 8px;
+  height: 30px;
+  margin-left: 2px;
+  border-radius: 0 4px 4px 0;
+  background: #2a3238;
+  flex: none;
+}
+
+.batt-gauge-fill {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  border-radius: 8px;
+  transition: width 1s ease;
+}
+
+.batt-gauge-fill.lvl-high {
+  background: linear-gradient(180deg, #74da92, #5fce80);
+}
+
+.batt-gauge-fill.lvl-mid {
+  background: linear-gradient(180deg, #f9b468, #f7a44f);
+}
+
+.batt-gauge-fill.lvl-low {
+  background: linear-gradient(180deg, #e67474, #e05c5c);
+}
+
+/* Shimmer band sweeping through the fill while power flows: forward into
+   the battery when charging, reversed when discharging. */
+.batt-gauge-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.22) 50%,
+    transparent 65%
+  );
+  background-size: 250% 100%;
+  opacity: 0;
+}
+
+.batt-gauge-fill.charging::after {
+  opacity: 1;
+  animation: batt-shimmer 1.8s linear infinite;
+}
+
+.batt-gauge-fill.discharging::after {
+  opacity: 1;
+  animation: batt-shimmer 1.8s linear infinite reverse;
+}
+
+@keyframes batt-shimmer {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+/* Configured min-discharge / max-charge limits as markers ON the gauge. */
+.batt-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #c084fc;
+  opacity: 0.85;
+}
+
+.batt-tick-label {
+  position: absolute;
+  top: 100%;
+  transform: translateX(-50%);
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: #c084fc;
+  white-space: nowrap;
+}
+
+.batt-gauge-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+.batt-gauge-pct {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.batt-gauge-kwh {
+  font-size: 0.8rem;
+  color: #c8d0d8;
+}
+
+.batt-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  color: #8b98a5;
+}
+
+.batt-status.charging {
+  color: #5fce80;
+}
+
+.batt-status.discharging {
+  color: #c084fc;
+}
+
+.batt-status-sub {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: #8b98a5;
+}
+
+/* Cascading chevrons next to the charge/discharge status. */
+.batt-chevs {
+  display: inline-flex;
+  gap: 1px;
+  font-size: 0.75rem;
+}
+
+.batt-chevs span {
+  animation: batt-chev 1.2s ease-in-out infinite;
+}
+
+.batt-chevs span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.batt-chevs span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes batt-chev {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batt-gauge-fill::after,
+  .batt-chevs span {
+    animation: none;
+  }
+}
+
+/* Parameter cards: side by side when wide, stacked on phones. */
+.param-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.param-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #2a3238;
+}
+
+.param-row:last-child {
+  border-bottom: 0;
+}
+
+.param-k {
+  color: #8b98a5;
+}
+
+.param-v {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.param-raw {
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: #8b98a5;
+  word-break: break-all;
+}
+
+@media (max-width: 600px) {
+  .batt-gauge-body {
+    height: 60px;
+  }
+
+  .batt-gauge-pct {
+    font-size: 1.3rem;
+  }
+}

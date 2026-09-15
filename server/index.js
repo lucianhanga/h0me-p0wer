@@ -14,6 +14,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
+import { registerBatteryParamsRoute } from "./battery-params.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
 import {
@@ -1136,6 +1137,13 @@ registerWelcomeRoute(app, {
 registerRoiRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
   getBatterySn: () => latestBattery?.sn ?? getBatterySn(poller.snapshot?.meter?.sn ?? getAnyDeviceSn()),
+});
+
+// Battery tab: all battery parameters in one route (see battery-params.js).
+// The deps closure reads latestBattery lazily at request time.
+registerBatteryParamsRoute(app, {
+  anker,
+  getLiveBattery: () => latestBattery ?? getLatestBattery(),
 });
 app.get(
   "/api/cloud/energy",

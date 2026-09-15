@@ -278,6 +278,13 @@ export class AnkerClient {
       gridToHomeW: num(gridInfo.grid_to_home_power),
       pvToGridW: num(gridInfo.photovoltaic_to_grid_power),
       homeLoadW: num(scene.home_load_power),
+      // Status/feature fields (Battery tab): raw feature_switch map
+      // (0w_feed = zero-export, soc_enable, multi_pv, heating, …),
+      // charging_status string, err_code, heating power.
+      featureSwitch: sb.feature_switch ?? null,
+      chargingStatus: sb.charging_status ?? null,
+      errCode: sb.err_code ?? null,
+      heatingPower: num(sb.heating_power),
       siteId: this.siteId,
     };
   }
