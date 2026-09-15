@@ -251,6 +251,40 @@ EPIPE noise on every client disconnect).
   the interval-end timestamp), and today's day-trend syncs every 2 min
   instead of 15. Grid card shows "· cloud".
 
+## Power-plan controller (2026-09-15)
+
+- `server/power-plan.js` (`PowerPlanController`) drives the Solarbank 2
+  output preset itself instead of the static Anker-app schedule. Goal:
+  kill the charge/discharge jojo around a fixed preset and maximize PV
+  into the house — never export.
+- **Write path (spike-verified)**:
+  `POST power_service/v1/site/get_site_device_param` /
+  `set_site_device_param` with `param_type: "6"` (SB2 schedule), `cmd: 17`
+  on write; `param_data` is a JSON **string**. Direct per-device output
+  control (MQTT/10004-class endpoints) is blocked for third-party — the
+  weekly-schedule preset is the only working control surface, and it is
+  enough because the device follows it within ~1 min.
+- **Preset semantics (verified live)**: preset = target AC output to home.
+  PV ≤ preset → all PV to home, cells top up the difference; PV > preset →
+  preset to home, surplus charges the battery. Example: preset 600, PV 600
+  → out 600, charge 0, grid covers the rest.
+- **Algorithm**: PV=0 → `min(800, houseDemand)`; PV>0 →
+  `min(floor(PV/100)*100, houseDemand)`; SOC ≥ 99 → `min(PV, houseDemand)`;
+  clamp to [0, max_load], floor to step (10 W). Inputs from `scen_info`
+  (`pvW`, `homeLoadW`, `soc`) on the 10 s battery sync.
+- **Write discipline**: only on ≥ 50 W change, ≥ 30 s between writes,
+  5-min refresh for smaller drifts (a few writes/hour — the endpoint rate
+  limit is never approached). Always written as TWO half-day slots (Anker
+  single-slot 0 W export bug); `mode_type: 3`, week [0..6], other fields
+  preserved from the last read.
+- Enable saves the device's current schedule verbatim
+  (`.power-plan-state.json` next to the DB, mode 600, gitignored);
+  **disable restores it byte-for-byte** (verified: back to 200 W flat).
+  Enabled state survives restarts.
+- Routes: `GET/POST /api/power-plan[/enable|/disable]`; UI:
+  `web/src/live/PowerPlanCard.jsx` on the Live tab (status, target/preset,
+  decision inputs, disable-and-restore button).
+
 ## Battery realtime via MQTT (2026-09-10)
 
 - Same channel as the Anker app: `POST app/devicemanage/get_user_mqtt_info`

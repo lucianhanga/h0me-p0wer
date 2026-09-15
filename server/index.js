@@ -14,6 +14,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { pvKwhForDay } from "./welcome-ai.js";
+import { PowerPlanController } from "./power-plan.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -1344,6 +1345,37 @@ setInterval(async () => {
     console.warn(`[cloud-sync] meter-down today refresh failed: ${err.message}`);
   }
 }, 2 * 60 * 1000).unref();
+
+// Power-plan controller: drives the Solarbank output preset from our own
+// algorithm instead of the static Anker-app schedule (see power-plan.js).
+// Tick on every battery sync (10 s cadence); the controller itself decides
+// whether a rewrite is warranted.
+const powerPlan = new PowerPlanController(anker);
+
+app.get("/api/power-plan", (req, res) => {
+  res.json(powerPlan.getState());
+});
+app.post("/api/power-plan/enable", async (req, res) => {
+  try {
+    if (!anker.configured) throw new Error("cloud not configured");
+    await powerPlan.enable();
+    res.json(powerPlan.getState());
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+app.post("/api/power-plan/disable", async (req, res) => {
+  try {
+    await powerPlan.disable();
+    res.json(powerPlan.getState());
+  } catch (err) {
+    res.status(502).json({ error: err.message });
+  }
+});
+
+setInterval(() => {
+  powerPlan.tick(latestBattery);
+}, 10 * 1000).unref();
 
 poller.start();
 

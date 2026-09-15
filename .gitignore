@@ -3,3 +3,4 @@ dist/
 .env
 server/data.db
 server/.token-cache.json
+server/.power-plan-state.json
