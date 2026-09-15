@@ -428,6 +428,26 @@ th {
   flex-wrap: wrap;
 }
 
+/* Phones: compact span buttons so 1h–Reset fit on ONE line; the avg/res
+   stats text wraps to its own line below instead of squeezing the row. */
+@media (max-width: 600px) {
+  .controls {
+    gap: 0.3rem;
+  }
+
+  .controls button {
+    min-height: 28px;
+    padding: 0.2rem 0.42rem;
+    font-size: 0.78rem;
+  }
+
+  .controls .muted {
+    flex-basis: 100%;
+    margin-left: 0 !important;
+    font-size: 0.72rem;
+  }
+}
+
 /* Active span preset on the graph (1h/6h/24h/7d/30d) — same accent as the
    active tab so the current window is visible at a glance. */
 .controls button.span-active {
@@ -997,6 +1017,40 @@ pre {
   color: #f7a44f;
   font-weight: 600;
   margin-right: 0.15rem;
+}
+
+/* Baseline tile: title + small recompute button on one row. */
+.roi-baseline-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.roi-refresh-btn {
+  background: none;
+  border: 1px solid #2a3238;
+  border-radius: 5px;
+  color: #8b98a5;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.15rem 0.4rem;
+  cursor: pointer;
+}
+
+.roi-refresh-btn:hover {
+  color: #e8ecef;
+}
+
+.roi-refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.roi-perday {
+  font-size: 0.85rem;
+  color: #8b98a5;
+  font-weight: 400;
 }
 
 .roi-pos {
