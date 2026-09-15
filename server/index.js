@@ -831,6 +831,10 @@ app.get("/api/stats/overview", (req, res) => {
   const todayPvBattKwh = r2(pvToBattKwh);
   const pvDayKwh = (dateStr) =>
     dateStr === todayDs ? r2(pvToHomeKwh) : (getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0);
+  // Total PV production (to-home + to-battery, i.e. everything the panels
+  // made) — distinct from pvDayKwh, which is PV-direct-to-home only.
+  const pvProducedDayKwh = (dateStr) =>
+    dateStr === todayDs ? r2(pvKwh) : (getPvDaily(dateStr, dateStr)[0]?.produced ?? 0);
   // Today's cells override in the per-day rows the sums/bars are built from.
   for (const r of monthRows) if (r.label === todayDs) r.disKwh = todayCellsKwh;
   const battYear = (() => {
@@ -850,6 +854,9 @@ app.get("/api/stats/overview", (req, res) => {
       // pass-through, so subtract it or PV energy counts twice.
       battKwh: todayCellsKwh,
       pvKwh: r2(pvToHomeKwh),
+      // Total PV production today (to-home + to-battery) — informational,
+      // not part of the home-total sum (that's pvKwh + battInKwh already).
+      pvProducedKwh: r2(pvKwh),
       // "Loaded into the battery" (from PV) — informational, no € attached.
       battInKwh: todayPvBattKwh,
     },
@@ -857,11 +864,13 @@ app.get("/api/stats/overview", (req, res) => {
       gridKwh: r2(weekImport),
       battKwh: r2(weekRows.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
       pvKwh: r2(weekRows.reduce((a, r) => a + pvDayKwh(r.label), 0)),
+      pvProducedKwh: r2(weekRows.reduce((a, r) => a + pvProducedDayKwh(r.label), 0)),
     },
     month: {
       gridKwh: r2(monthImport),
       battKwh: r2(monthRowsCur.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
       pvKwh: r2(monthRowsCur.reduce((a, r) => a + pvDayKwh(r.label), 0)),
+      pvProducedKwh: r2(monthRowsCur.reduce((a, r) => a + pvProducedDayKwh(r.label), 0)),
     },
     year: {
       gridKwh: r2(yearImport),
@@ -869,6 +878,10 @@ app.get("/api/stats/overview", (req, res) => {
       pvKwh: r2(
         pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, todayDs).toHome +
           r2(pvToHomeKwh),
+      ),
+      pvProducedKwh: r2(
+        pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, todayDs).produced +
+          r2(pvKwh),
       ),
     },
   };
@@ -886,15 +899,23 @@ app.get("/api/stats/overview", (req, res) => {
   }
 
   // Stacked-bar data for the tiles' flip sides: per-bucket kWh split by
-  // source (grid / battery-cells / PV-to-home). Today = 30-min buckets from
-  // the profile; week/month = per day (cloud month rows + battery day-trends
-  // + pv_daily); year = per month.
-  byPeriod.today.bars = profile.map((p) => ({
-    label: p.t,
-    grid: r2((Math.max(p.power, 0) * 0.5) / 1000),
-    batt: r2((Math.max(p.cells ?? 0, 0) * 0.5) / 1000),
-    pv: r2((Math.max(p.pvHome ?? 0, 0) * 0.5) / 1000),
-  }));
+  // source (grid / battery-cells / PV-to-home). Today = hourly (profile is
+  // 30-min, summed in pairs — half-hourly bars were too dense/cluttered on
+  // the flip side); week/month = per day (cloud month rows + battery
+  // day-trends + pv_daily); year = per month.
+  const HOUR_MS = 3600 * 1000;
+  const hourlyToday = new Map();
+  for (const p of profile) {
+    const ht = Math.floor(p.t / HOUR_MS) * HOUR_MS;
+    const cur = hourlyToday.get(ht) ?? { label: ht, grid: 0, batt: 0, pv: 0 };
+    cur.grid += (Math.max(p.power, 0) * 0.5) / 1000;
+    cur.batt += (Math.max(p.cells ?? 0, 0) * 0.5) / 1000;
+    cur.pv += (Math.max(p.pvHome ?? 0, 0) * 0.5) / 1000;
+    hourlyToday.set(ht, cur);
+  }
+  byPeriod.today.bars = [...hourlyToday.values()]
+    .sort((a, b) => a.label - b.label)
+    .map((h) => ({ label: h.label, grid: r2(h.grid), batt: r2(h.batt), pv: r2(h.pv) }));
   const dayBars = (rows) =>
     rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: pvDayKwh(r.label) }));
   byPeriod.week.bars = dayBars(weekRows);
@@ -969,6 +990,10 @@ app.get("/api/stats/period", (req, res) => {
   function pvKwhDay(dateStr) {
     return getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0;
   }
+  // Total PV production (to-home + to-battery) for one finished date.
+  function pvProducedDay(dateStr) {
+    return getPvDaily(dateStr, dateStr)[0]?.produced ?? 0;
+  }
   // Grid import kWh + per-interval bars for one date (meter cloud day-trend).
   function dayGrid(dateStr) {
     let imp = 0;
@@ -1008,6 +1033,7 @@ app.get("/api/stats/period", (req, res) => {
   let gridKwh = 0;
   let battKwhSum = 0;
   let pvKwhSum = 0;
+  let pvProducedKwhSum = 0;
   let bars = [];
   let periodStart = null; // yyyy-MM-dd of the period's first day (for hasEarlier)
 
@@ -1021,6 +1047,7 @@ app.get("/api/stats/period", (req, res) => {
     bars = g.bars;
     battKwhSum = battKwh(dateStr);
     pvKwhSum = pvKwhDay(dateStr);
+    pvProducedKwhSum = pvProducedDay(dateStr);
   } else if (type === "week") {
     // Rolling 7-day window shifted back by whole weeks (matches the offset-0
     // tile's semantics).
@@ -1040,6 +1067,7 @@ app.get("/api/stats/period", (req, res) => {
     bars = dayBars(rows);
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
     pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
+    pvProducedKwhSum = r2(rows.reduce((a, r) => a + pvProducedDay(r.label), 0));
   } else if (type === "month") {
     const d = new Date(dayStart.getFullYear(), dayStart.getMonth() - offset, 1);
     const ym = localDate(d).slice(0, 7);
@@ -1050,6 +1078,7 @@ app.get("/api/stats/period", (req, res) => {
     bars = dayBars(rows);
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
     pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
+    pvProducedKwhSum = r2(rows.reduce((a, r) => a + pvProducedDay(r.label), 0));
   } else {
     const year = dayStart.getFullYear() - offset;
     periodStart = `${year}-01-01`;
@@ -1061,6 +1090,7 @@ app.get("/api/stats/period", (req, res) => {
         }))
       : [];
     gridKwh = r2(yearRows.reduce((a, r) => a + r.importKwh, 0));
+    let producedYear = 0;
     bars = yearRows.map((r) => {
       const [y, m] = r.label.split("-").map(Number);
       let batt = 0;
@@ -1069,9 +1099,11 @@ app.get("/api/stats/period", (req, res) => {
         const ds = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
         batt += battKwh(ds);
         pv += pvKwhDay(ds);
+        producedYear += pvProducedDay(ds);
       }
       return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
     });
+    pvProducedKwhSum = r2(producedYear);
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
     pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
   }
@@ -1087,6 +1119,7 @@ app.get("/api/stats/period", (req, res) => {
       gridKwh,
       battKwh: battKwhSum,
       pvKwh: pvKwhSum,
+      pvProducedKwh: pvProducedKwhSum,
       gridEur: eur(gridKwh),
       battEur: eur(battKwhSum),
       pvEur: eur(pvKwhSum),

@@ -39,6 +39,52 @@ function SunArc({ sunrise, sunset }) {
   );
 }
 
+// Yesterday summary — deterministic (measured, not AI), its own fetch
+// against the same /api/stats/period route the Dashboard's ‹ › navigation
+// uses, so it never depends on the AI briefing schema or its refresh cycle.
+function YesterdayCard() {
+  const [y, setY] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/stats/period?type=day&offset=1")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j.ok && j.data.hasData) setY(j.data);
+      })
+      .catch(() => {
+        // no data yet (e.g. first day of use) — card just doesn't render
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!y) return null;
+  const saved = Math.round((y.battEur + y.pvEur) * 100) / 100;
+  return (
+    <FlipTile>
+      <section className="card">
+        <SpeakButton
+          id="yesterday"
+          className="speak-corner"
+          text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${saved}.`}
+        />
+        <h3>Yesterday</h3>
+        <p className="wx-big">
+          {y.homeKwh} kWh <span className="muted">used</span>
+        </p>
+        <p className="muted">
+          grid {y.gridKwh} kWh · battery {y.battKwh} kWh · PV {y.pvKwh} kWh direct
+        </p>
+        <p className="muted">
+          ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{saved}
+        </p>
+      </section>
+    </FlipTile>
+  );
+}
+
 export default function WelcomeTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -159,6 +205,8 @@ export default function WelcomeTab() {
             <p className="muted">{data.production.reasoning}</p>
           </section>
         </FlipTile>
+
+        <YesterdayCard />
 
         <FlipTile>
           <section className="card">
