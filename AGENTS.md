@@ -392,6 +392,13 @@ EPIPE noise on every client disconnect).
   refreshes at the slots — opening the tab never waits for the AI. The prompt
   adapts to the slot: morning = day ahead, afternoon = progress + remaining,
   evening = wrap-up + tomorrow. Manual ↻ refresh stays on demand.
+- **`/api/welcome` never blocks the client**: fresh cache → instant; stale
+  cache → instant `stale: true` + background refresh (fire-and-forget); only a
+  cacheless cold start waits. (The old blocking wait for a flaky AI call was
+  the recurring "Preparing your briefing…", 2026-09-15.)
+- **AI call hardening** (Kimi Code endpoint latency varies 1 s…>30 s): 60 s
+  timeout, retry json_schema → json_schema → json_object before the
+  deterministic fallback (json_object alone often answers off-schema).
 - **Background-first data model (2026-09-14)**: the server always pulls —
   meter Modbus loop + unconditional 10 s `scen_info` (6 calls/min, inside the
   ~10-12/min guideline; carries live grid values via `grid_info` when Modbus

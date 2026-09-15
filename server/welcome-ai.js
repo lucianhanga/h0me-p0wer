@@ -223,14 +223,23 @@ export async function callWelcomeAI(config, context) {
   });
   const url = `${config.ai.baseUrl}/chat/completions`;
   const headers = { Authorization: `Bearer ${config.ai.apiKey}`, "Content-Type": "application/json" };
-  try {
-    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_schema", json_schema: WELCOME_SCHEMA })) });
-    return validateAiResponse(JSON.parse(j.choices[0].message.content));
-  } catch (err) {
-    console.warn(`[welcome] structured AI call failed (${err.message}) — retrying with json_object`);
-    const j = await fetchJson(url, { timeoutMs: 30000, headers, method: "POST", body: JSON.stringify(body({ type: "json_object" })) });
-    return validateAiResponse(JSON.parse(j.choices[0].message.content));
+  // The endpoint's latency varies wildly (seen: instant … >30 s). Refresh is
+  // non-blocking/background, so a generous 60 s timeout is free. The abort is
+  // transient — retry with json_schema again before degrading to json_object
+  // (which the model often answers off-schema).
+  for (const format of [
+    { type: "json_schema", json_schema: WELCOME_SCHEMA },
+    { type: "json_schema", json_schema: WELCOME_SCHEMA },
+    { type: "json_object" },
+  ]) {
+    try {
+      const j = await fetchJson(url, { timeoutMs: 60000, headers, method: "POST", body: JSON.stringify(body(format)) });
+      return validateAiResponse(JSON.parse(j.choices[0].message.content));
+    } catch (err) {
+      console.warn(`[welcome] AI attempt failed (${err.message})`);
+    }
   }
+  throw new Error("all AI attempts failed");
 }
 
 // Deterministic stand-in when the AI is unreachable: same response shape,
