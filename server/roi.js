@@ -9,11 +9,19 @@ import {
   getPvDailyDates,
   getStoredPeriodStarts,
 } from "./db.js";
+import { buildBomPdf } from "./roi-pdf.js";
 
 // Bill of materials with SNAPSHOTTED purchase prices — user-editable config.
 // ROI math must use the prices paid, never live prices, so rows carry their
 // own priceSnapshotDate; `estimated: true` flags guesses to correct by hand.
 const BOM_PATH = path.join(path.dirname(fileURLToPath(import.meta.url)), "roi-bom.json");
+// Product pictures: fetched once (Amazon robot-walls curl; headless Chrome
+// passes), committed to git so they never disappear.
+const IMG_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "roi-images");
+const PIXEL_GIF = Buffer.from(
+  "R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7",
+  "base64",
+);
 const FALLBACK_INSTALL_DATE = "2026-09-07"; // day the meter was linked
 
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -49,6 +57,30 @@ function cellsKwhForDay(battSn, dateStr) {
 }
 
 export function registerRoiRoute(app, deps = {}) {
+  // Cached product picture per ASIN; 404 answers a 1x1 transparent GIF so
+  // <img> tags degrade silently when an item has no cached image.
+  app.get("/api/roi/image/:asin", (req, res) => {
+    const asin = String(req.params.asin).replace(/[^A-Za-z0-9]/g, "");
+    const file = path.join(IMG_DIR, `${asin}.jpg`);
+    if (fs.existsSync(file)) {
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return res.sendFile(file);
+    }
+    res.status(404).setHeader("Content-Type", "image/gif").send(PIXEL_GIF);
+  });
+
+  // Printable BOM (no-dep hand-rolled PDF, images embedded from roi-images/).
+  app.get("/api/roi/bom.pdf", (req, res) => {
+    const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
+    const totalInvestedEur = r2(bom.reduce((a, r) => a + r.lineTotalEur, 0));
+    const snapshotDate = bom.find((r) => r.priceSnapshotDate)?.priceSnapshotDate ?? "n/a";
+    const pdf = buildBomPdf({ bom, totalInvestedEur, snapshotDate });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", 'attachment; filename="h0me-p0wer-bom.pdf"');
+    res.setHeader("Cache-Control", "no-store");
+    res.send(pdf);
+  });
+
   app.get("/api/roi", (req, res) => {
     const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
     const totalInvestedEur = r2(bom.reduce((a, r) => a + r.lineTotalEur, 0));

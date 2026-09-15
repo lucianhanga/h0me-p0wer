@@ -393,8 +393,8 @@ EPIPE noise on every client disconnect).
   for the balcony-solar setup. `GET /api/roi` (`server/roi.js`,
   `registerRoiRoute`) is **DB-only** — no cloud calls.
 - **BOM with snapshotted prices**: `server/roi-bom.json` (committed,
-  user-editable) — `{asin, name, qty, unitPriceEur, estimated?, url,
-  priceSnapshotDate}`. The ROI math must use the PRICES PAID, never live
+  user-editable) — `{asin, name, desc?, qty, unitPriceEur, estimated?, url,
+  priceSnapshotDate}` (`desc` is shown in the PDF only). The ROI math must use the PRICES PAID, never live
   prices, so each row carries its snapshot date; `estimated: true` rows are
   guesses (Amazon blocks price scraping) the user should correct by hand.
   The UI flags them with "~".
@@ -412,6 +412,18 @@ EPIPE noise on every client disconnect).
 - Amortization chart: cumulative savings (solid measured / dashed
   projection) vs. invested markLine, break-even markPoint at the payback
   date. Styles: `.roi-*` at the end of styles.css.
+- **Product images + BOM PDF (2026-09-15)**: cached pictures in
+  `server/roi-images/<ASIN>.jpg` (committed, ≤400px JPEG via `sips`) served
+  by `GET /api/roi/image/:asin` (immutable cache; 404 = 1×1 GIF so `<img>`
+  degrades silently). Amazon robot-walls curl (even `/gp/product`, `/-/en/`,
+  .com variants) — **headless Chrome `--dump-dom` passes the check**; the
+  landing image is the first `"hiRes":"…m.media-amazon.com/images/I/…"` in
+  the DOM. `GET /api/roi/bom.pdf` renders a printable A4 BOM with
+  `server/roi-pdf.js`, a hand-rolled NO-DEPENDENCY PDF writer (PDF 1.4,
+  WinAnsi Helvetica core fonts, JPEGs embedded natively as DCTDecode
+  XObjects, real xref table) — do not add a pdf npm package. The BOM card is
+  one compact line per item (28px thumb + ellipsized name + right-aligned
+  numbers) with a "Download PDF" button in the card header.
 
 ## Dashboard channel audit (2026-09-15)
 

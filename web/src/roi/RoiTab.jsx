@@ -82,17 +82,25 @@ export default function RoiTab() {
       </div>
 
       <div className="card">
-        <h4>Investment (bill of materials)</h4>
+        <div className="roi-bom-head">
+          <h4>Investment (bill of materials)</h4>
+          <a className="roi-pdf-btn" href="/api/roi/bom.pdf" download>
+            Download PDF
+          </a>
+        </div>
         {data.bom.map((r) => (
           <div className="roi-bom-row" key={r.asin}>
+            <img className="roi-bom-thumb" src={`/api/roi/image/${r.asin}`} alt="" loading="lazy" />
             <span className="roi-bom-name">
               {r.estimated ? <span className="roi-est">~</span> : null}
               {r.name}
             </span>
-            <span className="roi-bom-qty">
-              {r.qty} × {fmtEur(r.unitPriceEur)}
+            <span className="roi-bom-nums">
+              <span className="roi-bom-qty">
+                {r.qty} × {fmtEur(r.unitPriceEur)}
+              </span>
+              <span className="roi-bom-price">{fmtEur(r.lineTotalEur)}</span>
             </span>
-            <span className="roi-bom-price">{fmtEur(r.lineTotalEur)}</span>
           </div>
         ))}
         <div className="roi-total-row">
