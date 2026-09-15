@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
+import PowerPlanCard from "./PowerPlanCard.jsx";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Polls the backend every 5 s (flow/meter) and
@@ -133,6 +134,8 @@ export default function LiveTab() {
           </div>
         </FlipTile>
       </div>
+
+      <PowerPlanCard />
 
       <button
         className="details-toggle"
