@@ -41,12 +41,28 @@ async function readParam(anker, siteId, paramType) {
     param_type: paramType,
   });
   const raw = resp?.param_data ?? resp?.data?.param_data ?? null;
-  return typeof raw === "string" && raw ? JSON.parse(raw) : null;
+  // param_data is a JSON STRING for schedule param types (4/6/9/12/13) but
+  // an already-parsed OBJECT for setting param types (16/18/23/26/27/28/29/
+  // 30) — 2026-09-16 fix: this used to only handle the string case, so every
+  // settings query (18, 27, ...) was silently discarded as "empty" even when
+  // Anker returned real data, because typeof raw was "object", not "string".
+  if (typeof raw === "string") return raw ? JSON.parse(raw) : null;
+  if (raw && typeof raw === "object") return raw;
+  return null;
 }
 
-// param_type 27: charge/discharge limits + backup reserve (Solarbank 2
-// family). param_type 18: station settings — EMPTY on this single-battery
-// system; read once and included only when present.
+// param_type 18: station settings (charge/discharge limits + backup
+// reserve) for non-Gen4 Solarbank systems — this is where the A17C3 (this
+// account's device) actually carries `charge_upper_limit`/
+// `discharge_lower_limit`. param_type 27 is the Gen4-only equivalent
+// ("no longer in 18" per Anker's own Gen4 migration) — tried as well and
+// merged in for forward compatibility if the account ever gets a Gen4
+// device, but expected empty on this hardware. 2026-09-16: previously read
+// 27 first and 18 only into an opaque "station" blob, and since readParam()
+// discarded every object-shaped param_data (see above), BOTH looked
+// permanently empty — the app fell back to hardcoded 10 %/100 % guesses
+// instead of the account's real configured limits (e.g. a 95 % charge
+// ceiling set in the Anker app never showed up).
 async function fetchConfig(anker, getLiveBattery) {
   const siteId = await ensureSiteId(anker, getLiveBattery);
   if (!siteId) throw new Error("no Anker site found");
@@ -59,30 +75,44 @@ async function fetchConfig(anker, getLiveBattery) {
     socCalibrationEnable: null,
     station: null,
   };
+  const applyLimits = (p) => {
+    if (!p) return;
+    if (config.chargeUpperLimitPct == null) {
+      config.chargeUpperLimitPct = numOrNull(p.charge_upper_limit);
+    }
+    if (config.dischargeLowerLimitPct == null) {
+      config.dischargeLowerLimitPct = numOrNull(p.discharge_lower_limit);
+    }
+    if (config.backupReservePct == null) config.backupReservePct = numOrNull(p.backup_reserve);
+    if (config.backupReserveSwitch == null) config.backupReserveSwitch = p.backup_reserve_switch ?? null;
+    if (config.socCalibrationEnable == null) {
+      config.socCalibrationEnable = p.soc_calibration_enable ?? null;
+    }
+  };
+  try {
+    const p18 = await readParam(anker, siteId, "18");
+    if (p18) {
+      config.station = p18;
+      applyLimits(p18);
+    }
+  } catch (err) {
+    config.error18 = err.message;
+  }
   try {
     const p27 = await readParam(anker, siteId, "27");
     if (p27) {
-      config.chargeUpperLimitPct = numOrNull(p27.charge_upper_limit);
-      config.dischargeLowerLimitPct = numOrNull(p27.discharge_lower_limit);
-      config.backupReservePct = numOrNull(p27.backup_reserve);
-      config.backupReserveSwitch = p27.backup_reserve_switch ?? null;
-      config.socCalibrationEnable = p27.soc_calibration_enable ?? null;
+      applyLimits(p27);
       config.raw27 = p27;
     }
   } catch (err) {
     config.error27 = err.message;
   }
-  try {
-    const p18 = await readParam(anker, siteId, "18");
-    if (p18 && Object.keys(p18).length) config.station = p18;
-  } catch (err) {
-    config.error18 = err.message;
+  if (config.chargeUpperLimitPct != null || config.dischargeLowerLimitPct != null) {
+    config.limitsSource = "account";
   }
-  // Fallbacks when the device exposes nothing (verified 2026-09-15 on the
-  // A17C3: param 27/18/30 all EMPTY). The SB2 schedule (param_type 6, same
-  // endpoint the power plan uses) carries `reserved_soc`; the discharge
-  // floor otherwise defaults to the observed 10 % (battery stops there
-  // overnight), charge ceiling to 100 %.
+  // Fallback when the device exposes nothing on either param type: SB2
+  // schedule (param_type 6, JSON-string param_data) sometimes carries
+  // `reserved_soc`; otherwise hardcode the observed defaults.
   if (config.dischargeLowerLimitPct == null) {
     try {
       const sched = await readParam(anker, siteId, "6");
@@ -94,7 +124,10 @@ async function fetchConfig(anker, getLiveBattery) {
       config.limitsSource = "default";
     }
   }
-  if (config.chargeUpperLimitPct == null) config.chargeUpperLimitPct = 100;
+  if (config.chargeUpperLimitPct == null) {
+    config.chargeUpperLimitPct = 100;
+    config.limitsSource = config.limitsSource ?? "default";
+  }
   if (config.backupReservePct == null) config.backupReservePct = config.dischargeLowerLimitPct;
   return config;
 }
