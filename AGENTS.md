@@ -291,10 +291,13 @@ EPIPE noise on every client disconnect).
   clamp to [0, max_load], floor to step (10 W). Inputs from `scen_info`
   (`pvW`, `homeLoadW`, `soc`) on the 10 s battery sync.
 - **Write discipline**: only on ≥ 50 W change, ≥ 30 s between writes,
-  5-min refresh for smaller drifts (a few writes/hour — the endpoint rate
-  limit is never approached). Always written as TWO half-day slots (Anker
-  single-slot 0 W export bug); `mode_type: 3`, week [0..6], other fields
-  preserved from the last read.
+  asymmetric hysteresis (2026-09-15): step DOWN promptly (a preset above
+  current PV is served from the CELLS — the jojo this kills), step UP only
+  after the higher target holds 3 min continuously (cloud wobble around a
+  100 W boundary otherwise makes the preset chase PV while the device lags
+  ~1 min behind; verified by simulation: a 644↔590 W wobble = zero writes).
+  Always written as TWO half-day slots (Anker single-slot 0 W export bug);
+  `mode_type: 3`, week [0..6], other fields preserved from the last read.
 - Enable saves the device's current schedule verbatim
   (`.power-plan-state.json` next to the DB, mode 600, gitignored);
   **disable restores it byte-for-byte** (verified: back to 200 W flat).
