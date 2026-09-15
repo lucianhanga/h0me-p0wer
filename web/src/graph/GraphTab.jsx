@@ -36,14 +36,13 @@ const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOu
 const GRAPHS = [
   {
     title: "Home Power Usage",
-    legend: ["Grid", "PV", "Battery out", "Battery in", "Home", "Grid range"],
+    legend: ["Grid", "PV", "Battery out", "Home", "Grid range"],
     series: [
       { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
       { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
       { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "u" },
       { key: "pvHome", name: "PV", color: "#5fce80", width: 1, stack: "u" },
       { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "u" },
-      { key: "battChgNeg", name: "Battery in", color: "#8a63d2", width: 1 },
       { key: "home", name: "Home", color: "#e8ecef", width: 2 },
     ],
   },
