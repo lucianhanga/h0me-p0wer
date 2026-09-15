@@ -4,8 +4,7 @@
     "name": "Mendler HWC-O43 metal cover w/ planter, 118×124×65 cm (battery housing)",
     "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
     "qty": 1,
-    "unitPriceEur": 199.99,
-    "estimated": true,
+    "unitPriceEur": 412.99,
     "url": "https://www.amazon.de/dp/B0H2HZWTX9",
     "priceSnapshotDate": "2026-09-15"
   },
@@ -14,9 +13,17 @@
     "name": "NAKA Solarmodul 500 W JAM60D41-500/LB Vollschwarz (2er-Pack, 0% MwSt.)",
     "desc": "Pair of 500 W full-black glass-glass solar panels (1000 Wp total) — the generation side of the balcony power plant.",
     "qty": 1,
-    "unitPriceEur": 169.99,
-    "estimated": true,
+    "unitPriceEur": 229.99,
     "url": "https://www.amazon.de/dp/B0DYF56BTN",
+    "priceSnapshotDate": "2026-09-15"
+  },
+  {
+    "asin": "PVMOUNT",
+    "name": "PV Flachdach-Halterung ohne Bohren, für 2 Module, Silber (Solamount)",
+    "desc": "Ballasted flat-roof/ground mount for both 500 W panels — no drilling; tilted toward SSW as installed.",
+    "qty": 1,
+    "unitPriceEur": 105.95,
+    "url": "https://www.amazon.de/s?k=PV+Flachdach+Halterung+ohne+Bohren+2+Module+Solamount",
     "priceSnapshotDate": "2026-09-15"
   },
   {
@@ -24,8 +31,7 @@
     "name": "Kalitec corrugated conduit NW 23, closed, 10 m (cable protection)",
     "desc": "Closed corrugated conduit (10 m) protecting the DC solar cables on their outdoor run.",
     "qty": 1,
-    "unitPriceEur": 14.99,
-    "estimated": true,
+    "unitPriceEur": 25.91,
     "url": "https://www.amazon.de/dp/B08MD67N94",
     "priceSnapshotDate": "2026-09-15"
   },
@@ -34,8 +40,7 @@
     "name": "Anker SOLIX solar extension cable 10 m, 6 mm² (set of 2)",
     "desc": "10 m, 6 mm² MC4 extension cables (set of 2) linking the panels to the Solarbank's DC inputs.",
     "qty": 2,
-    "unitPriceEur": 39.99,
-    "estimated": true,
+    "unitPriceEur": 38.16,
     "url": "https://www.amazon.de/dp/B0F4QGJVXN",
     "priceSnapshotDate": "2026-09-15"
   },
@@ -44,8 +49,7 @@
     "name": "Anker SOLIX Solarbank 2 E1600 Plus (1.6 kWh)",
     "desc": "1.6 kWh LFP plug-and-play storage with 800 W inverter output; stores surplus PV and releases it after sunset.",
     "qty": 1,
-    "unitPriceEur": 549.0,
-    "estimated": true,
+    "unitPriceEur": 398.99,
     "url": "https://www.amazon.de/dp/B0D1XMRC56",
     "priceSnapshotDate": "2026-09-15"
   },
@@ -54,8 +58,7 @@
     "name": "Anker SOLIX Smart Meter Gen 2 (3-phase)",
     "desc": "Three-phase smart meter measuring grid import/export at the house connection; feeds the local Modbus data this dashboard reads.",
     "qty": 1,
-    "unitPriceEur": 64.11,
-    "estimated": true,
+    "unitPriceEur": 93.09,
     "url": "https://www.amazon.de/dp/B0GXZ6LR5C",
     "priceSnapshotDate": "2026-09-15"
   }
