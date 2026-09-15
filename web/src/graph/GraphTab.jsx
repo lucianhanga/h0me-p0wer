@@ -12,6 +12,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 const SHORTCUTS = [
   { label: "1h", ms: 3600 * 1000 },
   { label: "6h", ms: 6 * 3600 * 1000 },
+  { label: "12h", ms: 12 * 3600 * 1000 },
   { label: "24h", ms: 24 * 3600 * 1000 },
   { label: "7d", ms: 7 * 24 * 3600 * 1000 },
   { label: "30d", ms: 30 * 24 * 3600 * 1000 },
