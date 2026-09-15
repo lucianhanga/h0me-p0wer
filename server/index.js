@@ -129,16 +129,17 @@ function getCloudGridLive() {
   return null;
 }
 
-// Persist PV energy for recent finished days (raw samples live only 48 h —
-// recompute the last two days each run so values settle as data arrives).
+// Persist PV energy for the last finished day (raw samples live only 48 h).
+// Recompute YESTERDAY only — it is always fully inside the retention window.
+// Recomputing older days would overwrite good full-day rows with shrinking
+// partial ones as their early samples get pruned (and before the
+// getBatteryHistory end-bound fix it also leaked later days into them).
 function rollupPvDaily() {
   const today = localDate();
-  for (let back = 1; back <= 2; back++) {
-    const dateStr = localDate(new Date(Date.now() - back * 86400000));
-    if (dateStr >= today) continue;
-    const v = pvKwhForDay(dateStr);
-    savePvDaily(dateStr, v.produced, v.toHome, v.toBatt);
-  }
+  const dateStr = localDate(new Date(Date.now() - 86400000));
+  if (dateStr >= today) return;
+  const v = pvKwhForDay(dateStr);
+  savePvDaily(dateStr, v.produced, v.toHome, v.toBatt);
 }
 
 // Stored PV totals over a date range (finished days only; today is added
@@ -643,15 +644,25 @@ app.get("/api/stats/overview", (req, res) => {
   // --- Battery profile for today: 30-s live snapshots as anchors, cloud
   // battery day-trend as fallback, interpolated (same pattern as grid).
   const battSn = latestBattery?.sn ?? getBatterySn(sn);
-  const battAnchors = new Map(); // bt -> {s, c}
-  const putBatt = (bt, v) => {
-    const cell = (battAnchors.get(bt) ?? battAnchors.set(bt, { s: 0, c: 0 }).get(bt));
+  const battAnchors = new Map(); // bt -> {s, c} signed battery flow (out − charge)
+  const cellsAnchors = new Map(); // bt -> {s, c} cells-only output (excl. PV pass-through)
+  const pvAnchors = new Map(); // bt -> {s, c} PV direct-to-home
+  const putInto = (map, bt, v) => {
+    const cell = (map.get(bt) ?? map.set(bt, { s: 0, c: 0 }).get(bt));
     cell.s += v;
     cell.c++;
   };
+  // Validated split (see /api/flow): PV→home exists only while the inverter
+  // outputs; cells = output minus that pass-through. Never both booked.
+  const pvHomeOfRow = (r) =>
+    (r.output_w ?? 0) > 0 ? Math.max(0, (r.pv_w ?? 0) - (r.charge_w ?? 0)) : 0;
   for (const r of getBatteryHistory(dayStartMs, now)) {
     if (r.output_w == null) continue;
-    putBatt(Math.floor(r.ts / BUCKET) * BUCKET, (r.output_w ?? 0) - (r.charge_w ?? 0));
+    const bt = Math.floor(r.ts / BUCKET) * BUCKET;
+    const pvHome = pvHomeOfRow(r);
+    putInto(battAnchors, bt, (r.output_w ?? 0) - (r.charge_w ?? 0));
+    putInto(cellsAnchors, bt, Math.max(0, (r.output_w ?? 0) - pvHome));
+    putInto(pvAnchors, bt, pvHome);
   }
   if (battSn) {
     const todayStr = localDate(new Date(dayStartMs));
@@ -659,25 +670,38 @@ app.get("/api/stats/overview", (req, res) => {
       if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
       if (r.ts + 20 * 60 * 1000 > now) continue;
       const bt = Math.floor(r.ts / BUCKET) * BUCKET;
-      if (!battAnchors.has(bt)) putBatt(bt, r.power);
+      if (!battAnchors.has(bt)) putInto(battAnchors, bt, r.power);
+      // The cloud battery series is CELLS-only (verified 2026-09-15) — use
+      // it as the cells fallback too (no local samples that bucket).
+      if (!cellsAnchors.has(bt)) putInto(cellsAnchors, bt, Math.max(0, r.power));
     }
   }
-  const battSorted = [...battAnchors.entries()].sort(([a], [b]) => a - b);
-  const battByT = new Map();
-  for (let i = 0; i < battSorted.length; i++) {
-    const [bt, cell] = battSorted[i];
-    battByT.set(bt, Math.round(cell.s / cell.c));
-    const next = battSorted[i + 1];
-    if (next) {
-      const [nbt] = next;
-      const nv = next[1].s / next[1].c;
-      for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
-        const frac = (t - bt) / (nbt - bt);
-        battByT.set(t, Math.round(cell.s / cell.c + (nv - cell.s / cell.c) * frac));
+  const interp = (anchors) => {
+    const sorted = [...anchors.entries()].sort(([a], [b]) => a - b);
+    const byT = new Map();
+    for (let i = 0; i < sorted.length; i++) {
+      const [bt, cell] = sorted[i];
+      byT.set(bt, Math.round(cell.s / cell.c));
+      const next = sorted[i + 1];
+      if (next) {
+        const [nbt] = next;
+        const nv = next[1].s / next[1].c;
+        for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
+          const frac = (t - bt) / (nbt - bt);
+          byT.set(t, Math.round(cell.s / cell.c + (nv - cell.s / cell.c) * frac));
+        }
       }
     }
+    return byT;
+  };
+  const battByT = interp(battAnchors);
+  const cellsByT = interp(cellsAnchors);
+  const pvByT = interp(pvAnchors);
+  for (const p of profile) {
+    p.batt = battByT.get(p.t) ?? null;
+    p.cells = cellsByT.get(p.t) ?? null;
+    p.pvHome = pvByT.get(p.t) ?? null;
   }
-  for (const p of profile) p.batt = battByT.get(p.t) ?? null;
 
   // --- Battery kWh per day (for week/month tiles): integrate the cloud
   // battery day trend (20-min signed power; discharge +, charge −).
@@ -730,6 +754,7 @@ app.get("/api/stats/overview", (req, res) => {
   let chargedKwh = 0;
   let pvKwh = 0;
   let pvToHomeKwh = 0;
+  let pvToBattKwh = 0;
   for (let i = 1; i < battRows.length; i++) {
     const dt = (battRows[i].ts - battRows[i - 1].ts) / 3600000;
     if (dt > 0.5) continue;
@@ -742,6 +767,11 @@ app.get("/api/stats/overview", (req, res) => {
     const pvHome0 = battRows[i - 1].output_w > 0 ? Math.max(0, battRows[i - 1].pv_w - battRows[i - 1].charge_w) : 0;
     const pvHome1 = battRows[i].output_w > 0 ? Math.max(0, battRows[i].pv_w - battRows[i].charge_w) : 0;
     pvToHomeKwh += (((pvHome0 + pvHome1) / 2) * dt) / 1000;
+    // PV loaded into the battery (informational — savings are booked at
+    // discharge time, NOT here, or the same PV energy would count twice).
+    const pvBatt0 = Math.min(battRows[i - 1].pv_w, battRows[i - 1].charge_w);
+    const pvBatt1 = Math.min(battRows[i].pv_w, battRows[i].charge_w);
+    pvToBattKwh += (((pvBatt0 + pvBatt1) / 2) * dt) / 1000;
   }
   const battLatest = latestBattery ?? getLatestBattery();
   const battery = battLatest
@@ -783,17 +813,30 @@ app.get("/api/stats/overview", (req, res) => {
     batterySavingsToday: eur(dischargedKwh),
   };
 
-  // Consumption by source per period (dashboard tiles): house total = grid
-  // import + battery discharge + PV direct-to-home. Battery kWh per day comes
-  // from the battery's cloud day-trends (synced locally); PV beyond today is
-  // 0 — local pv_w samples live only 48 h and the cloud has no PV channel
-  // (needs a daily rollup once panels exist).
+  // Consumption by source per period (dashboard tiles), uniform per-day
+  // channel split — NO double booking:
+  //   pvKwh(day)   = PV direct-to-home (pv_daily rollup for finished days,
+  //                  live trapezoid for today)
+  //   battKwh(day) = CELLS-only discharge. The cloud battery day-trend IS a
+  //                  cells-only series (verified 2026-09-15 vs local
+  //                  integration); for today the cloud series lags, so use
+  //                  the live trapezoid (discharge − PV pass-through).
+  // PV→battery ("loaded") is reported separately and NEVER added to savings:
+  // that energy counts when it comes back as cells discharge.
   const r2 = (v) => Math.round(v * 100) / 100;
+  const todayDs = localDate();
+  const todayCellsKwh = Math.max(0, r2(dischargedKwh - pvToHomeKwh));
+  const todayPvBattKwh = r2(pvToBattKwh);
+  const pvDayKwh = (dateStr) =>
+    dateStr === todayDs ? r2(pvToHomeKwh) : (getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0);
+  // Today's cells override in the per-day rows the sums/bars are built from.
+  for (const r of monthRows) if (r.label === todayDs) r.disKwh = todayCellsKwh;
   const battYear = (() => {
     let sum = 0;
     const d = new Date(dayStartMs);
     for (let date = new Date(d.getFullYear(), 0, 1); date <= d; date.setDate(date.getDate() + 1)) {
-      sum += battKwhForDay(localDate(date)).disKwh;
+      const ds = localDate(date);
+      sum += ds === todayDs ? todayCellsKwh : battKwhForDay(ds).disKwh;
     }
     return r2(sum);
   })();
@@ -803,24 +846,26 @@ app.get("/api/stats/overview", (req, res) => {
       gridKwh: flows.gridImportKwh,
       // "From battery" = CELLS only: the inverter's output includes the PV
       // pass-through, so subtract it or PV energy counts twice.
-      battKwh: r2(dischargedKwh - pvToHomeKwh),
+      battKwh: todayCellsKwh,
       pvKwh: r2(pvToHomeKwh),
+      // "Loaded into the battery" (from PV) — informational, no € attached.
+      battInKwh: todayPvBattKwh,
     },
     week: {
       gridKwh: r2(weekImport),
       battKwh: r2(weekRows.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
-      pvKwh: r2(pvStoredTotals(weekRows[0]?.label ?? localDate(), localDate()).toHome + r2(pvToHomeKwh)),
+      pvKwh: r2(weekRows.reduce((a, r) => a + pvDayKwh(r.label), 0)),
     },
     month: {
       gridKwh: r2(monthImport),
       battKwh: r2(monthRowsCur.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
-      pvKwh: r2(pvStoredTotals(`${ym}-01`, localDate()).toHome + r2(pvToHomeKwh)),
+      pvKwh: r2(monthRowsCur.reduce((a, r) => a + pvDayKwh(r.label), 0)),
     },
     year: {
       gridKwh: r2(yearImport),
       battKwh: battYear,
       pvKwh: r2(
-        pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, localDate()).toHome +
+        pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, todayDs).toHome +
           r2(pvToHomeKwh),
       ),
     },
@@ -831,6 +876,7 @@ app.get("/api/stats/overview", (req, res) => {
   // Money view per source: grid = spent, battery/PV = saved (discharge and
   // direct PV are avoided grid import at the same tariff — overstated for a
   // grid-charged battery, same caveat as costs.batterySavingsToday).
+  // battInKwh deliberately gets NO € — it is booked when discharged.
   for (const p of Object.values(byPeriod)) {
     p.gridEur = eur(p.gridKwh);
     p.battEur = eur(p.battKwh);
@@ -838,28 +884,31 @@ app.get("/api/stats/overview", (req, res) => {
   }
 
   // Stacked-bar data for the tiles' flip sides: per-bucket kWh split by
-  // source (grid / battery / PV). Today = 30-min buckets from the profile;
-  // week/month = per day (cloud month rows + battery day-trends); year =
-  // per month (grid from year rows, battery summed from day-trends).
+  // source (grid / battery-cells / PV-to-home). Today = 30-min buckets from
+  // the profile; week/month = per day (cloud month rows + battery day-trends
+  // + pv_daily); year = per month.
   byPeriod.today.bars = profile.map((p) => ({
     label: p.t,
     grid: r2((Math.max(p.power, 0) * 0.5) / 1000),
-    batt: r2((Math.max(p.batt ?? 0, 0) * 0.5) / 1000),
-    pv: 0,
+    batt: r2((Math.max(p.cells ?? 0, 0) * 0.5) / 1000),
+    pv: r2((Math.max(p.pvHome ?? 0, 0) * 0.5) / 1000),
   }));
   const dayBars = (rows) =>
-    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: 0 }));
+    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: pvDayKwh(r.label) }));
   byPeriod.week.bars = dayBars(weekRows);
-  byPeriod.month.bars = dayBars(monthRowsCur);
+  byPeriod.month.bars = dayBars(monthRowsCur.filter((r) => r.label <= todayDs));
   byPeriod.year.bars = yearRows.map((r) => {
     const [y, m] = r.label.split("-").map(Number);
     let batt = 0;
+    let pv = 0;
     const d = new Date(dayStartMs);
     const lastDay = m === d.getMonth() + 1 ? d.getDate() : new Date(y, m, 0).getDate();
     for (let day = 1; day <= lastDay; day++) {
-      batt += battKwhForDay(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`).disKwh;
+      const ds = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      batt += ds === todayDs ? todayCellsKwh : battKwhForDay(ds).disKwh;
+      pv += pvDayKwh(ds);
     }
-    return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: 0 };
+    return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
   });
 
   res.json({
@@ -901,6 +950,8 @@ app.get("/api/stats/period", (req, res) => {
   dayStart.setHours(0, 0, 0, 0);
 
   // Battery discharge/charge kWh for one date (battery cloud day-trend).
+  // The cloud battery series is CELLS-only (verified 2026-09-15) — no PV
+  // pass-through inside, so it never double-books the PV channel.
   function battKwh(dateStr) {
     if (!battSn) return 0;
     let dis = 0;
@@ -910,6 +961,11 @@ app.get("/api/stats/period", (req, res) => {
       if (kwh >= 0) dis += kwh;
     }
     return r2(dis);
+  }
+  // PV direct-to-home kWh for one finished date (local pv_daily rollup —
+  // the cloud has no PV channel; 0 before the panels existed).
+  function pvKwhDay(dateStr) {
+    return getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0;
   }
   // Grid import kWh + per-interval bars for one date (meter cloud day-trend).
   function dayGrid(dateStr) {
@@ -944,11 +1000,12 @@ app.get("/api/stats/period", (req, res) => {
     }));
   }
   const dayBars = (rows) =>
-    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: battKwh(r.label), pv: 0 }));
+    rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: battKwh(r.label), pv: pvKwhDay(r.label) }));
 
   let label;
   let gridKwh = 0;
   let battKwhSum = 0;
+  let pvKwhSum = 0;
   let bars = [];
   let periodStart = null; // yyyy-MM-dd of the period's first day (for hasEarlier)
 
@@ -961,6 +1018,7 @@ app.get("/api/stats/period", (req, res) => {
     gridKwh = g.imp;
     bars = g.bars;
     battKwhSum = battKwh(dateStr);
+    pvKwhSum = pvKwhDay(dateStr);
   } else if (type === "week") {
     // Rolling 7-day window shifted back by whole weeks (matches the offset-0
     // tile's semantics).
@@ -979,6 +1037,7 @@ app.get("/api/stats/period", (req, res) => {
     gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
     bars = dayBars(rows);
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+    pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
   } else if (type === "month") {
     const d = new Date(dayStart.getFullYear(), dayStart.getMonth() - offset, 1);
     const ym = localDate(d).slice(0, 7);
@@ -988,6 +1047,7 @@ app.get("/api/stats/period", (req, res) => {
     gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
     bars = dayBars(rows);
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+    pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
   } else {
     const year = dayStart.getFullYear() - offset;
     periodStart = `${year}-01-01`;
@@ -1002,28 +1062,32 @@ app.get("/api/stats/period", (req, res) => {
     bars = yearRows.map((r) => {
       const [y, m] = r.label.split("-").map(Number);
       let batt = 0;
+      let pv = 0;
       for (let day = 1; day <= new Date(y, m, 0).getDate(); day++) {
-        batt += battKwh(`${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+        const ds = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+        batt += battKwh(ds);
+        pv += pvKwhDay(ds);
       }
-      return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: 0 };
+      return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
     });
     battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
+    pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
   }
 
-  const hasData = gridKwh > 0 || battKwhSum > 0;
+  const hasData = gridKwh > 0 || battKwhSum > 0 || pvKwhSum > 0;
   res.json({
     ok: true,
     data: {
       label,
       hasData,
       hasEarlier: earliest != null && periodStart != null && periodStart > earliest,
-      homeKwh: r2(gridKwh + battKwhSum),
+      homeKwh: r2(gridKwh + battKwhSum + pvKwhSum),
       gridKwh,
       battKwh: battKwhSum,
-      pvKwh: 0,
+      pvKwh: pvKwhSum,
       gridEur: eur(gridKwh),
       battEur: eur(battKwhSum),
-      pvEur: 0,
+      pvEur: eur(pvKwhSum),
       bars,
     },
   });

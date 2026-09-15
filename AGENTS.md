@@ -384,6 +384,39 @@ EPIPE noise on every client disconnect).
   starting on `.chart-box, button, a, select, input` are IGNORED so the
   graph's drag-to-pan and buttons keep working. Verified via CDP touch events.
 
+## Dashboard channel audit (2026-09-15)
+
+- **Uniform per-day channel split, NO double booking** (verified numerically
+  against raw DB + cloud): `pvKwh(day)` = PV direct-to-home; `battKwh(day)` =
+  CELLS-only discharge. **The cloud battery day-trend `power` series IS
+  cells-only** (09-14: cloud 0.41 ≈ local cells 0.34, NOT the 2.66 inverter
+  output) — it never overlaps the PV channel. For today the cloud series
+  lags, so today's cells = live trapezoid `discharge − pvToHome` (substituted
+  into the week/month/year sums + bars). The solarbank `charge_total` /
+  `discharge_total` scalars are CUMULATIVE counters — useless for daily
+  history (7.62 "today" vs actual 1.08); the 20-min series + pv_daily are
+  the online-account history.
+- Today tile has a 4th row **"To battery"** (`battInKwh` = PV→battery,
+  `min(pv_w, charge_w)` trapezoid) — informational, **never gets €**: those
+  savings are booked when the energy comes back as cells discharge.
+- **pv_daily pollution bug (fixed)**: `getBatteryHistory(sinceMs)` ignored
+  its end argument, so `pvKwhForDay(X)` integrated X→now and every rollup
+  re-write inflated yesterday's row with the following days (proved by exact
+  arithmetic: 3.69 = 0.54 + 2.32 + 0.83). Fix: `getBatteryHistory(sinceMs,
+  untilMs)` honors the end bound; `rollupPvDaily` recomputes YESTERDAY only
+  (day-before would shrink as its early samples hit the 48 h prune). The
+  corrupted 09-11/12/13 rows were unrecoverable (raw samples pruned) and
+  were DELETED — PV history starts clean at 2026-09-14.
+- Tiles UI: equal heights (stretch chain through FlipTile + flex column,
+  money footer pinned via `margin-top: auto`), uniform right column (kWh
+  over €, `.src-kwh`/`.src-value` column). **`.back-bars` must stay
+  `position: absolute; inset: 0`** inside `.flip-back` (relative+overflow
+  hidden): ECharts writes its measured pixel height inline, and as normal
+  flow content that feeds back into the grid row height and grows without
+  bound (seen: 120 px → 4 812 px runaway).
+- Past periods (`/api/stats/period`): pvKwh from `pv_daily.to_home`,
+  bars carry the pv segment (BackBars already rendered it, data was 0).
+
 ## Consumption-by-source tiles (2026-09-12)
 
 - The Dashboard contains ONLY this section (old tiles — totals row, day
