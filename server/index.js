@@ -1453,7 +1453,7 @@ setInterval(async () => {
 // algorithm instead of the static Anker-app schedule (see power-plan.js).
 // Tick on every battery sync (10 s cadence); the controller itself decides
 // whether a rewrite is warranted.
-const powerPlan = new PowerPlanController(anker);
+const powerPlan = new PowerPlanController(anker, () => latestBattery ?? getLatestBattery());
 
 app.get("/api/power-plan", (req, res) => {
   res.json(powerPlan.getState());

@@ -99,6 +99,38 @@ async function fetchConfig(anker, getLiveBattery) {
   return config;
 }
 
+// Shared config resolver: 6 h cache (kv store), same cache the Battery tab
+// route reads/writes — so the power-plan controller and the Battery tab
+// never disagree about the account's configured charge/discharge limits.
+export async function resolveBatteryConfig(anker, getLiveBattery, { forceRefresh = false } = {}) {
+  const cached = kvGet(CONFIG_KV_KEY);
+  const fromCache = () =>
+    cached ? { ...cached.value, fetchedAt: cached.fetchedAt, source: "cache" } : null;
+  if (!forceRefresh && cached && Date.now() - cached.fetchedAt < CONFIG_TTL_MS) {
+    return fromCache();
+  }
+  if (!anker.configured) return fromCache();
+  try {
+    const fresh = await fetchConfig(anker, getLiveBattery);
+    kvSet(CONFIG_KV_KEY, fresh);
+    return { ...fresh, fetchedAt: Date.now(), source: "cloud" };
+  } catch (err) {
+    console.warn(`[battery-params] config fetch failed: ${err.message}`);
+    return fromCache(); // stale cache beats nothing
+  }
+}
+
+// Discharge floor (SOC%, "reserve") + charge ceiling (SOC%, "max charging")
+// for callers that only need the two limits, not the full config payload —
+// the power-plan controller uses these instead of guessing/hardcoding.
+export async function getBatteryLimits(anker, getLiveBattery) {
+  const config = await resolveBatteryConfig(anker, getLiveBattery);
+  return {
+    dischargeFloorPct: config?.dischargeLowerLimitPct ?? 10,
+    chargeCeilingPct: config?.chargeUpperLimitPct ?? 100,
+  };
+}
+
 export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
   app.get("/api/battery/params", async (req, res) => {
     const b = getLiveBattery() ?? null;
@@ -126,24 +158,9 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
         }
       : null;
 
-    let config = null;
-    const cached = kvGet(CONFIG_KV_KEY);
-    const fromCache = () =>
-      cached ? { ...cached.value, fetchedAt: cached.fetchedAt, source: "cache" } : null;
-    if (req.query.refresh !== "1" && cached && Date.now() - cached.fetchedAt < CONFIG_TTL_MS) {
-      config = fromCache();
-    } else if (anker.configured) {
-      try {
-        const fresh = await fetchConfig(anker, getLiveBattery);
-        kvSet(CONFIG_KV_KEY, fresh);
-        config = { ...fresh, fetchedAt: Date.now(), source: "cloud" };
-      } catch (err) {
-        console.warn(`[battery-params] config fetch failed: ${err.message}`);
-        config = fromCache(); // stale cache beats nothing
-      }
-    } else {
-      config = fromCache();
-    }
+    const config = await resolveBatteryConfig(anker, getLiveBattery, {
+      forceRefresh: req.query.refresh === "1",
+    });
 
     const fs = b?.featureSwitch ?? null;
     res.json({
