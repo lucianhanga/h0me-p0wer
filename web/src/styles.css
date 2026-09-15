@@ -513,6 +513,18 @@ pre {
   .tile-sub {
     font-size: 0.75rem;
   }
+
+  .src-home {
+    font-size: 1.2rem;
+  }
+
+  .src-produced {
+    font-size: 0.72rem;
+  }
+
+  .src-row {
+    font-size: 0.8rem;
+  }
 }
 
 .tile {
@@ -574,8 +586,28 @@ pre {
 .src-home {
   font-size: 1.4rem;
   font-weight: 600;
+  margin-bottom: 0.2rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Total PV production — a secondary stat, not a row in the flow list: it's
+   the SUM of "PV direct" + "To battery" below, so a colored dot matching
+   those rows would read as a third, double-counted flow into the house
+   total. Icon + muted text carries the identity instead of another hue. */
+.src-produced {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #8b98a5;
+  font-size: 0.78rem;
   margin-bottom: 0.6rem;
   font-variant-numeric: tabular-nums;
+}
+
+.src-produced-icon {
+  color: #5fce80;
+  font-size: 0.85rem;
+  line-height: 1;
 }
 
 .src-rows {

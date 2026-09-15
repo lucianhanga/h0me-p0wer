@@ -138,6 +138,12 @@ function SourceCard({ type, title, data, formatLabel }) {
           </button>
         </div>
         <div className="src-home">{active.homeKwh} kWh</div>
+        {active.pvProducedKwh != null && (
+          <div className="src-produced">
+            <span className="src-produced-icon">☀</span>
+            <span>{active.pvProducedKwh} kWh produced</span>
+          </div>
+        )}
         <div className="src-rows">
           {rows.map((r) => (
             <div className="src-row" key={r.key}>
