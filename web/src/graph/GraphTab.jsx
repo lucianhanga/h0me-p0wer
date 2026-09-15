@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import echarts from "../echarts.js";
 
-// Three focused graphs on Apache ECharts, one shared data manager:
+// Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
 //      stacked, Home line on top)
 //   2. Power Production — PV production and its split (→ battery / → home)
 //   3. Battery — charging vs discharging
-// All three share the visible window: span buttons + zoom/pan on any chart
-// move them together. No range sliders for now.
+// Span buttons and zoom/pan are PER GRAPH (independent windows). No range
+// sliders for now.
 const SHORTCUTS = [
   { label: "1h", ms: 3600 * 1000 },
   { label: "6h", ms: 6 * 3600 * 1000 },
@@ -22,7 +22,13 @@ const LIVE_EDGE_MS = 2 * 60 * 1000; // consider "live" when right edge within 2 
 // pass-through; PV splits exactly into charge + pass-through).
 const pvHomeOf = (r) => ((r.battOut ?? 0) > 0 ? Math.max(0, (r.pv ?? 0) - (r.battChg ?? 0)) : 0);
 const pvBattOf = (r) => Math.min(r.pv ?? 0, r.battChg ?? 0);
-const battCellsOf = (r) => Math.max(0, (r.battOut ?? 0) - pvHomeOf(r));
+// NET cells power: inverter out minus the PV pass-through, minus charge.
+// A battery can't charge and discharge its cells at once — bucket averages
+// over oscillating states must net, or the graphs show both at once
+// (reported 2026-09-15: battery graph showed charging AND discharging).
+const cellsNetOf = (r) => (r.battOut ?? 0) - pvHomeOf(r) - (r.battChg ?? 0);
+const battCellsOf = (r) => Math.max(0, cellsNetOf(r)); // discharging cells
+const battChgNetOf = (r) => Math.min(0, cellsNetOf(r)); // charging cells (neg)
 const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0));
 
 // Series per graph. `key` is either a raw row field or one of the derived
@@ -69,7 +75,7 @@ function rowValue(key, r, envelopeOn) {
     case "battCells":
       return battCellsOf(r);
     case "battChgNeg":
-      return r.battChg == null ? null : -r.battChg;
+      return battChgNetOf(r);
     case "home":
       return homeOf(r);
     case "gridMin":
@@ -82,17 +88,21 @@ function rowValue(key, r, envelopeOn) {
 
 export default function GraphTab() {
   const containerRefs = GRAPHS.map(() => useRef(null));
-  const apiRef = useRef(null); // { setSpan(ms) } for the span buttons
-  const [stats, setStats] = useState(null); // {avg, min, max, bucketMs}
-  const [activeMs, setActiveMs] = useState(24 * 3600 * 1000);
+  const apiRefs = useRef(GRAPHS.map(() => null)); // per-graph { setSpan(ms) }
+  // Per-graph UI state: stats line + which span preset is highlighted.
+  const [statsArr, setStatsArr] = useState(GRAPHS.map(() => null));
+  const [activeArr, setActiveArr] = useState(GRAPHS.map(() => 24 * 3600 * 1000));
 
   useEffect(() => {
     // Height comes from CSS (.chart-box-sm, incl. landscape rule) so rotation
     // resizes via the ResizeObservers — no width/height at init (pinned-size
     // rotation bug 2026-09-12).
     const isPhone = window.matchMedia("(max-width: 600px)").matches;
-    const charts = GRAPHS.map((def, i) => {
-      const chart = echarts.init(containerRefs[i].current, null, { renderer: "canvas" });
+
+    // Each graph is a self-contained unit: its own chart, rows, window,
+    // fetch/load cycle and live tick. Nothing is shared between graphs.
+    const units = GRAPHS.map((def, gi) => {
+      const chart = echarts.init(containerRefs[gi].current, null, { renderer: "canvas" });
       chart.setOption({
         animation: false,
         backgroundColor: "transparent",
@@ -167,233 +177,218 @@ export default function GraphTab() {
           selected: Object.fromEntries(def.legend.map((n) => [n, true])),
         },
       });
-      return chart;
-    });
 
-    let fetchTimer = null;
-    let programmatic = false; // true while we shift the window programmatically
-    let liveBusy = false; // skip overlapping live ticks
+      let fetchTimer = null;
+      let programmatic = false;
+      let liveBusy = false;
 
-    // Current visible window in ms (absolute values; null before first zoom).
-    function visibleWindow() {
-      const dz = charts[0].getOption().dataZoom?.[0];
-      if (dz?.startValue != null && dz?.endValue != null) {
-        return [Number(dz.startValue), Number(dz.endValue)];
+      function visibleWindow() {
+        const dz = chart.getOption().dataZoom?.[0];
+        if (dz?.startValue != null && dz?.endValue != null) {
+          return [Number(dz.startValue), Number(dz.endValue)];
+        }
+        return null;
       }
-      return null;
-    }
 
-    function setWindow(fromMs, toMs) {
-      programmatic = true; // don't let our own shift trigger a full refetch
-      for (const chart of charts) {
+      function setWindow(fromMs, toMs) {
+        programmatic = true;
         chart.dispatchAction({
           type: "dataZoom",
           startValue: Math.round(fromMs),
           endValue: Math.round(toMs),
         });
+        programmatic = false;
       }
-      programmatic = false;
-    }
 
-    // Current rows are kept in JS so live updates can append a few points
-    // instead of replacing the whole dataset (which caused visible flicker).
-    const rowsRef = { rows: [], bucketMs: 5000 };
-    let fetchSeq = 0; // stale-response guard: only the newest fetch may apply
+      const rowsRef = { rows: [], bucketMs: 5000 };
+      let fetchSeq = 0;
 
-    function applyRows(rows) {
-      // Resolution-aware envelope (best practice): per-bucket min/max is
-      // informative at fine zoom but renders as unrepresentative needles at
-      // coarse buckets. Above 5 min buckets it collapses to the mean.
-      const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
-      charts.forEach((chart, i) => {
+      function applyRows(rows) {
+        // Resolution-aware envelope: collapse to the mean above 5-min buckets.
+        const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
         chart.setOption({
-          series: GRAPHS[i].series.map((s) => ({
+          series: def.series.map((s) => ({
             name: s.name,
             data: rows.map((r) => [r.t, rowValue(s.key, r, envelopeOn)]),
           })),
         });
-      });
-    }
-
-    function updateStats(rows, bucketMs) {
-      const grids = rows.map((r) => r.grid).filter((v) => v != null);
-      const los = rows.map((r) => r.gridMin).filter((v) => v != null);
-      const his = rows.map((r) => r.gridMax).filter((v) => v != null);
-      setStats(
-        grids.length
-          ? {
-              avg: Math.round(grids.reduce((a, b) => a + b, 0) / grids.length),
-              min: Math.round(Math.min(...los)),
-              max: Math.round(Math.max(...his)),
-              bucketMs,
-            }
-          : null,
-      );
-    }
-
-    async function fetchTimeseries(params) {
-      try {
-        const payload = await fetch(`/api/timeseries?${params}`).then((r) => r.json());
-        return payload.ok ? payload : null;
-      } catch {
-        return null; // backend unreachable — keep old data
       }
-    }
 
-    async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
-      const seq = ++fetchSeq;
-      const payload = await fetchTimeseries(
-        `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`,
-      );
-      if (!payload || seq !== fetchSeq) return; // a newer fetch superseded us
-      rowsRef.rows = payload.data;
-      rowsRef.bucketMs = payload.bucketMs;
-      applyRows(payload.data);
-      updateStats(payload.data, payload.bucketMs);
-    }
+      function updateStats(rows, bucketMs) {
+        const grids = rows.map((r) => r.grid).filter((v) => v != null);
+        const los = rows.map((r) => r.gridMin).filter((v) => v != null);
+        const his = rows.map((r) => r.gridMax).filter((v) => v != null);
+        setStatsArr((arr) =>
+          arr.map((s, i) =>
+            i === gi
+              ? grids.length
+                ? {
+                    avg: Math.round(grids.reduce((a, b) => a + b, 0) / grids.length),
+                    min: Math.round(Math.min(...los)),
+                    max: Math.round(Math.max(...his)),
+                    bucketMs,
+                  }
+                : null
+              : s,
+          ),
+        );
+      }
 
-    // Refetch at a resolution matching the current window (debounced), with
-    // padding on both sides so panning feels instant.
-    function loadVisible() {
-      const win = visibleWindow();
-      if (!win) return;
-      const [fromMs, toMs] = win;
-      const pad = (toMs - fromMs) / 2;
-      loadRange(fromMs - pad, toMs + pad, toMs - fromMs);
-    }
+      async function fetchTimeseries(params) {
+        try {
+          const payload = await fetch(`/api/timeseries?${params}`).then((r) => r.json());
+          return payload.ok ? payload : null;
+        } catch {
+          return null; // backend unreachable — keep old data
+        }
+      }
 
-    function scheduleLoad() {
-      clearTimeout(fetchTimer);
-      fetchTimer = setTimeout(loadVisible, 250);
-    }
+      async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
+        const seq = ++fetchSeq;
+        const payload = await fetchTimeseries(
+          `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`,
+        );
+        if (!payload || seq !== fetchSeq) return;
+        rowsRef.rows = payload.data;
+        rowsRef.bucketMs = payload.bucketMs;
+        applyRows(payload.data);
+        updateStats(payload.data, payload.bucketMs);
+      }
 
-    // Zoom/pan on ANY chart moves all three together.
-    for (const chart of charts) {
+      function loadVisible() {
+        const win = visibleWindow();
+        if (!win) return;
+        const [fromMs, toMs] = win;
+        const pad = (toMs - fromMs) / 2;
+        loadRange(fromMs - pad, toMs + pad, toMs - fromMs);
+      }
+
+      function scheduleLoad() {
+        clearTimeout(fetchTimer);
+        fetchTimer = setTimeout(loadVisible, 250);
+      }
+
       chart.on("datazoom", () => {
         if (programmatic) return;
         scheduleLoad();
         const win = visibleWindow();
         if (win) {
-          setWindow(win[0], win[1]);
           const span = win[1] - win[0];
           const match = SHORTCUTS.find((s) => Math.abs(span - s.ms) / s.ms < 0.02);
-          setActiveMs(match?.ms ?? null);
+          setActiveArr((arr) => arr.map((a, i) => (i === gi ? (match?.ms ?? null) : a)));
         }
       });
-    }
 
-    // Span shortcut: fetch the span's data, then set the window by value —
-    // exact, no clamping-to-data games.
-    apiRef.current = {
-      async setSpan(ms) {
-        const to = Date.now();
-        const from = to - ms;
-        await loadRange(from, to);
-        setWindow(from, to);
-        setActiveMs(ms);
-      },
-    };
+      const unit = {
+        async setSpan(ms) {
+          const to = Date.now();
+          const from = to - ms;
+          await loadRange(from, to);
+          setWindow(from, to);
+          setActiveArr((arr) => arr.map((a, i) => (i === gi ? ms : a)));
+        },
+      };
+      apiRefs.current[gi] = unit;
 
-    // Initial view: last 24 h.
-    apiRef.current.setSpan(24 * 3600 * 1000);
+      // Initial view: last 24 h.
+      unit.setSpan(24 * 3600 * 1000);
 
-    // Keep the view fresh while watching the live edge: fetch only the NEW
-    // points since the last bucket and append them, then slide the window
-    // forward. Parked views in the past are left alone.
-    const liveTimer = setInterval(async () => {
-      if (liveBusy) return;
-      const win = visibleWindow();
-      if (!win) return;
-      const [fromMs, toMs] = win;
-      if (toMs < Date.now() - LIVE_EDGE_MS) return;
-      liveBusy = true;
-      try {
-        const width = toMs - fromMs;
-        const lastT = rowsRef.rows.length ? rowsRef.rows[rowsRef.rows.length - 1].t : fromMs;
-        const payload = await fetchTimeseries(
-          `from=${lastT + 1}&to=${Date.now()}&bucket=${rowsRef.bucketMs}`,
-        );
-        if (payload && payload.data.length) {
-          // Merge by timestamp (dedupe), keeping ~1.5 windows of history —
-          // robust against a full refetch landing while this tick was flying.
-          const cutoff = Date.now() - width * 1.5;
-          const byT = new Map();
-          for (const r of rowsRef.rows) if (r.t >= cutoff) byT.set(r.t, r);
-          for (const r of payload.data) byT.set(r.t, r);
-          rowsRef.rows = [...byT.values()].sort((a, b) => a.t - b.t);
-          applyRows(rowsRef.rows);
-          updateStats(rowsRef.rows, rowsRef.bucketMs);
+      // Keep the view fresh while watching the live edge.
+      const liveTimer = setInterval(async () => {
+        if (liveBusy) return;
+        const win = visibleWindow();
+        if (!win) return;
+        const [fromMs, toMs] = win;
+        if (toMs < Date.now() - LIVE_EDGE_MS) return;
+        liveBusy = true;
+        try {
+          const width = toMs - fromMs;
+          const lastT = rowsRef.rows.length ? rowsRef.rows[rowsRef.rows.length - 1].t : fromMs;
+          const payload = await fetchTimeseries(
+            `from=${lastT + 1}&to=${Date.now()}&bucket=${rowsRef.bucketMs}`,
+          );
+          if (payload && payload.data.length) {
+            const cutoff = Date.now() - width * 1.5;
+            const byT = new Map();
+            for (const r of rowsRef.rows) if (r.t >= cutoff) byT.set(r.t, r);
+            for (const r of payload.data) byT.set(r.t, r);
+            rowsRef.rows = [...byT.values()].sort((a, b) => a.t - b.t);
+            applyRows(rowsRef.rows);
+            updateStats(rowsRef.rows, rowsRef.bucketMs);
+          }
+          // Only slide the window if the right edge is still at the live edge.
+          const win2 = visibleWindow();
+          if (win2 && win2[1] >= Date.now() - LIVE_EDGE_MS) {
+            setWindow(Date.now() - width, Date.now());
+          }
+        } finally {
+          liveBusy = false;
         }
-        // The user may have panned away while the fetch was in flight —
-        // only slide the window if the right edge is still at the live edge.
-        const win2 = visibleWindow();
-        if (win2 && win2[1] >= Date.now() - LIVE_EDGE_MS) {
-          setWindow(Date.now() - width, Date.now());
-        }
-      } finally {
-        liveBusy = false;
-      }
-    }, 5000);
+      }, 5000);
 
-    // Background tabs get their timers throttled (Chrome: ~1/min), so the
-    // live window falls behind while hidden. On return, do an immediate full
-    // refresh of the current window instead of crawling back 5 s at a time.
-    const onVisible = () => {
-      if (document.visibilityState === "visible") scheduleLoad();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", onVisible);
+      const onVisible = () => {
+        if (document.visibilityState === "visible") scheduleLoad();
+      };
+      document.addEventListener("visibilitychange", onVisible);
+      window.addEventListener("focus", onVisible);
 
-    const resizeObserver = new ResizeObserver(() => charts.forEach((c) => c.resize()));
-    for (const ref of containerRefs) resizeObserver.observe(ref.current);
+      const resizeObserver = new ResizeObserver(() => chart.resize());
+      resizeObserver.observe(containerRefs[gi].current);
+
+      return {
+        dispose() {
+          clearInterval(liveTimer);
+          clearTimeout(fetchTimer);
+          document.removeEventListener("visibilitychange", onVisible);
+          window.removeEventListener("focus", onVisible);
+          resizeObserver.disconnect();
+          chart.dispose();
+        },
+      };
+    });
 
     return () => {
-      clearInterval(liveTimer);
-      clearTimeout(fetchTimer);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", onVisible);
-      resizeObserver.disconnect();
-      apiRef.current = null;
-      for (const chart of charts) chart.dispose();
+      for (const u of units) u.dispose();
+      apiRefs.current = GRAPHS.map(() => null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div>
-      <div className="controls">
-        {SHORTCUTS.map((s) => (
-          <button
-            key={s.label}
-            className={activeMs === s.ms ? "span-active" : ""}
-            onClick={() => apiRef.current?.setSpan(s.ms)}
-          >
-            {s.label}
-          </button>
-        ))}
-        <button
-          onClick={() => apiRef.current?.setSpan(24 * 3600 * 1000)}
-          title="Back to the last 24 hours"
-        >
-          Reset
-        </button>
-        {stats && (
-          <span className="muted" style={{ marginLeft: "auto" }}>
-            avg {stats.avg} W · min {stats.min} W · max {stats.max} W ·{" "}
-            {stats.bucketMs < 60000
-              ? `${stats.bucketMs / 1000}s`
-              : `${(stats.bucketMs / 60000).toFixed(1)}min`}{" "}
-            resolution
-          </span>
-        )}
-      </div>
       {GRAPHS.map((def, i) => (
         <section key={def.title}>
           <h4>{def.title}</h4>
+          <div className="controls">
+            {SHORTCUTS.map((s) => (
+              <button
+                key={s.label}
+                className={activeArr[i] === s.ms ? "span-active" : ""}
+                onClick={() => apiRefs.current[i]?.setSpan(s.ms)}
+              >
+                {s.label}
+              </button>
+            ))}
+            <button
+              onClick={() => apiRefs.current[i]?.setSpan(24 * 3600 * 1000)}
+              title="Back to the last 24 hours"
+            >
+              Reset
+            </button>
+            {statsArr[i] && (
+              <span className="muted" style={{ marginLeft: "auto" }}>
+                avg {statsArr[i].avg} W ·{" "}
+                {statsArr[i].bucketMs < 60000
+                  ? `${statsArr[i].bucketMs / 1000}s`
+                  : `${(statsArr[i].bucketMs / 60000).toFixed(1)}min`}{" "}
+                res
+              </span>
+            )}
+          </div>
           <div ref={containerRefs[i]} className="chart-box-sm" />
         </section>
       ))}
-      <p className="muted">drag to pan · scroll to zoom — all three graphs move together</p>
+      <p className="muted">drag to pan · scroll to zoom — each graph has its own window</p>
     </div>
   );
 }
