@@ -2,7 +2,7 @@
   "name": "h0me-p0wer",
   "short_name": "h0me-p0wer",
   "start_url": ".",
-  "display": "standalone",
+  "display": "browser",
   "background_color": "#101418",
   "theme_color": "#101418",
   "icons": [
