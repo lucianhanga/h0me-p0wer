@@ -141,6 +141,10 @@ export class PowerPlanController {
   // Called on every battery sync with the latest scen_info payload.
   async tick(info) {
     if (!this.enabled || !info || !this.anker.siteId) return;
+    // Never act on stale samples: right after a (re)start the DB/MQTT merge
+    // can hand us an old reading, and a prompt step-down on that once wrote
+    // a bogus 100 W preset (2026-09-15).
+    if (!info.ts || Date.now() - info.ts > 30 * 1000) return;
     const pvW = info.pvW ?? 0;
     const demandW = info.homeLoadW ?? null;
     const soc = info.soc ?? null;
