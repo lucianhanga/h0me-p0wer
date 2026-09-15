@@ -398,20 +398,45 @@ EPIPE noise on every client disconnect).
   prices, so each row carries its snapshot date; `estimated: true` rows are
   guesses (Amazon blocks price scraping) the user should correct by hand.
   The UI flags them with "~".
-- **Savings model**: per finished day (today excluded),
+- **Savings model (measured/actual)**: per finished day (today excluded),
   `saved = (pv_daily.to_home + cells discharge) × TARIFF_EUR_PER_KWH`.
   Cells discharge = battery cloud day-trend positive integral (20-min power
   × 20/60/1000) — per the dashboard channel audit the trend is ALREADY
   cells-only, so it never overlaps the PV channel (do NOT subtract
-  pvToHome here).
+  pvToHome here). Display-only: `measuredAvgDailySavingsEur`, `measuredDays`,
+  `savingsSoFarEur`, `series` — the ACTUAL comparison, NOT the ROI basis.
+- **Baseline ("set in stone", 2026-09-15)**: ALL forward-looking numbers
+  (payback, projections, forecast) come from a persisted baseline in
+  `server/roi-baseline.js`, kv key `roi_baseline`. Computed ONCE on first
+  `/api/roi` call (`getBaseline()` initializes when missing) and recomputed
+  ONLY via `POST /api/roi/baseline/refresh` (the tab's ↻ button, confirm()
+  first) — never on a schedule, never day-to-day. `computeBaseline()` asks
+  the AI (same client/config as welcome: `parseWelcomeConfig` + `fetchJson`,
+  json_schema → json_schema → json_object, 60 s) for a CONSERVATIVE
+  `{annualPvKwh, selfConsumptionRatio, annualSavingsEur, monthlyDistribution,
+  reasoning}` fed with PV config + PVGIS climatology + tariff + measured
+  avg daily import + the noisy measured savings (weak signal only).
+  Validation: ratio clamped 0.3–0.95, `annualPvKwh` capped at the PVGIS
+  yearly figure, distribution normalized to sum exactly 1, and
+  `annualSavingsEur` is ALWAYS re-derived (`annualPvKwh × ratio × tariff`)
+  so the numbers can't disagree. Fallback when the AI/key/PVGIS is down:
+  PVGIS yearly kWh, ratio 0.75, PVGIS monthly shape → `source:
+  "pvgis-fallback"` vs `"ai"` (hardcoded Munich climatology if even
+  HOME_ADDRESS is missing).
 - `installDate` = earliest day with savings data (first `pv_daily` row or
   first battery day-trend), fallback 2026-09-07 (meter link date).
-  Payback = installDate + invested/avgDailySavings; projections for
-  1/2/3/5/10/15 years assume the measured daily average, constant tariff,
-  no degradation.
-- Amortization chart: cumulative savings (solid measured / dashed
-  projection) vs. invested markLine, break-even markPoint at the payback
-  date. Styles: `.roi-*` at the end of styles.css.
+  **Forecast** (`forecastSeries`): cumulative €/day from installDate until
+  the invested sum is crossed + ~6 months margin (hard cap 25 y); each day's
+  increment = `(annualSavingsEur/365) × monthlyDistribution[month] × 12`
+  (month's share vs. an average month → seasonally shaped; a full year sums
+  to the annual figure up to the ≤1% day-count wobble). `paybackDate`/
+  `daysToPayback` = where the FORECAST crosses invested; `projections[]`
+  1/2/3/5/10/15 y = `annualSavingsEur × years`; constant tariff, no
+  degradation.
+- Amortization chart: measured cumulative (solid green) + forecast
+  cumulative (dashed blue, seasonal wave visible) vs. invested markLine,
+  break-even markPoint where the FORECAST crosses invested. Legend for both
+  lines. Styles: `.roi-*` at the end of styles.css.
 - **Product images + BOM PDF (2026-09-15)**: cached pictures in
   `server/roi-images/<ASIN>.jpg` (committed, ≤400px JPEG via `sips`) served
   by `GET /api/roi/image/:asin` (immutable cache; 404 = 1×1 GIF so `<img>`
