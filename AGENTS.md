@@ -317,10 +317,18 @@ EPIPE noise on every client disconnect).
   PV ≤ preset → all PV to home, cells top up the difference; PV > preset →
   preset to home, surplus charges the battery. Example: preset 600, PV 600
   → out 600, charge 0, grid covers the rest.
-- **Algorithm**: PV=0 → `min(800, houseDemand)`; PV>0 →
-  `min(floor(PV/100)*100, houseDemand)`; SOC ≥ 99 → `min(PV, houseDemand)`;
+- **Algorithm**: PV=0 → `min(800, houseDemand)`; PV>0 → `min(PV, houseDemand)`
+  (also covers battery-full — same formula, no separate branch needed);
   clamp to [0, max_load], floor to step (10 W). Inputs from `scen_info`
   (`pvW`, `homeLoadW`, `soc`) on the 10 s battery sync.
+  **Fixed 2026-09-15 (PV-rounding waste)**: the original PV>0 branch was
+  `min(floor(PV/100)*100, houseDemand)` — flooring PV to the nearest 100 W
+  rounded the preset BELOW actual PV even when PV < houseDemand, so up to
+  99 W of legitimate under-demand PV got misrouted to charge the battery for
+  zero cycling benefit (target was already ≤ PV either way, so cells never
+  engaged in this branch regardless of the floor). `min(PV, houseDemand)`
+  sends 100% of PV to the house whenever PV ≤ demand, and still routes only
+  the true excess (PV > demand) to the battery.
 - **Write discipline**: only on ≥ 50 W change, ≥ 30 s between writes,
   asymmetric hysteresis (2026-09-15): step DOWN promptly (a preset above
   current PV is served from the CELLS — the jojo this kills), step UP only
