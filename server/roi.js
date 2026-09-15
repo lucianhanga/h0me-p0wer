@@ -32,12 +32,12 @@ function loadBom() {
   }
 }
 
-// Battery cells-only discharge kWh for one date: integrate the battery SN's
-// cloud day-trend (signed 20-min power, discharge +), positive part only,
-// then subtract the PV pass-through (pv_daily.to_home) — the trend is the
-// INVERTER output, so adding raw discharge + PV-to-home would double-count
-// PV (validated flow model, see AGENTS.md).
-function cellsKwhForDay(battSn, dateStr, pvToHomeKwh) {
+// Battery cells discharge kWh for one date: integrate the battery SN's
+// cloud day-trend (signed 20-min power, discharge +), positive part only.
+// The trend is ALREADY cells-only (verified numerically in the dashboard
+// channel audit: cloud 0.41 ≈ local cells 0.34, NOT the inverter output),
+// so it never overlaps the PV channel — do NOT subtract pvToHome here.
+function cellsKwhForDay(battSn, dateStr) {
   if (!battSn) return { cellsKwh: 0, hasRows: false };
   const rows = getCloudTrend(battSn, "day", dateStr).rows;
   let disKwh = 0;
@@ -45,7 +45,7 @@ function cellsKwhForDay(battSn, dateStr, pvToHomeKwh) {
     if (r.power == null || r.power <= 0) continue;
     disKwh += (r.power * (20 / 60)) / 1000;
   }
-  return { cellsKwh: Math.max(0, disKwh - pvToHomeKwh), hasRows: rows.length > 0 };
+  return { cellsKwh: disKwh, hasRows: rows.length > 0 };
 }
 
 export function registerRoiRoute(app, deps = {}) {
@@ -77,7 +77,7 @@ export function registerRoiRoute(app, deps = {}) {
     for (let t = startMs; t <= endMs; t += 86400000) {
       const date = localDate(new Date(t));
       const pvToHomeKwh = pvByDate.get(date)?.to_home ?? 0;
-      const { cellsKwh, hasRows } = cellsKwhForDay(battSn, date, pvToHomeKwh);
+      const { cellsKwh, hasRows } = cellsKwhForDay(battSn, date);
       if (pvByDate.has(date) || hasRows) measuredDays++;
       const savedEur = r2((pvToHomeKwh + cellsKwh) * tariff);
       savingsSoFar = r2(savingsSoFar + savedEur);

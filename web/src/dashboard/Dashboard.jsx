@@ -63,16 +63,19 @@ export default function Dashboard() {
   );
 }
 
-// Consumption-by-source card: house total on top, then the three sources
-// with the same colors as the chart (grid/battery/PV). Grid € = spent,
-// battery/PV € = saved (avoided grid import at the same tariff).
+// Consumption-by-source card: house total on top, then the source rows with
+// the same colors as the chart (grid/battery/PV). Grid € = spent, battery/PV
+// € = saved (avoided grid import at the same tariff). Today additionally has
+// a "To battery" row (PV loaded into the battery — informational, no €: the
+// savings are booked when the battery discharges, never twice).
 // ‹ › in the title row navigates the card through past periods
 // (/api/stats/period, offset ≥ 1); flip side shows the same period's bars.
 const SRC_ROWS = [
   { key: "gridKwh", eur: "gridEur", label: "Grid", color: "#f7a44f" },
-  { key: "battKwh", eur: "battEur", label: "Battery", color: "#c084fc", saved: true },
-  { key: "pvKwh", eur: "pvEur", label: "PV", color: "#5fce80", saved: true },
+  { key: "pvKwh", eur: "pvEur", label: "PV direct", color: "#5fce80", saved: true },
+  { key: "battKwh", eur: "battEur", label: "From battery", color: "#c084fc", saved: true },
 ];
+const BATT_IN_ROW = { key: "battInKwh", label: "To battery", color: "#8b98a5", stored: true };
 
 function SourceCard({ type, title, data, formatLabel }) {
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
@@ -104,6 +107,8 @@ function SourceCard({ type, title, data, formatLabel }) {
 
   const active = offset === 0 || !past ? data : past;
   const savedEur = Math.round((active.battEur + active.pvEur) * 100) / 100;
+  // Today (offset 0) also reports PV→battery; past periods don't have it.
+  const rows = active.battInKwh != null ? [...SRC_ROWS, BATT_IN_ROW] : SRC_ROWS;
   return (
     <FlipTile back={<BackBars rows={active.bars} formatLabel={formatLabel} />}>
       <div className="tile">
@@ -134,15 +139,14 @@ function SourceCard({ type, title, data, formatLabel }) {
         </div>
         <div className="src-home">{active.homeKwh} kWh</div>
         <div className="src-rows">
-          {SRC_ROWS.map((r) => (
+          {rows.map((r) => (
             <div className="src-row" key={r.key}>
               <span className="src-dot" style={{ background: r.color }} />
-              <span>{r.label}</span>
+              <span className="src-label">{r.label}</span>
               <span className="src-value">
-                {active[r.key]} kWh
+                <span className="src-kwh">{active[r.key]} kWh</span>
                 <span className="src-eur">
-                  · €{active[r.eur]}
-                  {r.saved ? " saved" : ""}
+                  {r.stored ? "stored" : `€${active[r.eur]}${r.saved ? " saved" : ""}`}
                 </span>
               </span>
             </div>

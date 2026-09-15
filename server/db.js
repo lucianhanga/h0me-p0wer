@@ -208,6 +208,10 @@ const selectBatterySince = db.prepare(`
   SELECT * FROM battery_snapshots WHERE ts >= ? ORDER BY ts ASC
 `);
 
+const selectBatteryBetween = db.prepare(`
+  SELECT * FROM battery_snapshots WHERE ts >= ? AND ts < ? ORDER BY ts ASC
+`);
+
 export function saveBatterySnapshot(b) {
   insertBattery.run(b.ts, b.soc, b.outputW, b.chargeW, b.pvW, b.toHomeW, b.pv1W ?? 0, b.pv2W ?? 0);
 }
@@ -229,8 +233,13 @@ export function getLatestBattery() {
   };
 }
 
-export function getBatteryHistory(sinceMs) {
-  return selectBatterySince.all(sinceMs);
+// untilMs is optional but pass it whenever a day boundary matters — without
+// it the query runs up to NOW, which once silently polluted the pv_daily
+// rollup with the following days' production (2026-09-15).
+export function getBatteryHistory(sinceMs, untilMs = null) {
+  return untilMs == null
+    ? selectBatterySince.all(sinceMs)
+    : selectBatteryBetween.all(sinceMs, untilMs);
 }
 
 // Per-string PV energy for a local day (kWh), trapezoid over the 10 s
