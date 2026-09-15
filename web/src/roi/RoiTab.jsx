@@ -89,7 +89,14 @@ export default function RoiTab() {
           </a>
         </div>
         {data.bom.map((r) => (
-          <div className="roi-bom-row" key={r.asin}>
+          <a
+            className="roi-bom-row"
+            key={r.asin}
+            href={r.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`${r.name} — open on Amazon`}
+          >
             <img className="roi-bom-thumb" src={`/api/roi/image/${r.asin}`} alt="" loading="lazy" />
             <span className="roi-bom-name">
               {r.estimated ? <span className="roi-est">~</span> : null}
@@ -101,7 +108,7 @@ export default function RoiTab() {
               </span>
               <span className="roi-bom-price">{fmtEur(r.lineTotalEur)}</span>
             </span>
-          </div>
+          </a>
         ))}
         <div className="roi-total-row">
           <span>Total invested</span>
