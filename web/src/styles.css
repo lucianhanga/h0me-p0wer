@@ -739,10 +739,27 @@ pre {
     height: calc(100dvh - 100px);
   }
 
+  .chart-box-sm {
+    height: calc((100dvh - 220px) / 3);
+    min-height: 70px;
+  }
+
   /* The hint line under the chart costs height the landscape phone
      doesn't have (it was already being clipped by the viewport). */
   .chart-box + p {
     display: none;
+  }
+}
+
+/* Smaller boxes for the three-graph layout (Graph tab). */
+.chart-box-sm {
+  width: 100%;
+  height: 220px;
+}
+
+@media (max-width: 600px) {
+  .chart-box-sm {
+    height: 140px;
   }
 }
 
