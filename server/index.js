@@ -35,6 +35,9 @@ import {
   getBatteryHistory,
   getPvStringKwhForDay,
   integrateBatteryEnergy,
+  saveCloudPvTrend,
+  getCloudPvDayPower,
+  sumCloudEnergyInGaps,
   pruneBattery,
   savePvDaily,
   getPvDaily,
@@ -762,22 +765,55 @@ app.get("/api/stats/overview", (req, res) => {
 
   // --- Battery (Solarbank) today: SOC + integrated discharge/charge/PV kWh
   // from the 30-s live snapshots — shared trapezoid + gap policy, see
-  // integrateBatteryEnergy (db.js). todayDataCoveragePct reports how much of
-  // today's elapsed window actually had continuous data (2026-09-16: a real
-  // ~5h battery-telemetry outage silently zeroed today's PV production with
+  // integrateBatteryEnergy (db.js). A real ~5h battery-telemetry outage
+  // (2026-09-16, see AGENTS.md) silently zeroed today's PV production with
   // no way to tell "measured, genuinely low" from "measured, but a chunk of
-  // the day is missing" — see AGENTS.md).
+  // the day is missing." Fix has two parts: (1) dischargedKwh/chargedKwh/
+  // pvKwh (standalone totals, safe to recover) get backfilled from Anker's
+  // own cloud day-trends for exactly the gap windows — the cloud has this
+  // data regardless of whether OUR poller was running. (2) pvToHomeKwh/
+  // pvToBattKwh are a DERIVED SPLIT that can't be reconstructed the same
+  // way (the cloud only reports totals, not the home/battery split), so
+  // those deliberately stay local-only/conservative — backfilling
+  // dischargedKwh without a matching pvToHomeKwh backfill would otherwise
+  // inflate todayCellsKwh (= dischargedKwh − pvToHomeKwh) below.
   const battRows = getBatteryHistory(dayStartMs, now);
-  const battEnergy = integrateBatteryEnergy(battRows);
-  const dischargedKwh = battEnergy.dischargedKwh;
-  const chargedKwh = battEnergy.chargedKwh;
-  const pvKwh = battEnergy.producedKwh;
+  const todayDateStr = localDate(new Date(dayStartMs));
+  const battEnergy = integrateBatteryEnergy(battRows, {
+    windowStartMs: dayStartMs,
+    windowEndMs: now,
+  });
   const pvToHomeKwh = battEnergy.toHomeKwh;
   const pvToBattKwh = battEnergy.toBattKwh;
+  let dischargedKwh = battEnergy.dischargedKwh;
+  let chargedKwh = battEnergy.chargedKwh;
+  let pvKwh = battEnergy.producedKwh;
+  let recoveredMs = 0;
+  if (battEnergy.gaps.length) {
+    const cloudPvRows = getCloudPvDayPower(todayDateStr, todayDateStr);
+    pvKwh = Math.round((pvKwh + sumCloudEnergyInGaps(cloudPvRows, battEnergy.gaps)) * 100) / 100;
+    if (cloudPvRows.some((r) => battEnergy.gaps.some((g) => r.ts >= g.startMs && r.ts < g.endMs))) {
+      recoveredMs += battEnergy.gaps.reduce((a, g) => a + (g.endMs - g.startMs), 0);
+    }
+    if (battSn) {
+      const cloudBattRows = getCloudDayPower(battSn, todayDateStr, todayDateStr);
+      let gapDis = 0;
+      let gapChg = 0;
+      for (const r of cloudBattRows) {
+        if (r.power == null) continue;
+        if (!battEnergy.gaps.some((g) => r.ts >= g.startMs && r.ts < g.endMs)) continue;
+        const kwh = (r.power * (20 / 60)) / 1000;
+        if (kwh >= 0) gapDis += kwh;
+        else gapChg += -kwh;
+      }
+      dischargedKwh = Math.round((dischargedKwh + gapDis) * 100) / 100;
+      chargedKwh = Math.round((chargedKwh + gapChg) * 100) / 100;
+    }
+  }
   const todayElapsedMs = Math.max(1, now - dayStartMs);
   const todayDataCoveragePct = Math.max(
     0,
-    Math.min(100, Math.round((battEnergy.coveredMs / todayElapsedMs) * 100)),
+    Math.min(100, Math.round(((battEnergy.coveredMs + recoveredMs) / todayElapsedMs) * 100)),
   );
   const battLatest = latestBattery ?? getLatestBattery();
   const battery = battLatest
@@ -831,7 +867,13 @@ app.get("/api/stats/overview", (req, res) => {
   // that energy counts when it comes back as cells discharge.
   const r2 = (v) => Math.round(v * 100) / 100;
   const todayDs = localDate();
-  const todayCellsKwh = Math.max(0, r2(dischargedKwh - pvToHomeKwh));
+  // Deliberately battEnergy.dischargedKwh (LOCAL-ONLY), not the backfilled
+  // `dischargedKwh` above — cells = discharge − PV-passthrough, and only
+  // discharge got a cloud backfill (no matching pvToHomeKwh backfill
+  // exists), so subtracting the backfilled figure here would inflate
+  // today's "From battery" savings for any gap window. See the battery
+  // block's comment above.
+  const todayCellsKwh = Math.max(0, r2(battEnergy.dischargedKwh - pvToHomeKwh));
   const todayPvBattKwh = r2(pvToBattKwh);
   const pvDayKwh = (dateStr) =>
     dateStr === todayDs ? r2(pvToHomeKwh) : (getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0);
@@ -863,10 +905,12 @@ app.get("/api/stats/overview", (req, res) => {
       pvProducedKwh: r2(pvKwh),
       // "Loaded into the battery" (from PV) — informational, no € attached.
       battInKwh: todayPvBattKwh,
-      // % of today's elapsed time actually covered by continuous telemetry
-      // (see integrateBatteryEnergy) — below 100 means a real gap dropped
-      // some of today's battery/PV numbers rather than under-measuring a
-      // genuinely quiet day. UI should flag low values, not hide them.
+      // % of today's elapsed time covered by continuous LOCAL telemetry OR
+      // successfully backfilled from Anker's cloud (see integrateBatteryEnergy
+      // + the battery block above) — pvProducedKwh/battKwh are already
+      // corrected for any gap this covers, so a value below 100 here means
+      // even the cloud couldn't fill it (a rarer, more serious case: the
+      // account/cloud was unreachable too), not just "today looks quiet."
       dataCoveragePct: todayDataCoveragePct,
     },
     week: {
@@ -1307,6 +1351,31 @@ async function syncCloudHistory() {
         saveCloudTrend(latestBattery.sn, "day", day, rows);
       } catch (err) {
         console.warn(`[cloud-sync] battery day ${day} failed: ${err.message}`);
+      }
+    }
+
+    // PV production day trend, site-level device_type "solar_production" —
+    // ground truth for backfilling local battery_snapshots gaps
+    // (integrateBatteryEnergy's gaps, see /api/stats/overview and
+    // AGENTS.md 2026-09-16): Anker's cloud records this independently of
+    // whether OUR poller was running. Kept in its own table (cloud_pv_history)
+    // since it's site-wide, not per-device — see saveCloudPvTrend.
+    for (const dayOffset of [0, 1]) {
+      const d = new Date(now.getTime() - dayOffset * 86400000);
+      const day = iso(d);
+      try {
+        const data = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          deviceSn: latestBattery.sn ?? "",
+          deviceType: "solar_production",
+          type: "day",
+          startTime: day,
+          endTime: "",
+        });
+        const rows = (data?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
+        saveCloudPvTrend("day", day, rows);
+      } catch (err) {
+        console.warn(`[cloud-sync] solar production day ${day} failed: ${err.message}`);
       }
     }
   }

@@ -266,7 +266,15 @@ export function getBatteryHistory(sinceMs, untilMs = null) {
 // `coveredMs` reports how much of the requested window actually had
 // continuous data, so callers can surface "partial data" instead of quietly
 // presenting an undercounted total as if it were the whole day.
-export function integrateBatteryEnergy(rows, { maxGapMs = 30 * 60 * 1000 } = {}) {
+// windowStartMs/windowEndMs are optional — pass them (the caller's day
+// start and "now") to also detect a LEADING gap (server was already down
+// when the window began, e.g. an overnight crash) or a TRAILING gap (still
+// down right now). Without them, only gaps strictly BETWEEN two known
+// readings are detected.
+export function integrateBatteryEnergy(
+  rows,
+  { maxGapMs = 30 * 60 * 1000, windowStartMs, windowEndMs } = {},
+) {
   let dischargedKwh = 0;
   let chargedKwh = 0;
   let producedKwh = 0;
@@ -275,9 +283,19 @@ export function integrateBatteryEnergy(rows, { maxGapMs = 30 * 60 * 1000 } = {})
   let pv1Kwh = 0;
   let pv2Kwh = 0;
   let coveredMs = 0;
+  const gaps = []; // [{startMs, endMs}] — excluded windows, for cloud backfill
+  if (windowStartMs != null && windowEndMs != null && !rows.length) {
+    gaps.push({ startMs: windowStartMs, endMs: windowEndMs });
+  }
+  if (windowStartMs != null && rows.length && rows[0].ts - windowStartMs > maxGapMs) {
+    gaps.push({ startMs: windowStartMs, endMs: rows[0].ts });
+  }
   for (let i = 1; i < rows.length; i++) {
     const dtMs = rows[i].ts - rows[i - 1].ts;
-    if (dtMs > maxGapMs) continue;
+    if (dtMs > maxGapMs) {
+      gaps.push({ startMs: rows[i - 1].ts, endMs: rows[i].ts });
+      continue;
+    }
     coveredMs += dtMs;
     const dt = dtMs / 3600000;
     const a = rows[i - 1];
@@ -297,6 +315,10 @@ export function integrateBatteryEnergy(rows, { maxGapMs = 30 * 60 * 1000 } = {})
     const tb1 = Math.min(b.pv_w ?? 0, b.charge_w ?? 0);
     toBattKwh += ((tb0 + tb1) / 2) * dt / 1000;
   }
+  if (windowEndMs != null && rows.length) {
+    const lastTs = rows[rows.length - 1].ts;
+    if (windowEndMs - lastTs > maxGapMs) gaps.push({ startMs: lastTs, endMs: windowEndMs });
+  }
   const r2 = (v) => Math.round(v * 100) / 100;
   return {
     dischargedKwh: r2(dischargedKwh),
@@ -307,6 +329,7 @@ export function integrateBatteryEnergy(rows, { maxGapMs = 30 * 60 * 1000 } = {})
     pv1Kwh: r2(pv1Kwh),
     pv2Kwh: r2(pv2Kwh),
     coveredMs,
+    gaps,
   };
 }
 
@@ -449,6 +472,66 @@ export function getCloudDayPower(sn, fromDate, toDate) {
     ts: new Date(`${r.period_start}T${r.label}`).getTime(),
     power: r.power,
   }));
+}
+
+// --- Cloud PV production day-trend (site-level "solar_production" energy
+// analysis, device_type is site-wide so there's no per-device SN to key on)
+// — a ground-truth backfill source for gaps in local battery_snapshots
+// telemetry. Anker's own cloud records PV production independently of
+// whether OUR poller was running, so a local outage (2026-09-16, see
+// AGENTS.md) doesn't have to mean permanently undercounted totals. Kept in
+// its own table rather than reusing cloud_history: that table's device_sn
+// column is used elsewhere (getBatterySn) to mean "the one non-meter SN
+// seen" — adding a synthetic PV key there would break that assumption.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS cloud_pv_history (
+    period_type TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    label TEXT NOT NULL,
+    power REAL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (period_type, period_start, label)
+  )
+`);
+
+const upsertCloudPvRow = db.prepare(`
+  INSERT OR REPLACE INTO cloud_pv_history (period_type, period_start, label, power, fetched_at)
+  VALUES (?, ?, ?, ?, ?)
+`);
+
+export function saveCloudPvTrend(type, start, dataTrend) {
+  const now = Date.now();
+  for (const t of dataTrend) {
+    upsertCloudPvRow.run(type, start, t.time, num(t.power), now);
+  }
+}
+
+const selectCloudPvDayRows = db.prepare(`
+  SELECT period_start, label, power FROM cloud_pv_history
+  WHERE period_type = 'day' AND period_start >= ? AND period_start <= ?
+`);
+
+export function getCloudPvDayPower(fromDate, toDate) {
+  return selectCloudPvDayRows.all(fromDate, toDate).map((r) => ({
+    ts: new Date(`${r.period_start}T${r.label}`).getTime(),
+    power: r.power,
+  }));
+}
+
+// Sum cloud-reported power (20-min buckets, instantaneous-average
+// convention — see getCloudDayPower) that falls inside any of the given
+// local-data gaps (integrateBatteryEnergy's `gaps`). Recovers exactly the
+// missing portion without double-counting time the local trapezoid already
+// covered more precisely.
+export function sumCloudEnergyInGaps(cloudRows, gaps) {
+  if (!gaps.length) return 0;
+  let kwh = 0;
+  for (const r of cloudRows) {
+    if (r.power == null) continue;
+    if (!gaps.some((g) => r.ts >= g.startMs && r.ts < g.endMs)) continue;
+    kwh += (r.power * (20 / 60)) / 1000;
+  }
+  return Math.round(kwh * 100) / 100;
 }
 
 // --- Welcome tab: key-value cache (geocode, PVGIS, AI result) --------------
