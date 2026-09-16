@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
+// Rendered inside StrategyTab.jsx (moved out of its own top-level tab
+// 2026-09-16) — the gauge stays visible, the detailed param cards below
+// collapse by default (same .details-toggle pattern as PowerPlanCard.jsx).
+
 const fmtW = (v) => (v == null ? "—" : `${Math.round(v)} W`);
 const fmtPct = (v) => (v == null ? "—" : `${v} %`);
 const fmtTemp = (v) => (v == null ? "—" : `${Math.round(v)} °C`);
@@ -26,6 +30,7 @@ export default function BatteryTab() {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const load = (refresh = false) =>
     fetch(`/api/battery/params${refresh ? "?refresh=1" : ""}`)
@@ -136,66 +141,71 @@ export default function BatteryTab() {
         )}
       </div>
 
-      <div className="param-cards">
-        <div className="card">
-          <div className="card-label">
-            Configuration
-            <button
-              className={`wx-refresh${refreshing ? " spinning" : ""}`}
-              disabled={refreshing}
-              title="refetch device configuration from the cloud"
-              onClick={() => {
-                setRefreshing(true);
-                load(true);
-              }}
-            >
-              ↻
-            </button>
-          </div>
-          <ParamRow k="Charge upper limit" v={fmtPct(config?.chargeUpperLimitPct)} />
-          <ParamRow k="Discharge lower limit" v={fmtPct(config?.dischargeLowerLimitPct)} />
-          <ParamRow
-            k="Backup reserve"
-            v={
-              config?.backupReservePct != null
-                ? `${config.backupReservePct} % · ${onOff(config.backupReserveSwitch)}`
-                : "—"
-            }
-          />
-          <ParamRow
-            k="Limits source"
-            v={
-              <span
-                className={`badge ${["power_cutoff", "account"].includes(config?.limitsSource) ? "ok" : "warn"}`}
+      <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        Battery information <span className="chevron">{open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div className="param-cards">
+          <div className="card">
+            <div className="card-label">
+              Configuration
+              <button
+                className={`wx-refresh${refreshing ? " spinning" : ""}`}
+                disabled={refreshing}
+                title="refetch device configuration from the cloud"
+                onClick={() => {
+                  setRefreshing(true);
+                  load(true);
+                }}
               >
-                {config?.limitsSource ?? "unknown"}
-              </span>
-            }
-          />
-          <ParamRow k="Zero-export (0w feed)" v={onOff(features?.zeroExport)} />
-          <ParamRow k="SOC calibration" v={onOff(config?.socCalibrationEnable)} />
-          <ParamRow
-            k="Config fetched"
-            v={`${fmtTime(config?.fetchedAt)}${config?.source ? ` · ${config.source}` : ""}`}
-          />
-          {config?.station && (
-            <div className="param-raw">station: {JSON.stringify(config.station)}</div>
-          )}
-        </div>
+                ↻
+              </button>
+            </div>
+            <ParamRow k="Charge upper limit" v={fmtPct(config?.chargeUpperLimitPct)} />
+            <ParamRow k="Discharge lower limit" v={fmtPct(config?.dischargeLowerLimitPct)} />
+            <ParamRow
+              k="Backup reserve"
+              v={
+                config?.backupReservePct != null
+                  ? `${config.backupReservePct} % · ${onOff(config.backupReserveSwitch)}`
+                  : "—"
+              }
+            />
+            <ParamRow
+              k="Limits source"
+              v={
+                <span
+                  className={`badge ${["power_cutoff", "account"].includes(config?.limitsSource) ? "ok" : "warn"}`}
+                >
+                  {config?.limitsSource ?? "unknown"}
+                </span>
+              }
+            />
+            <ParamRow k="Zero-export (0w feed)" v={onOff(features?.zeroExport)} />
+            <ParamRow k="SOC calibration" v={onOff(config?.socCalibrationEnable)} />
+            <ParamRow
+              k="Config fetched"
+              v={`${fmtTime(config?.fetchedAt)}${config?.source ? ` · ${config.source}` : ""}`}
+            />
+            {config?.station && (
+              <div className="param-raw">station: {JSON.stringify(config.station)}</div>
+            )}
+          </div>
 
-        <div className="card">
-          <div className="card-label">Status</div>
-          <ParamRow k="Temperature" v={fmtTemp(live?.temperatureC)} />
-          <ParamRow k="Charging status" v={live?.chargingStatus ?? "—"} />
-          <ParamRow k="Error code" v={live?.errCode ?? "—"} />
-          <ParamRow k="Heating power" v={fmtW(live?.heatingPower)} />
-          <ParamRow k="PV1 / PV2" v={`${fmtW(live?.pv1W)} / ${fmtW(live?.pv2W)}`} />
-          <ParamRow k="Grid → battery" v={fmtW(live?.gridToBatteryW)} />
-          <ParamRow k="PV → grid" v={fmtW(live?.pvToGridW)} />
-          <ParamRow k="Home load" v={fmtW(live?.homeLoadW)} />
-          <ParamRow k="Device" v={live?.sn ? `${live.name} · ${live.sn}` : (live?.name ?? "—")} />
+          <div className="card">
+            <div className="card-label">Status</div>
+            <ParamRow k="Temperature" v={fmtTemp(live?.temperatureC)} />
+            <ParamRow k="Charging status" v={live?.chargingStatus ?? "—"} />
+            <ParamRow k="Error code" v={live?.errCode ?? "—"} />
+            <ParamRow k="Heating power" v={fmtW(live?.heatingPower)} />
+            <ParamRow k="PV1 / PV2" v={`${fmtW(live?.pv1W)} / ${fmtW(live?.pv2W)}`} />
+            <ParamRow k="Grid → battery" v={fmtW(live?.gridToBatteryW)} />
+            <ParamRow k="PV → grid" v={fmtW(live?.pvToGridW)} />
+            <ParamRow k="Home load" v={fmtW(live?.homeLoadW)} />
+            <ParamRow k="Device" v={live?.sn ? `${live.name} · ${live.sn}` : (live?.name ?? "—")} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -366,58 +366,77 @@ EPIPE noise on every client disconnect).
 
 ## Strategy engine + battery temperature + real charge limits (2026-09-16)
 
-- **Three mutually-exclusive strategies** replace the single house-priority
-  algorithm (`server/power-plan.js`, `computeTarget()` split into a
-  dispatcher + `computeHousePriority`/`computeBatteryPriority`/
-  `computeGridZeroBestEffort`, all built on a shared `fullDemandTarget()` —
-  the "serve full demand from PV+battery combined" formula, since three of
-  the strategies/trigger combos reduce to exactly that with only the floor
-  differing):
-  - `house_priority` (default, = the original 2026-09-15 algorithm): PV
-    served to house first; once the discharge trigger fires (below), battery
-    tops up the gap.
+- **Two strategies** (`server/power-plan.js`, `computeTarget()` dispatches
+  on `trigger` first, then `strategy`) — simplified TWICE the same day: a
+  short-lived 3-strategy/2-trigger design (house/battery/grid-zero-
+  besteffort × pv_zero/grid_zero) was replaced by this final 2×2 model after
+  the user asked to reduce complexity:
+  - `house_priority` (default): `dischargeToTarget()` — the battery
+    continuously tops up the house down to `dischargeFloorPct +
+    DISCHARGE_TOLERANCE_PCT`, REGARDLESS of PV level, targeting `demandW -
+    GRID_TARGET_W` (not the full demand). This absorbed what was briefly a
+    separate 3rd strategy ("grid ≈ 100 W best-effort") the same day it was
+    decided House priority should just BE that behavior.
   - `battery_priority`: while `soc < chargeCeilingPct && pv > 0`, target=0 —
     PV is deliberately withheld from the house so it charges the battery
     instead, house demand comes from the grid meanwhile (confirmed
-    intentional with the user, not a bug). Falls back to `house_priority`
-    once the ceiling is hit or PV drops to 0.
-  - `grid_zero_besteffort`: the normal reserve guard is REPLACED by
-    `effectiveFloor = dischargeFloorPct + tolerancePct` (tolerance has no
-    Anker API equivalent, default 3 points, configurable). While above that
-    floor: target = full demand UNCONDITIONALLY, ignoring PV level and the
-    discharge trigger entirely.
-- **Discharge trigger** (`house_priority`/`battery_priority` only, ignored
-  by `grid_zero_besteffort`) REPLACES the old `isEveningBridge()` fuzzy
-  heuristic (70%-of-peak, noon guard — deleted entirely, no hidden third
-  mode): `pv_zero` fires the shortfall branch only at `pv <= 0`; `grid_zero`
-  fires it whenever `pv < demand` at all (discharge immediately to keep grid
-  import near zero continuously) — this makes `house_priority`+`grid_zero`
-  mathematically converge to `grid_zero_besteffort`'s shape, differing only
-  in which floor gates it.
+    intentional, not a bug). Otherwise `passthroughOnly()` — PV (if any)
+    passes straight through to the house, but the battery is **never**
+    discharged under this strategy (confirmed: "will not discharge at
+    all" — no fallback to `dischargeToTarget()` like the short-lived
+    intermediate design had).
+- **Discharge trigger — `auto` | `manual`**: `auto` lets the strategy above
+  decide (`dischargeToTarget()` for `house_priority`,
+  `passthroughOnly()`-after-charging for `battery_priority`). `manual` is a
+  **persisted** `manualDischarge` boolean toggle that OVERRIDES the selected
+  strategy entirely ("will overwrite whatever the strategy was selected
+  before") — `true` → `dischargeToTarget()`, `false` → `passthroughOnly()`,
+  regardless of `strategy`. This replaced an even-shorter-lived time-limited
+  "discharge now for 15 min" override design the same day — manual is a
+  deliberate standing choice now, not a one-off action, so there's no
+  `forceDischargeUntil`/expiry logic.
+- **`GRID_TARGET_W` / `DISCHARGE_TOLERANCE_PCT` (env vars, default 100 W /
+  4 points)**: deployment-time constants, like `TARIFF_EUR_PER_KWH`
+  elsewhere in this codebase — explicitly NOT exposed in the Strategy tab UI
+  (the user asked to keep the UI to just the two dropdowns + the manual
+  toggle). The original ask was "keep grid supply **under** 100 W", not
+  literally 0 — targeting exactly 0 was a drift during design that got
+  caught and corrected the same day.
 - **Persistence**: `.power-plan-state.json` gains `strategy`
-  (`"house_priority"` default), `trigger` (`"pv_zero"` default),
-  `tolerancePct` (`3` default) — old files without them load cleanly via
-  `??` defaults. An upgrade can't be byte-for-byte identical to the deleted
-  evening-bridge heuristic; `pv_zero` is the closer, strictly-more-conservative
-  analog (never fires earlier than the heuristic would have) — logged once
-  at startup (`"[power-plan] upgraded: ..."`) so the shift is visible, not
-  silent, for anyone upgrading with the controller already enabled.
+  (`"house_priority"` default), `trigger` (`"auto"` default),
+  `manualDischarge` (`false` default). Backward-compat remap on load
+  (`PowerPlanController` constructor) handles TWO generations of older
+  files: pre-strategy-engine files (no `trigger` at all) and the short-lived
+  3-strategy/2-trigger files (`strategy: "grid_zero_besteffort"` →
+  `"house_priority"`, which now IS that behavior; `trigger: "pv_zero"` or
+  `"grid_zero"` → `"auto"`, the closest equivalent since `"manual"` didn't
+  exist yet) — both log `"[power-plan] upgraded: ..."` once at startup if
+  the controller is already enabled, so the shift is visible, not silent.
 - **`POST /api/power-plan/strategy`**: partial update, body
-  `{strategy?, trigger?, tolerancePct?}`, validated against the known enum
-  values (+ `tolerancePct` clamped 0-20), calls `PowerPlanController
-  .setStrategy()`. Response is the same shape as `GET /api/power-plan`'s
-  `getState()` (now including the three new fields) — matches the existing
-  enable/disable convention (POST response *is* the new state). No new GET
-  route: `web/src/strategy/StrategyTab.jsx` (7th tab, `App.jsx`, positioned
-  after Battery/before Graph) shares the same `GET /api/power-plan` poll
-  loop `PowerPlanCard.jsx` already uses. The write-discipline hysteresis
-  (step-down-promptly / step-up-after-3min-hold / min-write-gap) is
-  unchanged and applies uniformly to all three strategies — it only ever
-  sees the final numeric target, so a strategy switch is naturally subject
-  to the same rules as any other target change. The Strategy tab does NOT
-  add an enable/disable control — that stays exclusively on
-  `PowerPlanCard.jsx` (Live tab), matching the existing "disable button
-  removed from the UI on purpose" decision.
+  `{strategy?, trigger?, manualDischarge?}`, validated against the known
+  enum values, calls `PowerPlanController.setStrategy()`. Response is the
+  same shape as `GET /api/power-plan`'s `getState()` (now including
+  `strategy`/`trigger`/`manualDischarge`/`gridTargetW`/
+  `dischargeTolerancePct`, the last two read-only/informational) — matches
+  the existing enable/disable convention (POST response *is* the new
+  state). No new GET route: `web/src/strategy/StrategyTab.jsx` (7th tab,
+  `App.jsx`, positioned before Graph) shares the same `GET /api/power-plan`
+  poll loop `PowerPlanCard.jsx` already uses. **Battery tab merged in
+  (2026-09-16)**: `BatteryTab.jsx` is no longer its own top-level page —
+  `StrategyTab.jsx` renders it directly (own poll loop, unchanged); the SOC
+  gauge stays visible, the two detail param-cards are now behind a
+  `.details-toggle` "Battery information" section, collapsed by default
+  (same pattern as `PowerPlanCard.jsx`'s "Power Plan" section). Two
+  button-groups (strategy, trigger) plus a third discharge/don't-discharge
+  toggle shown only when `trigger === "manual"`, each with a short
+  description of current behavior underneath. The write-discipline
+  hysteresis (step-down-promptly / step-up-after-3min-hold / min-write-gap)
+  is unchanged and applies uniformly — it only ever sees the final numeric
+  target, so a strategy switch is naturally subject to the same rules as
+  any other target change. The Strategy tab does NOT add an enable/disable
+  control — that stays exclusively on `PowerPlanCard.jsx` (Live tab),
+  matching the existing "disable button removed from the UI on purpose"
+  decision.
 - **Real charge/discharge limits — `get_power_cutoff` (2026-09-16)**:
   `param_type "18"`/`"27"` (`get_site_device_param`) are confirmed
   genuinely empty on this account/device (A17C3, bare Solarbank 2, no power
