@@ -161,23 +161,28 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
 
 import { fetchJson } from "./welcome-sources.js";
 
+// 2026-09-16 restructure (user request): the Welcome tab now groups cards
+// as Today (start/right-now/end) and Week (so-far/upcoming/estimate), with
+// Production/Savings folded into whichever card they narratively belong to
+// instead of standing alone — see AGENTS.md. "This week so far" is
+// deterministic (Dashboard's own /api/stats/overview week totals, now
+// calendar-week-aligned), not part of this schema.
 export const WELCOME_SCHEMA = {
   name: "welcome",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["greeting", "today", "week", "month", "production", "endOfDay", "savings"],
+    required: ["greeting", "today", "production", "endOfDay", "week", "month"],
     properties: {
       greeting: { type: "string" },
       today: {
-        type: "object", additionalProperties: false, required: ["summary", "icon"],
+        type: "object", additionalProperties: false, required: ["summary", "icon", "statusQuo"],
         properties: {
           summary: { type: "string" },
           icon: { type: "string", enum: ["sun", "cloud-sun", "cloud", "rain", "snow"] },
+          statusQuo: { type: "string" },
         },
       },
-      week: { type: "object", additionalProperties: false, required: ["statement"], properties: { statement: { type: "string" } } },
-      month: { type: "object", additionalProperties: false, required: ["statement"], properties: { statement: { type: "string" } } },
       production: {
         type: "object", additionalProperties: false,
         required: ["todayKwh", "weekKwh", "monthKwh", "reasoning"],
@@ -188,16 +193,22 @@ export const WELCOME_SCHEMA = {
       },
       endOfDay: {
         type: "object", additionalProperties: false,
-        required: ["batterySocEstimate", "toHouseKwh", "toBatteryKwh", "gridExportKwh", "note"],
+        required: ["batterySocEstimate", "toHouseKwh", "toBatteryKwh", "gridExportKwh", "estimatedSavingsEur", "note"],
         properties: {
           batterySocEstimate: { type: "number" }, toHouseKwh: { type: "number" },
-          toBatteryKwh: { type: "number" }, gridExportKwh: { type: "number" }, note: { type: "string" },
+          toBatteryKwh: { type: "number" }, gridExportKwh: { type: "number" },
+          estimatedSavingsEur: { type: "number" }, note: { type: "string" },
         },
       },
-      savings: {
-        type: "object", additionalProperties: false, required: ["todayEur", "monthEur", "note"],
-        properties: { todayEur: { type: "number" }, monthEur: { type: "number" }, note: { type: "string" } },
+      week: {
+        type: "object", additionalProperties: false,
+        required: ["upcoming", "estimate", "estimateKwh", "estimateEur"],
+        properties: {
+          upcoming: { type: "string" }, estimate: { type: "string" },
+          estimateKwh: { type: "number" }, estimateEur: { type: "number" },
+        },
       },
+      month: { type: "object", additionalProperties: false, required: ["statement"], properties: { statement: { type: "string" } } },
     },
   },
 };
@@ -208,8 +219,11 @@ Hard rules:
 - Adapt to the provided localTime: morning (before 12:00) = the day ahead; afternoon (12-18) = the day so far (pvProducedTodayKwh, grid import so far) + what remains of it; evening (after 18:00) = wrap up the day and look at tomorrow (the week's first forecast day after today).
 - PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED and produced today (report actuals: pvNowW, pvProducedTodayKwh, charge flows) — otherwise it is still PLANNED and production numbers are estimates from the PVGIS climatology for this exact setup, scaled by today's and the week's forecast radiation vs. the monthly average.
 - Power flows (Solarbank 2 E1600 Plus, built-in inverter): ALL PV enters the battery unit; the house is fed ONLY through the unit's inverter, and the inverter's output already includes any PV pass-through — never present PV as flowing directly to the house. The bank decides dynamically (at low SOC it often charges from PV while the house runs on grid) — describe the MEASURED flows in the context, don't assume a fixed priority.
-- Estimates (production, end-of-day battery, savings) must be consistent with the context: consumption averages, battery SOC, tariff.
-- Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly.`;
+- today.statusQuo: ONE or TWO lively sentences that read like a snapshot of THIS EXACT MOMENT — battery.socNow, battery.pvNowW, battery.outputW/chargeW from the context. Present tense ("the battery is at…", "right now the panels are…"), not a forecast and not a recap of the whole day.
+- week.upcoming: look ONLY at the forecast days in "week" that are still AHEAD (today and earlier are already in the past) — what the weather means for production/consumption over what's left of the calendar week. Reference specific upcoming weekdays when the forecast is notably better or worse than the rest.
+- week.estimate/estimateKwh/estimateEur: a projection for how the REST of the CALENDAR week (through Sunday) will likely turn out — production total and rough savings — consistent with production.weekKwh and tariffEurPerKwh. This is a forward-looking estimate, not a summary of days already past (that's a separate, deterministic card the app builds itself).
+- Estimates (production, end-of-day battery, savings, week) must be consistent with the context: consumption averages, battery SOC, tariff.
+- Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly — statusQuo can be shorter/punchier, it's a quick glance, not a report.`;
 
 function validateAiResponse(j) {
   for (const k of WELCOME_SCHEMA.schema.required) if (!(k in j)) throw new Error(`AI reply missing "${k}"`);
@@ -265,23 +279,33 @@ export function buildFallback(config, context) {
     ? Math.round(context.week.reduce((a, d) => a + ((monthKwh / daysInMonth) * ((d.radiationSumKwhM2 ?? avgRad) / avgRad)), 0) * 10) / 10
     : null;
   const icon = context.today == null ? "cloud" : context.today.weathercode < 2 ? "sun" : context.today.weathercode < 60 ? "cloud-sun" : context.today.weathercode < 80 ? "cloud" : "rain";
+  const todayEur = todayKwh != null ? Math.round(todayKwh * context.tariffEurPerKwh * 100) / 100 : 0;
+  const weekEur = weekKwh != null ? Math.round(weekKwh * context.tariffEurPerKwh * 100) / 100 : 0;
+  const statusQuo = context.battery.socNow != null
+    ? `Battery at ${context.battery.socNow}% right now, panels making ${context.battery.pvNowW ?? 0} W.`
+    : "Live battery status isn't available right now.";
   return {
     greeting: `Welcome! ${context.weekday}, ${context.date} — sunrise ${context.sun.sunrise}, sunset ${context.sun.sunset}.`,
-    today: { summary: `Between ${context.today?.tempMin ?? "?"}°C and ${context.today?.tempMax ?? "?"}°C, about ${context.sun.sunHoursToday ?? "?"} h of sunshine.`, icon },
-    week: { statement: `Sunshine between ${Math.min(...context.week.map((d) => d.sunHours ?? 0))} h and ${Math.max(...context.week.map((d) => d.sunHours ?? 0))} h per day this week.` },
-    month: { statement: `Typical ${context.monthName} production for your setup: ~${monthKwh ?? "?"} kWh (PVGIS climatology).` },
+    today: {
+      summary: `Between ${context.today?.tempMin ?? "?"}°C and ${context.today?.tempMax ?? "?"}°C, about ${context.sun.sunHoursToday ?? "?"} h of sunshine.`,
+      icon,
+      statusQuo,
+    },
     production: { todayKwh, weekKwh, monthKwh, reasoning: "Prorated from PVGIS monthly average by forecast radiation (offline estimate)." },
     endOfDay: {
       batterySocEstimate: context.battery.socNow ?? 0,
       toHouseKwh: context.consumption.monthToDateAvgImportKwh ?? 0,
       toBatteryKwh: 0, gridExportKwh: 0,
+      estimatedSavingsEur: todayEur,
       note: "Offline estimate — based on your average consumption; the PV system is still planned.",
     },
-    savings: {
-      todayEur: todayKwh != null ? Math.round(todayKwh * context.tariffEurPerKwh * 100) / 100 : 0,
-      monthEur: monthKwh != null ? Math.round(monthKwh * context.tariffEurPerKwh * 100) / 100 : 0,
-      note: `At ${context.tariffEurPerKwh} €/kWh, assuming full self-consumption.`,
+    week: {
+      upcoming: `Sunshine between ${Math.min(...context.week.map((d) => d.sunHours ?? 0))} h and ${Math.max(...context.week.map((d) => d.sunHours ?? 0))} h per day this week.`,
+      estimate: `Typical week for your setup: ~${weekKwh ?? "?"} kWh (PVGIS climatology).`,
+      estimateKwh: weekKwh ?? 0,
+      estimateEur: weekEur,
     },
+    month: { statement: `Typical ${context.monthName} production for your setup: ~${monthKwh ?? "?"} kWh (PVGIS climatology).` },
   };
 }
 

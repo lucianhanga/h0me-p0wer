@@ -19,6 +19,10 @@ function WeatherIcon({ name }) {
 }
 
 // Sun arc: semicircle sunrise→sunset with a marker for the current time.
+// The elapsed portion (sunrise → now) is drawn as a warm gradient "progress"
+// stroke over the plain track, and the marker pulses — turns the arc from a
+// static diagram into a live read of how much of today's daylight has
+// passed (2026-09-16: "make the weather tile more vivid/alive").
 function SunArc({ sunrise, sunset }) {
   const toMin = (s) => Number(s?.slice(0, 2)) * 60 + Number(s?.slice(3, 5));
   const sr = toMin(sunrise), ss = toMin(sunset);
@@ -26,12 +30,28 @@ function SunArc({ sunrise, sunset }) {
   const frac = ss > sr ? Math.min(1, Math.max(0, (now - sr) / (ss - sr))) : null;
   const angle = frac == null ? null : Math.PI * (1 - frac); // π → 0 left to right
   const cx = 100, cy = 95, r = 80;
-  const x = frac == null ? null : cx + r * Math.cos(angle);
-  const y = frac == null ? null : cy - r * Math.sin(angle);
+  const point = (a) => [cx + r * Math.cos(a), cy - r * Math.sin(a)];
+  const [x, y] = frac == null ? [null, null] : point(angle);
   return (
     <svg viewBox="0 0 200 114" className="sun-arc">
+      <defs>
+        <linearGradient id="sunArcElapsed" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#f9d976" />
+          <stop offset="100%" stopColor="#f7a44f" />
+        </linearGradient>
+      </defs>
       <path d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`} fill="none" stroke="#2a3238" strokeWidth="2" />
-      {x != null && <circle cx={x} cy={y} r="5" fill="#f7a44f" />}
+      {x != null && (
+        <path
+          d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${x} ${y}`}
+          fill="none"
+          stroke="url(#sunArcElapsed)"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+      )}
+      {x != null && <circle cx={x} cy={y} r="9" className="sun-marker-glow" />}
+      {x != null && <circle cx={x} cy={y} r="5" fill="#f7a44f" className="sun-marker-dot" />}
       <text x={cx - r} y={cy + 14} textAnchor="middle" className="arc-label">{sunrise}</text>
       <text x={cx + r} y={cy + 14} textAnchor="middle" className="arc-label">{sunset}</text>
     </svg>
@@ -77,6 +97,53 @@ function YesterdayCard() {
       </p>
       <p className="muted">
         ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{saved}
+      </p>
+    </section>
+  );
+}
+
+// This week so far — deterministic, same reasoning as YesterdayCard: the
+// AI's week.upcoming/estimate are forward-looking (see welcome-ai.js), so
+// "what's already happened this week" is measured here instead, from the
+// Dashboard's own /api/stats/overview week totals (calendar Mon-Sun,
+// 2026-09-16 fix — see AGENTS.md). Future days in the week contribute 0,
+// so the totals are already correctly "so far," not inflated.
+function ThisWeekSoFarCard() {
+  const [w, setW] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/stats/overview")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j.ok) setW(j.data.byPeriod.week);
+      })
+      .catch(() => {
+        // no data yet — card just doesn't render
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!w) return null;
+  const saved = Math.round((w.battEur + w.pvEur) * 100) / 100;
+  return (
+    <section className="card">
+      <SpeakButton
+        id="weekSoFar"
+        className="speak-corner"
+        text={`This week so far: ${w.homeKwh} kilowatt-hours used, ${w.pvProducedKwh} produced by the panels, ${w.gridKwh} from the grid, ${w.battKwh} from the battery. Spent ${w.gridEur} euros, saved ${saved}.`}
+      />
+      <h3>This week so far</h3>
+      <p className="wx-big">
+        {w.homeKwh} kWh <span className="muted">used</span>
+      </p>
+      <p className="muted">
+        grid {w.gridKwh} kWh · battery {w.battKwh} kWh · PV {w.pvKwh} kWh direct
+      </p>
+      <p className="muted">
+        ☀ {w.pvProducedKwh} kWh produced · spent €{w.gridEur} · saved €{saved}
       </p>
     </section>
   );
@@ -171,60 +238,67 @@ export default function WelcomeTab() {
           <SpeakButton
             id="startOfDay"
             className="speak-corner"
-            text={`Start of day: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
+            text={`How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
           />
-          <h3>Start of day (measured)</h3>
+          <h3>How the day started</h3>
           <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
           <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
         </section>
 
-        <section className="card">
+        <section className="card wx-now">
           <SpeakButton
-            id="production"
+            id="statusQuo"
             className="speak-corner"
-            text={`Estimated production: ${data.production.todayKwh} kilowatt-hours today, about ${data.production.weekKwh} this week and ${data.production.monthKwh} this month. ${data.production.reasoning}`}
+            text={`${data.today.statusQuo} ${data.production.todayKwh} kilowatt-hours produced so far today. ${data.production.reasoning}`}
           />
-          <h3>{gt.pvLiveToday ? "Production" : "Estimated production (planned PV)"}</h3>
-          <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
+          <h3>
+            <span className="wx-live-dot" aria-hidden="true" />
+            Right now
+          </h3>
+          <p>{data.today.statusQuo}</p>
+          <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">produced today</span></p>
           <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
-          <p className="muted">{data.production.reasoning}</p>
+          <p className="muted">{gt.pvLiveToday ? "measured" : "estimated — PV still planned"} · {data.production.reasoning}</p>
         </section>
 
         <section className="card">
           <SpeakButton
             id="endOfDay"
             className="speak-corner"
-            text={`End of day prediction: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house. ${data.endOfDay.note}`}
+            text={`How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved. ${data.endOfDay.note}`}
           />
-          <h3>End of day (predicted)</h3>
+          <h3>How today will end</h3>
           <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
           <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
+          <p className="wx-big small">≈ €{data.endOfDay.estimatedSavingsEur} <span className="muted">saved today</span></p>
           <p className="muted">{data.endOfDay.note}</p>
         </section>
 
         <YesterdayCard />
 
+        <ThisWeekSoFarCard />
+
         <section className="card">
-          <SpeakButton id="week" className="speak-corner" text={`This week: ${data.week.statement}`} />
-          <h3>This week</h3>
-          <p>{data.week.statement}</p>
+          <SpeakButton id="weekUpcoming" className="speak-corner" text={`What's coming this week: ${data.week.upcoming}`} />
+          <h3>What's coming this week</h3>
+          <p>{data.week.upcoming}</p>
+        </section>
+
+        <section className="card">
+          <SpeakButton
+            id="weekEstimate"
+            className="speak-corner"
+            text={`How this week should end: ${data.week.estimate} About ${data.week.estimateKwh} kilowatt-hours, ${data.week.estimateEur} euros saved.`}
+          />
+          <h3>How this week should end</h3>
+          <p>{data.week.estimate}</p>
+          <p className="muted">≈ {data.week.estimateKwh} kWh · €{data.week.estimateEur} saved</p>
         </section>
 
         <section className="card">
           <SpeakButton id="month" className="speak-corner" text={`${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`} />
           <h3>{new Date().toLocaleString([], { month: "long" })}</h3>
           <p>{data.month.statement}</p>
-        </section>
-
-        <section className="card">
-          <SpeakButton
-            id="savings"
-            className="speak-corner"
-            text={`Estimated savings: about ${data.savings.todayEur} euros today and ${data.savings.monthEur} euros this month. ${data.savings.note}`}
-          />
-          <h3>Estimated savings</h3>
-          <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
-          <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
         </section>
       </div>
     </div>
