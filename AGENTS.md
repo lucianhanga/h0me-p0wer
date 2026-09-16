@@ -524,6 +524,40 @@ EPIPE noise on every client disconnect).
   above it). Verified via a standalone simulation: fluctuating targets
   (320/328/315/370/300/340 W) now correctly accumulate held-time across
   ticks instead of resetting to 0 every time.
+- **CRITICAL: stale `lastWrittenPower` after a container restart caused the
+  controller to stop writing entirely while the device kept discharging,
+  fixed (2026-09-16)**: `lastWrittenPower` is persisted state — the
+  controller's *belief* about what preset the device currently holds — but
+  it was never reconciled against the device's actual schedule on startup.
+  Live incident: production was switched to `battery_priority`, the app
+  believed `cur === target === 0` (no write needed), but the real device
+  schedule still held a stale higher preset from before the restart and
+  kept discharging ~645 W into the house the whole time — invisible to the
+  controller because it never re-read truth from the device, only trusted
+  its own memory. Emergency mitigation: `POST /api/power-plan/disable`
+  (unconditionally restores the original pre-takeover schedule) — verified
+  discharge dropped from 645 W to 58 W. Root-cause fix: new
+  `reconcileWrittenPower(parsed)` method reads the actual preset off a
+  freshly-fetched schedule (`parsed.custom_rate_plan[0].ranges[0].power`)
+  and overwrites `this.lastWrittenPower` (+ persists) whenever it disagrees
+  with what the app remembered — called from `tick()`'s cold-start
+  `readSchedule()` block and from `enable()`'s `readSchedule()`, i.e. every
+  point where the app (re-)establishes its view of the device's schedule.
+- **Step-up hold lowered from 3 min to 90 s (2026-09-16)**: `STEP_UP_HOLD_MS`
+  changed from `3 * 60 * 1000` to `90 * 1000` per explicit user choice
+  (weighed against keeping 3 min or going shorter still) — still long
+  enough to ride out a single cloudy-minute PV dip without chasing every
+  wobble, but roughly halves how long the house draws grid import while a
+  legitimate, sustained PV/demand increase is held back.
+- **Step-up hold countdown UI (2026-09-16)**: `tick()`'s step-up branch now
+  also computes `holdProgress: {heldMs, totalMs}` (null once the hold isn't
+  active or the delta is below `WRITE_MIN_DELTA_W`) alongside the existing
+  `reason` string, added to `lastDecision` so the frontend doesn't have to
+  parse `"holding up-step (Ns/90s)"` text. `StrategyTab.jsx` renders it as
+  a `.hold-progress` bar (`width` = `heldMs/totalMs`, recomputed against a
+  locally-ticking `nowMs` state so the bar fills smoothly every second
+  between the 10 s `/api/power-plan` polls, not just once per poll) plus a
+  "Ns" countdown label — shown only while a genuine step-up is pending.
 
 ## Battery realtime via MQTT (2026-09-10)
 
