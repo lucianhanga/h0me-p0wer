@@ -35,6 +35,19 @@ async function ensureSiteId(anker, getLiveBattery) {
   return anker.siteId;
 }
 
+const CUTOFF_EP = "power_service/v1/app/compatible/get_power_cutoff";
+
+// Bare Solarbank 2 systems (no power dock, e.g. this A17C3) don't expose
+// charge_upper_limit/discharge_lower_limit via get_site_device_param at all
+// (param 18/27 genuinely empty — confirmed against a matching community
+// report, thomluther/anker-solix-api#304: "site_device_parm query with
+// station parameter does not work for [SB2] yet"). The correct endpoint for
+// this hardware is get_power_cutoff, keyed by device_sn (not site_id alone).
+async function readPowerCutoff(anker, siteId, deviceSn) {
+  if (!deviceSn) return null; // can't call it without a device_sn
+  return anker.post(CUTOFF_EP, { site_id: siteId ?? "", device_sn: deviceSn });
+}
+
 async function readParam(anker, siteId, paramType) {
   const resp = await anker.post("power_service/v1/site/get_site_device_param", {
     site_id: siteId,
@@ -51,21 +64,23 @@ async function readParam(anker, siteId, paramType) {
   return null;
 }
 
-// param_type 18: station settings (charge/discharge limits + backup
-// reserve) for non-Gen4 Solarbank systems — this is where the A17C3 (this
-// account's device) actually carries `charge_upper_limit`/
-// `discharge_lower_limit`. param_type 27 is the Gen4-only equivalent
-// ("no longer in 18" per Anker's own Gen4 migration) — tried as well and
-// merged in for forward compatibility if the account ever gets a Gen4
-// device, but expected empty on this hardware. 2026-09-16: previously read
-// 27 first and 18 only into an opaque "station" blob, and since readParam()
-// discarded every object-shaped param_data (see above), BOTH looked
-// permanently empty — the app fell back to hardcoded 10 %/100 % guesses
-// instead of the account's real configured limits (e.g. a 95 % charge
-// ceiling set in the Anker app never showed up).
+// Limit sources tried in order, first non-null value per field wins
+// (applyLimits below):
+//   1. get_power_cutoff — the CORRECT source for bare Solarbank 2 systems
+//      like this A17C3 (see readPowerCutoff's comment above).
+//   2. param_type 18 (station settings) — where power-dock/other-generation
+//      systems carry the same fields; expected empty on this hardware.
+//   3. param_type 27 — Gen4-only equivalent ("no longer in 18" per Anker's
+//      own Gen4 migration); expected empty on this hardware too, kept for
+//      forward compatibility if the account ever gets a Gen4 device.
+// 2026-09-16: previously only tried 18/27, both confirmed genuinely empty on
+// this account (not a parsing bug — readParam() correctly handles
+// object-shaped param_data as of the same date) — get_power_cutoff added
+// because it's the endpoint that actually works for this device family.
 async function fetchConfig(anker, getLiveBattery) {
   const siteId = await ensureSiteId(anker, getLiveBattery);
   if (!siteId) throw new Error("no Anker site found");
+  const deviceSn = getLiveBattery()?.sn ?? null;
 
   const config = {
     chargeUpperLimitPct: null,
@@ -90,10 +105,21 @@ async function fetchConfig(anker, getLiveBattery) {
     }
   };
   try {
+    const cutoff = await readPowerCutoff(anker, siteId, deviceSn);
+    if (cutoff) {
+      applyLimits(cutoff);
+      config.powerCutoffRaw = cutoff;
+      config.limitsSource ??= "power_cutoff";
+    }
+  } catch (err) {
+    config.errorCutoff = err.message;
+  }
+  try {
     const p18 = await readParam(anker, siteId, "18");
     if (p18) {
       config.station = p18;
       applyLimits(p18);
+      config.limitsSource ??= "account";
     }
   } catch (err) {
     config.error18 = err.message;
@@ -103,14 +129,12 @@ async function fetchConfig(anker, getLiveBattery) {
     if (p27) {
       applyLimits(p27);
       config.raw27 = p27;
+      config.limitsSource ??= "account";
     }
   } catch (err) {
     config.error27 = err.message;
   }
-  if (config.chargeUpperLimitPct != null || config.dischargeLowerLimitPct != null) {
-    config.limitsSource = "account";
-  }
-  // Fallback when the device exposes nothing on either param type: SB2
+  // Fallback when the device exposes nothing on any of the above: SB2
   // schedule (param_type 6, JSON-string param_data) sometimes carries
   // `reserved_soc`; otherwise hardcode the observed defaults.
   if (config.dischargeLowerLimitPct == null) {
@@ -118,15 +142,15 @@ async function fetchConfig(anker, getLiveBattery) {
       const sched = await readParam(anker, siteId, "6");
       const reserved = numOrNull(sched?.reserved_soc);
       config.dischargeLowerLimitPct = reserved != null && reserved > 0 ? reserved : 10;
-      config.limitsSource = reserved != null && reserved > 0 ? "schedule" : "default";
+      config.limitsSource ??= reserved != null && reserved > 0 ? "schedule" : "default";
     } catch {
       config.dischargeLowerLimitPct = 10;
-      config.limitsSource = "default";
+      config.limitsSource ??= "default";
     }
   }
   if (config.chargeUpperLimitPct == null) {
     config.chargeUpperLimitPct = 100;
-    config.limitsSource = config.limitsSource ?? "default";
+    config.limitsSource ??= "default";
   }
   if (config.backupReservePct == null) config.backupReservePct = config.dischargeLowerLimitPct;
   return config;
@@ -178,6 +202,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
           pvW: b.pvW ?? 0,
           pv1W: b.pv1W ?? 0,
           pv2W: b.pv2W ?? 0,
+          temperatureC: b.temperatureC ?? null,
           toHomeW: b.toHomeW ?? null,
           gridToHomeW: b.gridToHomeW ?? null,
           pvToGridW: b.pvToGridW ?? null,

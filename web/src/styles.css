@@ -122,7 +122,8 @@ nav button.nav-active {
 /* Comfortable touch targets everywhere (Apple HIG: 44 pt). */
 @media (pointer: coarse) {
   button,
-  select {
+  select,
+  input {
     min-height: 44px;
     padding: 0.5rem 1rem;
   }
@@ -456,13 +457,18 @@ th {
 }
 
 select,
-button {
+button,
+input {
   background: #1a2128;
   color: #e8ecef;
   border: 1px solid #2a3238;
   border-radius: 6px;
   padding: 0.4rem 0.75rem;
   font-size: 0.9rem;
+}
+
+input[type="number"] {
+  width: 5rem;
 }
 
 button {
