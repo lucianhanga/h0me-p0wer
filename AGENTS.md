@@ -689,6 +689,63 @@ EPIPE noise on every client disconnect).
   to `false` at construction regardless of persisted state, and makes
   `enable()` throw outright rather than ever writing to the device — a
   structural guarantee, not a discipline one. Documented in `.env.example`.
+- **CRITICAL: `POWER_PLAN_DISABLE` (and `GRID_TARGET_W`/`DISCHARGE_TOLERANCE_PCT`)
+  silently never read the real .env value — ES module import hoisting, not a
+  dotenv bug (2026-09-16)**: testing `POWER_PLAN_DISABLE=true` locally, the
+  dev server booted with the power plan `enabled: true` anyway — caught and
+  disabled within its 90 s step-up hold, before any real write happened
+  (confirmed on production: `lastWriteAt` unchanged, no drift). Root cause:
+  `index.js` called `dotenv.config()` as a plain statement in its own body,
+  but ALL of a module's `import` declarations — regardless of where they're
+  written lexically — are resolved and their target modules FULLY EVALUATED
+  before that module's own body runs. `power-plan.js` (imported by
+  `index.js`) reads `process.env.GRID_TARGET_W` /
+  `DISCHARGE_TOLERANCE_PCT` / `POWER_PLAN_DISABLE` in `const` statements at
+  its OWN top level — which therefore always evaluated BEFORE
+  `dotenv.config()` had populated `process.env`, silently locking those
+  three to their hardcoded defaults (100 / 4 / false) no matter what `.env`
+  said. Never previously observed because `GRID_TARGET_W`/
+  `DISCHARGE_TOLERANCE_PCT` had never actually been overridden away from
+  their defaults in practice — `POWER_PLAN_DISABLE` was the first case
+  where the wrong-fallback behavior was actually exercised. A parallel
+  audit (forked agent) confirmed the same pattern in `db.js`'s `DB_PATH`
+  (harmless in practice: never .env-overridden either) and found no other
+  instances. Fix: moved the `dotenv.config()` call into its own module,
+  `server/env.js`, and made `import "./env.js"` the FIRST import in
+  `index.js` — sibling imports within one file evaluate in the order
+  they're written, so `env.js` (and its `dotenv.config()` call) now
+  genuinely finishes before `power-plan.js`/`db.js`/anything else in the
+  import graph is evaluated. Verified locally: `POWER_PLAN_DISABLE=true`
+  now correctly keeps the plan disabled on boot AND makes
+  `POST /api/power-plan/enable` reject outright with a clear error.
+- **Dashboard "day" tile flip-side bars: PV missing on past days, not
+  hourly, week tile showing the wrong week (2026-09-16)**: three related
+  Dashboard bar-chart bugs found while verifying the above. (1)
+  `/api/stats/period`'s `dayGrid()` (past-day navigation) hardcoded
+  `pv: 0` for every bar — never actually computed, so yesterday/older days
+  never showed a PV segment even though the tile's own PV total was
+  correct. Cloud data only has PV production PER-BUCKET (not the
+  home/battery split), so fixed by shaping the correct daily to-home total
+  (`pv_daily` rollup) proportionally across the day using
+  `cloud_pv_history`'s production curve as the timing shape — same
+  "total is real, split is estimated" tradeoff as the telemetry-gap
+  backfill above, same reasoning for why. (2) Past-day bars were raw
+  20-minute cloud buckets (~72/day) while "Today" used hourly (24) —
+  inconsistent density, chart visibly got denser navigating back a single
+  day. New shared `hourlyKwhFromRows()` buckets both the same way. (3)
+  "Today"'s bars used to only create a slot for hours that had `profile`
+  data, so the x-axis silently grew/shrank through the day instead of
+  showing a stable 24-hour day with the unfilled part visibly blank — now
+  always 24 slots, `null` (a real gap, not a measured zero) for any hour
+  later than the current one, so the chart visibly fills in as the day
+  progresses. (4) Unrelated but found alongside: `byPeriod.week` (current
+  week) and `/api/stats/period?type=week` (past-week navigation) both
+  computed a ROLLING 7-day window ending "today" — comment literally called
+  it that — not the actual Monday–Sunday calendar week the tile's "This
+  week" label implies (This month/This year are already calendar-aligned).
+  New `mondayOf()` helper fixes both call sites; verified locally against
+  live data (Wed 2026-09-16 → week correctly spans Mon 09-14–Sun 09-20,
+  last week's label `09-07 – 09-13`).
 
 ## Battery realtime via MQTT (2026-09-10)
 
