@@ -495,9 +495,35 @@ EPIPE noise on every client disconnect).
   (returns `{pvToBattery, pvToHome, cellsW, gridChargeW}`), used by BOTH
   `/api/flow` (index.js, replacing its inline duplicate) and
   `/api/battery/params` (new `live.cellsW` field) — one shared derivation,
-  so the two routes can't drift apart again. `BatteryTab.jsx`'s mode is now
-  `chargeW > 0 ? "charging" : cellsW > 0 ? "discharging" : "idle"` and the
+  so the two routes can't drift apart again. `BatteryTab.jsx`'s mode is a
+  **dominant-direction** comparison, `chargeW > cellsW ? "charging" :
+  cellsW > chargeW ? "discharging" : "idle"` (refined same day — a plain
+  `chargeW > 0` check let a small charging blip override a real, larger
+  discharge; `chargeW`/`cellsW` can both transiently read a small nonzero
+  value from sensor timing noise, matching `FlowDiagram`'s own
+  "dominant direction only" rule for the battery↔home arc), and the
   discharging wattage label shows `cellsW`, not `outputW`.
+- **Step-up hold never actually fired once `house_priority` became
+  continuous, fixed (2026-09-16)**: `tick()`'s step-up branch reset the
+  3-minute hold timer (`this.pendingUp`) whenever `targetW`'s EXACT value
+  changed (`this.pendingUp?.target !== targetW`) — but `targetW` is
+  `demandW`-derived (`dischargeToTarget()`), and real house demand
+  fluctuates essentially every 10 s tick, so the timer reset almost every
+  tick and could never reach `STEP_UP_HOLD_MS`. Confirmed live: a user
+  configured `house_priority`, and `lastWrittenPower` stayed at `0` for
+  15+ minutes while `lastDecision.reason` kept reporting `"holding up-step
+  (Ns/180s)"` with `N` never exceeding ~40 — the preset silently never
+  stepped up AT ALL. This was latent since 2026-09-15 (the original
+  `min(max, demand)` night branch had the exact same issue) but only
+  became visible once a continuous, always-on discharge strategy depended
+  on it working. Fix: the hold now tracks "how long has `targetW` stayed
+  ABOVE `cur` continuously" (`if (!this.pendingUp) this.pendingUp = {
+  since: now }`), not "how long has it been this exact value" — matching
+  the hold's actual documented intent (survive a target wobbling ACROSS
+  the `cur` boundary, not one merely changing magnitude while staying
+  above it). Verified via a standalone simulation: fluctuating targets
+  (320/328/315/370/300/340 W) now correctly accumulate held-time across
+  ticks instead of resetting to 0 every time.
 
 ## Battery realtime via MQTT (2026-09-10)
 
