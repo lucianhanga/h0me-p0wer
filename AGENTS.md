@@ -558,6 +558,26 @@ EPIPE noise on every client disconnect).
   locally-ticking `nowMs` state so the bar fills smoothly every second
   between the 10 s `/api/power-plan` polls, not just once per poll) plus a
   "Ns" countdown label — shown only while a genuine step-up is pending.
+- **Mobile audit: "charging 71 W" wrapping mid-phrase, fixed (2026-09-16)**:
+  `.batt-status`'s charging/discharging text was a bare, un-wrapped text
+  node inside a flex row that also carries the right-aligned
+  `.batt-status-sub` ("usable window ≈ N kWh"). On phone widths, once both
+  pieces competed for space, the flex-assigned box for the anonymous text
+  item could be narrower than its content, and — because no `white-space`
+  was set — the browser wrapped the text at the space inside "71 W",
+  splitting the number from its unit onto two lines. Audited every tab at
+  375/390px width with a headless Playwright pass (local build, API calls
+  proxied to the live production backend for real data) looking for both
+  true horizontal overflow and mid-phrase wraps; this was the only genuine
+  defect found (the ROI BOM's `.roi-bom-name` ellipsis-truncation is
+  intentional, not a bug). Fix: wrapped the status phrase in
+  `<span className="batt-status-main">` with `white-space: nowrap`, gave
+  `.batt-status-sub` the same, and set `.batt-status { flex-wrap: wrap }`
+  so if the two truly can't fit together, the sub-label drops to its own
+  line instead of breaking the primary phrase — plus a `max-width: 600px`
+  font-size step-down on both for extra headroom. Verified with a forced
+  4-digit wattage ("discharging 1245 W") to confirm no code path can still
+  split the number from its unit.
 
 ## Battery realtime via MQTT (2026-09-10)
 

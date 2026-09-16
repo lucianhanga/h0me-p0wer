@@ -123,7 +123,7 @@ export default function BatteryTab() {
                     <span>▲</span>
                     <span>▲</span>
                   </span>
-                  ⚡ charging {fmtW(chargeW)}
+                  <span className="batt-status-main">⚡ charging {fmtW(chargeW)}</span>
                 </>
               )}
               {mode === "discharging" && (
@@ -133,10 +133,10 @@ export default function BatteryTab() {
                     <span>▼</span>
                     <span>▼</span>
                   </span>
-                  ⏏ discharging {fmtW(cellsW)}
+                  <span className="batt-status-main">⏏ discharging {fmtW(cellsW)}</span>
                 </>
               )}
-              {mode === "idle" && "idle"}
+              {mode === "idle" && <span className="batt-status-main">idle</span>}
               {usableKwh != null && (
                 <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>
               )}
