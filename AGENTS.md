@@ -658,6 +658,37 @@ EPIPE noise on every client disconnect).
   unreachable), not for an ordinary recovered outage. Verified the gap
   detection (leading/internal/trailing) and backfill math against a
   synthetic day matching the real gap's shape and length before shipping.
+- **Multi-day battery/PV cloud catch-up (2026-09-16)**: the backfill above
+  only ever fetched today+yesterday (`syncCloudHistory`'s existing
+  2-day loop) — fine for a restart or a few-hours outage (recovers on the
+  next 15-min sync or the next request), but a server down for SEVERAL
+  consecutive days would only ever recover the most recent day; older
+  missed days would silently stay uncovered forever, since nothing ever
+  goes back for them (same class of gap as the main fix, just longer
+  timescale). The grid meter already had a proper 30-day catch-up scanner
+  (`catchUpCloudHistory`, `getStoredPeriodStarts` to find what's missing);
+  added the same pattern for battery+PV (`catchUpBatteryPvHistory`,
+  `getStoredPvPeriodStarts`). Runs as its OWN startup gate
+  (`battPvSyncStarter`), separate from the meter's `syncStarter` — it needs
+  `latestBattery.sn`/`siteId`, which populate on the battery's own
+  REST/MQTT sync timeline, not the meter poller's, so gating it on the same
+  condition as the grid catch-up would risk running before battery info is
+  ready. Throttled identically (6 s between calls, one battery + one PV
+  call per missing day) to respect the same rate limit that a burst of
+  manual `device_type` probing tripped earlier this session (see the entry
+  above) — up to ~62 calls (~6 min) on a first-ever run with zero stored
+  history, far fewer on a normal restart since most days are already
+  cached.
+- **`POWER_PLAN_DISABLE` env var — hard dual-control guard (2026-09-16)**:
+  dev (this Mac) and production (192.168.1.10) can both run against the
+  same real meter/Anker account/battery at once; only one should ever hold
+  the battery schedule (`enabled: true`). "Just don't call `/enable` on
+  dev" isn't a real guarantee — a copied state file, a stray curl, a future
+  script could still flip it. `POWER_PLAN_DISABLE=true` (set in this repo's
+  local `.env`, NOT in production's) forces `PowerPlanController.enabled`
+  to `false` at construction regardless of persisted state, and makes
+  `enable()` throw outright rather than ever writing to the device — a
+  structural guarantee, not a discipline one. Documented in `.env.example`.
 
 ## Battery realtime via MQTT (2026-09-10)
 
