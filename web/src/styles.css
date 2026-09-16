@@ -1003,23 +1003,115 @@ pre {
     transform: rotate(360deg);
   }
 }
-.wx-today { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
-.wx-icon { width: 56px; height: 56px; color: #f7a44f; flex-shrink: 0; }
+/* Subtle warm-tinted gradient (vs. the flat card background elsewhere) —
+   2026-09-16, "make the weather tile more vivid/alive." Stays inside the
+   existing dark palette, just adds depth. */
+.wx-today {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #1a2128 0%, #1e252f 55%, #241e19 100%);
+}
+.wx-icon {
+  width: 56px;
+  height: 56px;
+  color: #f7a44f;
+  flex-shrink: 0;
+  animation: wx-icon-breathe 3.6s ease-in-out infinite;
+  transform-origin: center;
+}
+@keyframes wx-icon-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
 .wx-today > div { flex: 1 1 220px; }
 .sun-arc { width: 200px; max-width: 100%; }
 .arc-label { fill: #8b98a5; font-size: 11px; }
+/* Pulsing halo behind the current-time marker — a live read of "now" on
+   the sunrise-sunset arc, not just a static dot. */
+.sun-marker-glow {
+  fill: #f7a44f;
+  opacity: 0.3;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sun-pulse 2.6s ease-in-out infinite;
+}
+.sun-marker-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sun-pulse-dot 2.6s ease-in-out infinite;
+}
+@keyframes sun-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.3;
+  }
+  50% {
+    transform: scale(1.9);
+    opacity: 0.05;
+  }
+}
+@keyframes sun-pulse-dot {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
 .wx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; }
-.wx-grid h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.wx-grid h3 { margin: 0 0 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; }
 .wx-grid p { margin: 0.25rem 0; }
 /* Equal card heights per row: cards no longer flip (no back content ever
    existed for them), so each .card just stretches to match its row's
    tallest sibling — native CSS Grid align-items:stretch, no JS needed. */
 .wx-grid .card { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
 .wx-big { font-size: 1.3rem; font-weight: 600; }
+.wx-big.small { font-size: 1rem; font-weight: 600; }
+/* "Right now" card: a small accent border + pulsing live dot next to the
+   heading, so it visibly reads as "this moment," distinct from the
+   measured/predicted cards around it. */
+.wx-now { border-color: #f7a44f44; }
+.wx-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5fce80;
+  flex-shrink: 0;
+  animation: wx-live-pulse 1.8s ease-in-out infinite;
+}
+@keyframes wx-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 #5fce8055;
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 0 4px #5fce8000;
+  }
+}
 @media (max-width: 600px) {
   .wx-today { gap: 0.75rem; }
   .wx-icon { width: 44px; height: 44px; }
   .sun-arc { width: 160px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wx-icon,
+  .sun-marker-glow,
+  .sun-marker-dot,
+  .wx-live-dot {
+    animation: none;
+  }
 }
 
 /* --- ROI tab ------------------------------------------------------------ */

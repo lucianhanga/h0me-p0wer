@@ -1046,6 +1046,40 @@ EPIPE noise on every client disconnect).
   divides by 3.6 into kWh/m². That unit trap cost a fix round.
 - Cold start with Open-Meteo down → generic error state (no partial render);
   bookend cards show SOC as text, not bars (spec amended).
+- **Restructured into Today/Week groups, Production+Savings folded in, tiles
+  made more animated (2026-09-16, user request)**: was 9 tiles (hero,
+  weather, start-of-day, Production, end-of-day, yesterday, This week,
+  month, Estimated savings) with production/savings standing alone. Now 10:
+  hero, weather (unchanged, but animated — see below), then Today as 3 cards
+  (start / **Right now** / end) and Week as 3 cards (**This week so far** /
+  **what's coming** / **week estimate**), yesterday, month. Production
+  numbers moved into "Right now" (`production.todayKwh`, was its own card);
+  today's savings moved into "How today will end"
+  (`endOfDay.estimatedSavingsEur`, NEW field); the `savings` schema object
+  is gone entirely. `week.statement` (one generic blob) split into
+  `week.upcoming` (forecast-driven, ONLY days still ahead — the prompt is
+  explicit that today/past are out of scope here) and `week.estimate` +
+  `estimateKwh`/`estimateEur` (a projection through Sunday, not a recap).
+  "This week so far" is deliberately NOT part of the AI schema — it's a new
+  deterministic component (`ThisWeekSoFarCard`, mirrors `YesterdayCard`)
+  reading `/api/stats/overview`'s `byPeriod.week` (now calendar-week
+  aligned, see the Dashboard bar-chart fix entry above) — measured
+  "so-far" facts don't need an AI guess, and future days in that data are
+  already 0 so the total is correctly partial without extra logic.
+  `today.statusQuo` is a NEW schema field: the prompt requires present-tense
+  language describing THIS EXACT MOMENT (battery.socNow/pvNowW/etc.), not a
+  recap or forecast — verified against a real AI call; it correctly said
+  "0 W, no solar, no charging" in the evening rather than restating the
+  day's totals. Animation (CSS only, `prefers-reduced-motion` respected
+  throughout): the sun-rise/set arc now draws the ELAPSED portion
+  (sunrise → now) as a warm gradient stroke over the plain track — a live
+  read of how much of today's daylight has passed, not just a static
+  diagram — plus a pulsing glow behind the current-time marker; the weather
+  icon has a slow breathing scale animation; the weather card got a subtle
+  warm-tinted gradient background (still within the existing dark palette);
+  "Right now" gets a small orange-accented border and a pulsing green
+  live-dot next to its heading, visually setting it apart from the
+  measured/predicted cards around it.
 
 ## Responsive design (epic #13, done 2026-09-10)
 
