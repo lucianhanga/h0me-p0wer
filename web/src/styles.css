@@ -1320,6 +1320,8 @@ pre {
 .batt-status {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  row-gap: 0.15rem;
   gap: 0.5rem;
   font-weight: 600;
   color: #8b98a5;
@@ -1333,11 +1335,30 @@ pre {
   color: #c084fc;
 }
 
+/* "charging 320 W" / "discharging 320 W" must never break between the
+   number and its unit (2026-09-16 fix — flex's default anonymous text item
+   wrapped at the space in "320 W", splitting "320" and "W" onto separate
+   lines on phone widths once the usable-window sub-label crowded the row). */
+.batt-status-main {
+  white-space: nowrap;
+}
+
 .batt-status-sub {
   margin-left: auto;
   font-weight: 400;
   font-size: 0.8rem;
   color: #8b98a5;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .batt-status {
+    font-size: 0.9rem;
+  }
+
+  .batt-status-sub {
+    font-size: 0.72rem;
+  }
 }
 
 /* Cascading chevrons next to the charge/discharge status. */
