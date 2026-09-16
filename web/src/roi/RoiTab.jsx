@@ -62,13 +62,19 @@ export default function RoiTab() {
   if (error) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
 
-  const monthsToPayback = data.paybackDate
-    ? Math.max(
-        0,
-        Math.round((new Date(`${data.paybackDate}T12:00:00`).getTime() - Date.now()) / (30.44 * DAY_MS)),
-      )
-    : null;
+  const monthsTo = (iso) =>
+    iso == null
+      ? null
+      : Math.max(0, Math.round((new Date(`${iso}T12:00:00`).getTime() - Date.now()) / (30.44 * DAY_MS)));
+  const monthsToOutlookPayback = monthsTo(data.outlookPaybackDate);
   const baseline = data.baseline;
+  // "Possible outcome" (trend-adjusted rolling forecast — see roi.js
+  // buildOutlook) is the headline payback date; the original flat baseline
+  // plan (from day 1) stays visible as a comparison only where it actually
+  // differs, so the tile doesn't repeat the same date twice.
+  const planDiffers = data.paybackDate !== data.outlookPaybackDate;
+  const tracking = data.performanceRatioPct != null;
+  const ahead = tracking && data.performanceRatioPct >= 100;
 
   return (
     <div>
@@ -81,6 +87,13 @@ export default function RoiTab() {
           <div className="tile-sub">
             since {fmtDate(data.installDate)} · {data.measuredDays} days
           </div>
+        </div>
+        <div className="tile">
+          <div className="tile-title">Tracking</div>
+          <div className={`tile-main ${tracking ? (ahead ? "roi-pos" : "roi-neg") : ""}`}>
+            {tracking ? `${data.performanceRatioPct}%` : "—"}
+          </div>
+          <div className="tile-sub">{tracking ? "of seasonal baseline" : "not enough data yet"}</div>
         </div>
         <div className="tile">
           <div className="tile-title roi-baseline-head">
@@ -113,16 +126,24 @@ export default function RoiTab() {
         </div>
         <div className="tile">
           <div className="tile-title">Payback</div>
-          <div className="tile-main">{data.paybackDate ? fmtDate(data.paybackDate) : "—"}</div>
-          <div className="tile-sub">
-            {monthsToPayback != null ? `in ${monthsToPayback} months` : "not within 25 years"}
+          <div className="tile-main">
+            {data.outlookPaybackDate ? fmtDate(data.outlookPaybackDate) : "—"}
           </div>
+          <div className="tile-sub">
+            {monthsToOutlookPayback != null ? `in ${monthsToOutlookPayback} months` : "not within 25 years"}
+          </div>
+          {planDiffers && (
+            <div className="tile-sub muted">
+              baseline plan: {data.paybackDate ? fmtDate(data.paybackDate) : "—"}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="card">
         <h4>Amortization</h4>
         <AmortizationChart data={data} />
+        {data.outlookNote && <p className="muted roi-outlook-note">{data.outlookNote}</p>}
       </div>
 
       <div className="card">
@@ -188,16 +209,21 @@ export default function RoiTab() {
         {data.tariffEurPerKwh}/kWh, no panel degradation. {baseline.reasoning} Measured comparison:
         {" "}{fmtEur(data.measuredAvgDailySavingsEur)}/day over {data.measuredDays} days (today
         excluded, unfinished). Savings = avoided grid import (PV direct-to-home + battery cells
-        discharge).
+        discharge). The "Possible outcome" (dotted line, Payback tile) is a rolling forecast: the
+        baseline's seasonal shape scaled by how the system has tracked against it so far —
+        it moves as new days are measured, unlike the fixed baseline plan.
       </p>
     </div>
   );
 }
 
-// Cumulative savings vs. investment: solid green = measured actuals, dashed
-// blue = seasonally-shaped forecast from the persisted baseline; orange
-// dashed = total invested; marker = break-even where the FORECAST crosses
-// the invested line.
+// Cumulative savings vs. investment: ONE line, solid where it's measured
+// (2026-09-16, user request + research: dashboards mix up actual/forecast
+// when they use different colors for each — same color, style changes at
+// "now" is the standard convention) — solid green for what's already
+// known, dotted green continuing as the trend-adjusted "possible outcome"
+// (buildOutlook, roi.js). Orange dashed = total invested; marker =
+// break-even where the OUTLOOK crosses the invested line.
 function AmortizationChart({ data }) {
   const ref = useRef(null);
 
@@ -206,7 +232,7 @@ function AmortizationChart({ data }) {
       new Date(`${s.date}T00:00:00`).getTime(),
       s.cumulativeEur,
     ]);
-    const forecast = (data.forecastSeries ?? []).map((f) => [
+    const outlook = (data.outlookSeries ?? []).map((f) => [
       new Date(`${f.date}T00:00:00`).getTime(),
       f.cumulativeEur,
     ]);
@@ -250,12 +276,12 @@ function AmortizationChart({ data }) {
           data: measured,
         },
         {
-          name: "Forecast (baseline)",
+          name: "Possible outcome",
           type: "line",
           showSymbol: false,
-          lineStyle: { color: "#58a6ff", width: 2, type: "dashed", opacity: 0.8 },
-          itemStyle: { color: "#58a6ff" },
-          data: forecast,
+          lineStyle: { color: "#5fce80", width: 2, type: "dotted", opacity: 0.85 },
+          itemStyle: { color: "#5fce80" },
+          data: outlook,
           markLine: {
             silent: true,
             symbol: "none",
@@ -268,13 +294,13 @@ function AmortizationChart({ data }) {
               position: "insideStartTop",
             },
           },
-          markPoint: data.paybackDate
+          markPoint: data.outlookPaybackDate
             ? {
                 symbol: "circle",
                 symbolSize: 9,
                 itemStyle: { color: "#f7a44f" },
                 label: {
-                  formatter: `break-even\n${fmtDate(data.paybackDate)}`,
+                  formatter: `break-even\n${fmtDate(data.outlookPaybackDate)}`,
                   color: "#e8ecef",
                   fontSize: 10,
                   position: "top",
@@ -282,7 +308,7 @@ function AmortizationChart({ data }) {
                 data: [
                   {
                     coord: [
-                      new Date(`${data.paybackDate}T00:00:00`).getTime(),
+                      new Date(`${data.outlookPaybackDate}T00:00:00`).getTime(),
                       data.totalInvestedEur,
                     ],
                   },
