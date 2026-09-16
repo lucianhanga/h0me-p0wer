@@ -614,6 +614,50 @@ EPIPE noise on every client disconnect).
   recreated twice during today's unrelated deploys, rotating away the logs
   from the actual 09:05–14:15 window, so the underlying cause of the
   telemetry stall itself couldn't be root-caused from here.
+- **Same-day follow-up: the gap doesn't have to just be flagged — Anker's
+  own cloud has it, so recover it (2026-09-16)**: user pointed out the
+  Anker app shows a correct "today produced" figure for the exact same
+  window our local telemetry lost — the account's cloud isn't affected by
+  OUR poller being down, since the device reports to Anker independently.
+  Confirmed live: `anker.getEnergyAnalysis({..., deviceType:
+  "solar_production", type: "day"})` (site-level `power_service/v1/site/
+  energy_analysis`) returns a 20-min PV-production trend that has real,
+  substantial values (peaking ~500–700 W) throughout the exact 09:05–14:15
+  gap — confirmed via `curl .../api/cloud/energy?...&device_type=
+  solar_production`. `device_type=solarbank` (already used elsewhere for
+  the battery's own net-power day trend) also works for battery
+  charge/discharge. Tried several other device_type guesses
+  (`solar`/`pv`/`photovoltaic`/`battery`/`charge`/`discharge`/etc.) — all
+  rejected with "-1 Failed to request"; only `solar_production` and
+  `solarbank` (and `home_usage`, `grid`, already used) are valid. **Caution
+  for next time**: probing 8 device_type guesses in a tight loop tripped
+  Anker's rate limit (HTTP 429, ~1 min cooldown) — space out exploratory
+  cloud-endpoint calls, don't burst them.
+  Fix: new `cloud_pv_history` table + `saveCloudPvTrend`/`getCloudPvDayPower`
+  (`server/db.js`) — deliberately a SEPARATE table from `cloud_history`,
+  not a synthetic device_sn row in it, because `getBatterySn()` picks "the
+  one cloud_history device_sn that isn't the meter," which a fake PV SN
+  would break. `integrateBatteryEnergy` now accepts optional
+  `windowStartMs`/`windowEndMs` and returns `gaps: [{startMs, endMs}]`
+  (also catching LEADING gaps — down before the window even started — and
+  TRAILING gaps — still down right now — not just gaps between two known
+  readings). `syncCloudHistory()` (index.js) syncs `solar_production`
+  today+yesterday alongside the existing `solarbank` sync. The overview
+  route now backfills `pvKwh`/`dischargedKwh`/`chargedKwh` — standalone
+  totals, safe to recover — from the cloud for exactly the gap windows via
+  `sumCloudEnergyInGaps`. Deliberately did NOT backfill `pvToHomeKwh`/
+  `pvToBattKwh` (the PV home/battery split): the cloud only reports totals,
+  not that split, so there's nothing correct to backfill it with — and
+  `todayCellsKwh` (= discharge − pvToHome, the "From battery" €-savings
+  row) is computed from `battEnergy.dischargedKwh` (LOCAL-ONLY, pre-backfill)
+  specifically, not the backfilled `dischargedKwh` — mixing a backfilled
+  discharge total with a non-backfilled PV-passthrough figure would have
+  inflated that row's savings estimate for any gap window. `dataCoveragePct`
+  now reflects post-backfill coverage, so the Dashboard's amber note only
+  fires when even the cloud couldn't cover a gap (account/cloud also
+  unreachable), not for an ordinary recovered outage. Verified the gap
+  detection (leading/internal/trailing) and backfill math against a
+  synthetic day matching the real gap's shape and length before shipping.
 
 ## Battery realtime via MQTT (2026-09-10)
 

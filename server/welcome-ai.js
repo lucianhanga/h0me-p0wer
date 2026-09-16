@@ -8,6 +8,8 @@ import {
   getFirstBatteryAfter,
   getBatteryHistory,
   integrateBatteryEnergy,
+  getCloudPvDayPower,
+  sumCloudEnergyInGaps,
 } from "./db.js";
 import { localDate } from "./welcome-sources.js";
 
@@ -35,15 +37,26 @@ function dailyImportRows(sn, monthsBack = 2) {
 // validated model: produced (Σ pvW), to_home (gated pvW − chargeW through
 // the inverter), to_batt (min(pvW, chargeW) into the cells). Shared by the
 // daily rollup (index.js) and the welcome/ask context. See
-// integrateBatteryEnergy (db.js) for the shared gap-handling policy —
-// coveragePct is null when the window hasn't ended yet (dateStr is today)
-// and the caller doesn't know the window length; index.js's overview route
-// computes its own coverage against "now" instead.
+// integrateBatteryEnergy (db.js) for the shared gap-handling policy. `produced`
+// is backfilled from Anker's own cloud (site-level "solar_production" day
+// trend, synced by syncCloudHistory in index.js) for any local telemetry
+// gap — the cloud total-produced figure is standalone, so it's safe to
+// recover; `toHome`/`toBatt` are a derived split that can't be reconstructed
+// the same way and stay local-only (see AGENTS.md, 2026-09-16).
 export function pvKwhForDay(dateStr) {
   const start = new Date(`${dateStr}T00:00:00`).getTime();
-  const rows = getBatteryHistory(start, start + 86400000);
-  const { producedKwh, toHomeKwh, toBattKwh } = integrateBatteryEnergy(rows);
-  return { produced: producedKwh, toHome: toHomeKwh, toBatt: toBattKwh };
+  const end = start + 86400000;
+  const rows = getBatteryHistory(start, end);
+  const { producedKwh, toHomeKwh, toBattKwh, gaps } = integrateBatteryEnergy(rows, {
+    windowStartMs: start,
+    windowEndMs: Math.min(end, Date.now()),
+  });
+  let produced = producedKwh;
+  if (gaps.length) {
+    const backfillKwh = sumCloudEnergyInGaps(getCloudPvDayPower(dateStr, dateStr), gaps);
+    produced = Math.round((produced + backfillKwh) * 100) / 100;
+  }
+  return { produced, toHome: toHomeKwh, toBatt: toBattKwh };
 }
 
 function avgImportByWeekday(rows, firstDate) {

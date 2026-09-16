@@ -146,8 +146,8 @@ function SourceCard({ type, title, data, formatLabel }) {
         )}
         {active.dataCoveragePct != null && active.dataCoveragePct < 90 && (
           <div className="src-gap-note">
-            ⚠ {active.dataCoveragePct}% of today covered — a telemetry gap likely means actual
-            totals are higher than shown
+            ⚠ {active.dataCoveragePct}% of today covered, even after recovering what we could
+            from Anker's cloud — actual totals may still be higher than shown
           </div>
         )}
         <div className="src-rows">
