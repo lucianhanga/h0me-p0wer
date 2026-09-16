@@ -55,13 +55,19 @@ export default function BatteryTab() {
   const { live, config, features, constants } = data;
   const soc = live?.soc ?? 0;
   const lvlClass = soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
-  // Dominant direction only — PV can split so both read > 0 at once.
-  const mode =
-    (live?.chargeW ?? 0) > (live?.outputW ?? 0)
-      ? "charging"
-      : (live?.outputW ?? 0) > 0
-        ? "discharging"
-        : "idle";
+  // 2026-09-16 fix: outputW is the TOTAL inverter output (PV pass-through +
+  // cell discharge combined, see server/battery-params.js's
+  // deriveBatteryFlow) — comparing it directly misread pure PV pass-through
+  // (chargeW=0, outputW>0) as "discharging", disagreeing with the Live
+  // tab's flow diagram. cellsW is the actual battery discharge power.
+  // Dominant direction only, matching FlowDiagram's own rule — chargeW and
+  // cellsW can both briefly read a small nonzero value from sensor timing
+  // noise (see AGENTS.md), not real simultaneous charge+discharge; a naive
+  // "chargeW > 0" check let a tiny charging blip override a real, larger
+  // discharge.
+  const chargeW = live?.chargeW ?? 0;
+  const cellsW = live?.cellsW ?? 0;
+  const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
   const minPct = config?.dischargeLowerLimitPct;
   const maxPct = config?.chargeUpperLimitPct;
   const usableKwh =
@@ -117,7 +123,7 @@ export default function BatteryTab() {
                     <span>▲</span>
                     <span>▲</span>
                   </span>
-                  ⚡ charging {fmtW(live.chargeW)}
+                  ⚡ charging {fmtW(chargeW)}
                 </>
               )}
               {mode === "discharging" && (
@@ -127,7 +133,7 @@ export default function BatteryTab() {
                     <span>▼</span>
                     <span>▼</span>
                   </span>
-                  ⏏ discharging {fmtW(live.outputW)}
+                  ⏏ discharging {fmtW(cellsW)}
                 </>
               )}
               {mode === "idle" && "idle"}

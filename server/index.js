@@ -14,7 +14,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow } from "./battery-params.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
 import {
@@ -203,11 +203,10 @@ app.get("/api/flow", (req, res) => {
   const pvW = b?.pvW ?? 0;
   const chargeW = b?.chargeW ?? 0;
   const outputW = b?.outputW ?? 0;
-  const pvToBattery = Math.min(pvW, chargeW);
-  // PV watts reaching the house INSIDE the inverter output (informational):
-  // PV splits exactly into cells + pass-through (pvW = chargeW + pvThrough),
-  // and the pass-through only exists while the inverter is outputting.
-  const pvToHome = outputW > 0 ? Math.max(0, pvW - chargeW) : 0;
+  // Shared with /api/battery/params (battery-params.js) so the Live tab's
+  // flow diagram and the Strategy/Battery tab's charge/discharge readout
+  // can never disagree again (they did: see deriveBatteryFlow's comment).
+  const { pvToBattery, pvToHome, cellsW, gridChargeW } = deriveBatteryFlow({ pvW, chargeW, outputW });
   res.json({
     ok: true,
     data: {
@@ -226,10 +225,10 @@ app.get("/api/flow", (req, res) => {
             charge: chargeW,
             // Cells-only output to the house (inverter total minus the PV
             // pass-through) — the PV→Home arc carries pvToHome separately.
-            cells: Math.max(0, outputW - pvToHome),
+            cells: cellsW,
             // Charging sourced from the grid (chargeW beyond what PV covers)
             // — the Home→Battery arc, normally 0.
-            gridCharge: Math.max(0, chargeW - pvToBattery),
+            gridCharge: gridChargeW,
             name: b.name ?? "Solarbank",
             pv1W: b.pv1W ?? 0,
             pv2W: b.pv2W ?? 0,

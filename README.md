@@ -5,9 +5,9 @@ setup: Smart Meter Gen 2 (AE1X0, local Modbus TCP) + Solarbank 2 E1600 Plus
 battery + 2×500 W PV — live monitoring, history, AI briefings, ROI tracking,
 and its own PV-aware power plan that drives the battery's output preset.
 
-| Welcome (AI briefing) | Live (power flow) | Battery |
+| Welcome (AI briefing) | Live (power flow) | Strategy (battery + power plan) |
 |---|---|---|
-| ![Welcome](docs/phone-welcome.png) | ![Live](docs/phone-live.png) | ![Battery](docs/phone-battery.png) |
+| ![Welcome](docs/phone-welcome.png) | ![Live](docs/phone-live.png) | ![Strategy](docs/phone-battery.png) |
 
 | Graph (history) | Dashboard (consumption by source) | ROI (payback) |
 |---|---|---|
@@ -15,10 +15,11 @@ and its own PV-aware power plan that drives the battery's output preset.
 
 ## The six tabs
 
-- **Welcome** — an AI briefing (any OpenAI-compatible endpoint; Kimi by
-  default): today's weather with a sunrise→sunset arc, week/month sun
-  outlook, estimated PV production for your system, measured start-of-day vs.
-  predicted end-of-day battery/house state, and savings in € at your tariff.
+- **Welcome** — an AI briefing (any OpenAI-compatible endpoint): today's
+  weather with a sunrise→sunset arc, week/month sun outlook, estimated PV
+  production for your system, measured start-of-day vs. predicted end-of-day
+  battery/house state, savings in € at your tariff, and yesterday's measured
+  summary — ordered present → recent past → broader trend → bottom line.
   Facts are gathered deterministically (Nominatim + Open-Meteo + PVGIS — all
   free and keyless — plus your local history); ONE structured AI call per
   scheduled slot (6:00–22:00 every 2 h), deterministic fallback offline.
@@ -27,19 +28,21 @@ and its own PV-aware power plan that drives the battery's output preset.
   correct Anker split: PV→home is inverter pass-through, never
   double-counted), main tiles (house, grid, battery with charge/discharge
   symbols, PV incl. per-string PV1/PV2), per-phase details, and the
-  **Power Plan** section (see below).
-- **Battery** — animated SOC gauge with charge/discharge animation and the
-  configured min/max limits as markers on the gauge, kWh stored, plus every
-  battery parameter (limits, backup reserve, zero-export switch, per-string
-  PV, error codes; device config cached 6 h to respect Anker rate limits).
+  **Power Plan** status card (see below).
+- **Strategy** — choose how the power plan prioritizes PV/battery/grid (see
+  below), plus the battery gauge and every battery parameter (limits,
+  backup reserve, zero-export switch, per-string PV, temperature, error
+  codes — collapsed behind a details toggle; device config cached 6 h to
+  respect Anker rate limits).
 - **Graph** — three focused charts (Home Power Usage / Power Production /
   Battery), each with its own span buttons (1h/6h/12h/24h/7d/30d), pan/zoom,
   resolution that follows zoom (raw 5 s samples where local data exists,
   cloud 20-min anchors + interpolation for the past), and live updates.
 - **Dashboard** — consumption by source for today/week/month/year: house
   total split into grid / PV-direct / from-battery (cells only — no double
-  booking), plus PV→battery stored; € spent vs saved per source; ‹ › period
-  navigation into the past; flip a tile for per-day stacked bars.
+  booking), plus PV→battery stored and total PV produced; € spent vs saved
+  per source; ‹ › period navigation into the past; flip a tile for per-day
+  stacked bars.
 - **ROI** — bill of materials with snapshotted purchase prices (clickable to
   Amazon, thumbnails, PDF download), amortization chart with measured savings
   vs. a seasonally-shaped forecast, and payback/projections (1–15 y) computed
@@ -49,17 +52,28 @@ and its own PV-aware power plan that drives the battery's output preset.
 ## Power Plan (the controller)
 
 The app can take over the battery's output preset (Anker weekly schedule,
-write path verified) instead of relying on the static app schedule:
+write path verified) instead of relying on the static app schedule. Pick a
+**strategy** and a **discharge trigger** on the Strategy tab:
 
-- PV = 0 → discharge `min(800 W, house demand)` until the SOC reserve
-- PV > 0 → `min(floor(PV/100)×100, house demand)` — surplus trickles into the
-  battery, never cycles (anti-jojo); PV above house demand charges fully
-- **Evening bridge**: once the day has peaked and PV falls below 70 % of
-  peak, the battery covers the sunset ramp instead of the grid
-- Battery full → all PV to the house; zero export by construction (the
-  device's 0 W feed-in switch stays untouched as the fast safety net)
-- Writes only on meaningful changes (≥50 W, ≥30 s apart, up-steps held 3 min)
-- Enable saves the existing Anker schedule; disable restores it byte-for-byte
+- **House priority** (default) — the battery continuously tops up the house,
+  leaving a small grid margin (`GRID_TARGET_W`, default 100 W) instead of
+  covering demand exactly, down to the discharge floor + a safety margin
+  (`DISCHARGE_TOLERANCE_PCT`, default 4 points).
+- **Battery priority** — PV charges the battery first; the house draws from
+  the grid meanwhile. Once full (or PV stops), PV passes straight through to
+  the house — the battery is never discharged under this strategy. Better
+  suited if you get frequent grid outages and want more energy in reserve
+  (though a bare Solarbank 2 Plus has no dedicated off-grid output of its
+  own without a Power Dock accessory — verify in the Anker app).
+- **Discharge trigger**: `auto` (the strategy above decides) or `manual` — a
+  persisted Discharge/Don't-discharge toggle that **overrides whichever
+  strategy is selected**, for testing or a deliberate manual call.
+
+Zero export by construction — the preset is never set above house demand
+(the device's own 0 W feed-in switch stays untouched as the fast safety
+net). Writes only on meaningful changes (≥50 W, ≥30 s apart, up-steps held
+3 min). Enable (Live tab) saves the existing Anker schedule; disable
+restores it byte-for-byte.
 
 Per instance (state file next to the DB) — run it on exactly ONE server.
 

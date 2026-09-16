@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import FlipTile from "../components/FlipTile.jsx";
 import SpeakButton from "../components/SpeakButton.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
@@ -63,25 +62,23 @@ function YesterdayCard() {
   if (!y) return null;
   const saved = Math.round((y.battEur + y.pvEur) * 100) / 100;
   return (
-    <FlipTile>
-      <section className="card">
-        <SpeakButton
-          id="yesterday"
-          className="speak-corner"
-          text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${saved}.`}
-        />
-        <h3>Yesterday</h3>
-        <p className="wx-big">
-          {y.homeKwh} kWh <span className="muted">used</span>
-        </p>
-        <p className="muted">
-          grid {y.gridKwh} kWh · battery {y.battKwh} kWh · PV {y.pvKwh} kWh direct
-        </p>
-        <p className="muted">
-          ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{saved}
-        </p>
-      </section>
-    </FlipTile>
+    <section className="card">
+      <SpeakButton
+        id="yesterday"
+        className="speak-corner"
+        text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${saved}.`}
+      />
+      <h3>Yesterday</h3>
+      <p className="wx-big">
+        {y.homeKwh} kWh <span className="muted">used</span>
+      </p>
+      <p className="muted">
+        grid {y.gridKwh} kWh · battery {y.battKwh} kWh · PV {y.pvKwh} kWh direct
+      </p>
+      <p className="muted">
+        ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{saved}
+      </p>
+    </section>
   );
 }
 
@@ -135,118 +132,100 @@ export default function WelcomeTab() {
       <UpdatedStamp at={data.generatedAt}>
         {`${data.aiPowered ? "AI briefing" : "offline estimate"}${data.stale ? " · cached" : ""}`}
       </UpdatedStamp>
-      <FlipTile>
-        <section className="card wx-hero">
-          <SpeakButton id="hero" className="speak-corner" text={data.greeting} />
-          <p className="wx-greeting">{data.greeting}</p>
-          <p className="muted wx-meta">
-            {data.aiPowered ? "AI briefing" : "offline estimate"}
-            {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-            <button
-              className={`wx-refresh${refreshing ? " spinning" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation(); // don't flip the card when refreshing
-                refresh();
-              }}
-              disabled={refreshing}
-              title="Refresh briefing (new AI call)"
-              aria-label="Refresh briefing"
-            >
-              ↻
-            </button>
-          </p>
-        </section>
-      </FlipTile>
+      <section className="card wx-hero">
+        <SpeakButton id="hero" className="speak-corner" text={data.greeting} />
+        <p className="wx-greeting">{data.greeting}</p>
+        <p className="muted wx-meta">
+          {data.aiPowered ? "AI briefing" : "offline estimate"}
+          {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          <button
+            className={`wx-refresh${refreshing ? " spinning" : ""}`}
+            onClick={refresh}
+            disabled={refreshing}
+            title="Refresh briefing (new AI call)"
+            aria-label="Refresh briefing"
+          >
+            ↻
+          </button>
+        </p>
+      </section>
 
-      <FlipTile>
-        <section className="card wx-today">
-          <SpeakButton
-            id="today"
-            className="speak-corner"
-            text={`${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun. Sunrise at ${gt.sunrise}, sunset at ${gt.sunset}.`}
-          />
-          <WeatherIcon name={data.today.icon} />
-          <div>
-            <p>{data.today.summary}</p>
-            <p className="muted">
-              {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
-            </p>
-          </div>
-          <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
-        </section>
-      </FlipTile>
+      <section className="card wx-today">
+        <SpeakButton
+          id="today"
+          className="speak-corner"
+          text={`${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun. Sunrise at ${gt.sunrise}, sunset at ${gt.sunset}.`}
+        />
+        <WeatherIcon name={data.today.icon} />
+        <div>
+          <p>{data.today.summary}</p>
+          <p className="muted">
+            {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
+          </p>
+        </div>
+        <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
+      </section>
 
       <div className="wx-grid">
-        <FlipTile>
-          <section className="card">
-            <SpeakButton id="week" className="speak-corner" text={`This week: ${data.week.statement}`} />
-            <h3>This week</h3>
-            <p>{data.week.statement}</p>
-          </section>
-        </FlipTile>
-        <FlipTile>
-          <section className="card">
-            <SpeakButton id="month" className="speak-corner" text={`${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`} />
-            <h3>{new Date().toLocaleString([], { month: "long" })}</h3>
-            <p>{data.month.statement}</p>
-          </section>
-        </FlipTile>
+        <section className="card">
+          <SpeakButton
+            id="startOfDay"
+            className="speak-corner"
+            text={`Start of day: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
+          />
+          <h3>Start of day (measured)</h3>
+          <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
+          <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
+        </section>
 
-        <FlipTile>
-          <section className="card">
-            <SpeakButton
-              id="production"
-              className="speak-corner"
-              text={`Estimated production: ${data.production.todayKwh} kilowatt-hours today, about ${data.production.weekKwh} this week and ${data.production.monthKwh} this month. ${data.production.reasoning}`}
-            />
-            <h3>{gt.pvLiveToday ? "Production" : "Estimated production (planned PV)"}</h3>
-            <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
-            <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
-            <p className="muted">{data.production.reasoning}</p>
-          </section>
-        </FlipTile>
+        <section className="card">
+          <SpeakButton
+            id="production"
+            className="speak-corner"
+            text={`Estimated production: ${data.production.todayKwh} kilowatt-hours today, about ${data.production.weekKwh} this week and ${data.production.monthKwh} this month. ${data.production.reasoning}`}
+          />
+          <h3>{gt.pvLiveToday ? "Production" : "Estimated production (planned PV)"}</h3>
+          <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">today</span></p>
+          <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
+          <p className="muted">{data.production.reasoning}</p>
+        </section>
+
+        <section className="card">
+          <SpeakButton
+            id="endOfDay"
+            className="speak-corner"
+            text={`End of day prediction: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house. ${data.endOfDay.note}`}
+          />
+          <h3>End of day (predicted)</h3>
+          <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
+          <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
+          <p className="muted">{data.endOfDay.note}</p>
+        </section>
 
         <YesterdayCard />
 
-        <FlipTile>
-          <section className="card">
-            <SpeakButton
-              id="startOfDay"
-              className="speak-corner"
-              text={`Start of day: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
-            />
-            <h3>Start of day (measured)</h3>
-            <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
-            <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
-          </section>
-        </FlipTile>
+        <section className="card">
+          <SpeakButton id="week" className="speak-corner" text={`This week: ${data.week.statement}`} />
+          <h3>This week</h3>
+          <p>{data.week.statement}</p>
+        </section>
 
-        <FlipTile>
-          <section className="card">
-            <SpeakButton
-              id="endOfDay"
-              className="speak-corner"
-              text={`End of day prediction: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house. ${data.endOfDay.note}`}
-            />
-            <h3>End of day (predicted)</h3>
-            <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
-            <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
-            <p className="muted">{data.endOfDay.note}</p>
-          </section>
-        </FlipTile>
+        <section className="card">
+          <SpeakButton id="month" className="speak-corner" text={`${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`} />
+          <h3>{new Date().toLocaleString([], { month: "long" })}</h3>
+          <p>{data.month.statement}</p>
+        </section>
 
-        <FlipTile>
-          <section className="card">
-            <SpeakButton
-              id="savings"
-              className="speak-corner"
-              text={`Estimated savings: about ${data.savings.todayEur} euros today and ${data.savings.monthEur} euros this month. ${data.savings.note}`}
-            />
-            <h3>Estimated savings</h3>
-            <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
-            <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
-          </section>
-        </FlipTile>
+        <section className="card">
+          <SpeakButton
+            id="savings"
+            className="speak-corner"
+            text={`Estimated savings: about ${data.savings.todayEur} euros today and ${data.savings.monthEur} euros this month. ${data.savings.note}`}
+          />
+          <h3>Estimated savings</h3>
+          <p className="wx-big">≈ €{data.savings.todayEur} <span className="muted">today</span></p>
+          <p className="muted">month ≈ €{data.savings.monthEur} · {data.savings.note}</p>
+        </section>
       </div>
     </div>
   );

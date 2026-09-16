@@ -379,6 +379,37 @@ section {
   color: #8b98a5;
 }
 
+/* Prominent caution callout — a hardware limitation worth emphasizing
+   (e.g. "this claim depends on an accessory you may not have"), stronger
+   than a plain .muted line but not a hard .error-box. */
+.callout-warn {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  background: #3a301d;
+  border: 1px solid #f7a44f44;
+  border-left: 3px solid #f7a44f;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0 1rem;
+}
+
+.callout-warn .callout-icon {
+  font-size: 1.1rem;
+  line-height: 1.3;
+  flex-shrink: 0;
+}
+
+.callout-warn p {
+  margin: 0;
+  color: #e8ecef;
+  font-size: 0.85rem;
+}
+
+.callout-warn strong {
+  color: #f7a44f;
+}
+
 h4 {
   font-size: 0.9rem;
   color: #8b98a5;
@@ -927,6 +958,10 @@ pre {
 .wx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; }
 .wx-grid h3 { margin: 0 0 0.5rem; font-size: 0.95rem; }
 .wx-grid p { margin: 0.25rem 0; }
+/* Equal card heights per row: cards no longer flip (no back content ever
+   existed for them), so each .card just stretches to match its row's
+   tallest sibling — native CSS Grid align-items:stretch, no JS needed. */
+.wx-grid .card { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
 .wx-big { font-size: 1.3rem; font-weight: 600; }
 @media (max-width: 600px) {
   .wx-today { gap: 0.75rem; }

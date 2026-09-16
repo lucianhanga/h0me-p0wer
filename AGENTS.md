@@ -480,6 +480,24 @@ EPIPE noise on every client disconnect).
   (`temperatureC: latestBattery?.temperatureC ?? null`) instead of blanking
   it every 10 s; this is the first MQTT-only-enriched field in the app (MQTT
   and REST previously always described the same field set).
+- **Live/Strategy tab charge-discharge inconsistency, fixed (2026-09-16)**:
+  `outputW` (raw device field) is the TOTAL inverter AC output — PV
+  pass-through + cell discharge combined (per the validated flow model
+  below) — NOT battery discharge power alone. `/api/flow` already derived
+  the correct `cells = max(0, outputW - pvToHome)` for the Live tab's flow
+  diagram, but `/api/battery/params` exposed raw `outputW` directly and
+  `BatteryTab.jsx`'s gauge compared `chargeW` vs `outputW` — misreading
+  pure PV pass-through (chargeW=0, outputW>0) as "discharging", and
+  showing the wrong wattage even when actually discharging (the full
+  inverter output, not just the cells' share) — disagreeing with the Live
+  tab, which correctly showed idle/the smaller cells figure. Fix: extracted
+  `deriveBatteryFlow({pvW, chargeW, outputW})` into `battery-params.js`
+  (returns `{pvToBattery, pvToHome, cellsW, gridChargeW}`), used by BOTH
+  `/api/flow` (index.js, replacing its inline duplicate) and
+  `/api/battery/params` (new `live.cellsW` field) — one shared derivation,
+  so the two routes can't drift apart again. `BatteryTab.jsx`'s mode is now
+  `chargeW > 0 ? "charging" : cellsW > 0 ? "discharging" : "idle"` and the
+  discharging wattage label shows `cellsW`, not `outputW`.
 
 ## Battery realtime via MQTT (2026-09-10)
 
