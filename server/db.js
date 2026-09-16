@@ -254,22 +254,68 @@ export function getBatteryHistory(sinceMs, untilMs = null) {
     : selectBatteryBetween.all(sinceMs, untilMs);
 }
 
-// Per-string PV energy for a local day (kWh), trapezoid over the 10 s
-// battery_snapshots — the cloud exposes per-string POWER (pv1_w/pv2_w) only,
-// no per-string kWh, so we integrate it ourselves.
+// Single shared trapezoid pass over battery_snapshots rows — every "today"
+// energy number (discharge/charge/PV production/PV split/per-string) used to
+// be computed by three separately-duplicated copies of this same loop
+// (index.js, welcome-ai.js, and this file), each with its own "skip gaps >
+// 30 min" guard — safe individually, but a real ~5h data outage (2026-09-16,
+// see AGENTS.md) silently zeroed out that whole window from every one of
+// them with no way to tell "today" apart from "today, but a chunk is
+// missing." Now there's one calculation: gaps longer than maxGapMs are still
+// excluded from the sums (never guessed at via interpolation), but
+// `coveredMs` reports how much of the requested window actually had
+// continuous data, so callers can surface "partial data" instead of quietly
+// presenting an undercounted total as if it were the whole day.
+export function integrateBatteryEnergy(rows, { maxGapMs = 30 * 60 * 1000 } = {}) {
+  let dischargedKwh = 0;
+  let chargedKwh = 0;
+  let producedKwh = 0;
+  let toHomeKwh = 0;
+  let toBattKwh = 0;
+  let pv1Kwh = 0;
+  let pv2Kwh = 0;
+  let coveredMs = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const dtMs = rows[i].ts - rows[i - 1].ts;
+    if (dtMs > maxGapMs) continue;
+    coveredMs += dtMs;
+    const dt = dtMs / 3600000;
+    const a = rows[i - 1];
+    const b = rows[i];
+    dischargedKwh += (((a.output_w ?? 0) + (b.output_w ?? 0)) / 2) * dt / 1000;
+    chargedKwh += (((a.charge_w ?? 0) + (b.charge_w ?? 0)) / 2) * dt / 1000;
+    producedKwh += (((a.pv_w ?? 0) + (b.pv_w ?? 0)) / 2) * dt / 1000;
+    pv1Kwh += (((a.pv1_w ?? 0) + (b.pv1_w ?? 0)) / 2) * dt / 1000;
+    pv2Kwh += (((a.pv2_w ?? 0) + (b.pv2_w ?? 0)) / 2) * dt / 1000;
+    // PV reaching the house = pv_w − charge_w (the part not charging), only
+    // while the inverter outputs (output_w already includes the PV
+    // pass-through — see /api/flow for the validated model).
+    const th0 = (a.output_w ?? 0) > 0 ? Math.max(0, (a.pv_w ?? 0) - (a.charge_w ?? 0)) : 0;
+    const th1 = (b.output_w ?? 0) > 0 ? Math.max(0, (b.pv_w ?? 0) - (b.charge_w ?? 0)) : 0;
+    toHomeKwh += ((th0 + th1) / 2) * dt / 1000;
+    const tb0 = Math.min(a.pv_w ?? 0, a.charge_w ?? 0);
+    const tb1 = Math.min(b.pv_w ?? 0, b.charge_w ?? 0);
+    toBattKwh += ((tb0 + tb1) / 2) * dt / 1000;
+  }
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return {
+    dischargedKwh: r2(dischargedKwh),
+    chargedKwh: r2(chargedKwh),
+    producedKwh: r2(producedKwh),
+    toHomeKwh: r2(toHomeKwh),
+    toBattKwh: r2(toBattKwh),
+    pv1Kwh: r2(pv1Kwh),
+    pv2Kwh: r2(pv2Kwh),
+    coveredMs,
+  };
+}
+
+// Per-string PV energy for a local day (kWh) — see integrateBatteryEnergy.
 export function getPvStringKwhForDay(dateStr) {
   const start = new Date(`${dateStr}T00:00:00`).getTime();
   const rows = selectBatterySince.all(start).filter((r) => r.ts < start + 86400000);
-  let pv1 = 0;
-  let pv2 = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
-    if (dt > 0.5) continue; // skip gaps > 30 min (same rule as pvKwhForDay)
-    pv1 += ((((rows[i - 1].pv1_w ?? 0) + (rows[i].pv1_w ?? 0)) / 2) * dt) / 1000;
-    pv2 += ((((rows[i - 1].pv2_w ?? 0) + (rows[i].pv2_w ?? 0)) / 2) * dt) / 1000;
-  }
-  const r2 = (v) => Math.round(v * 100) / 100;
-  return { pv1Kwh: r2(pv1), pv2Kwh: r2(pv2) };
+  const { pv1Kwh, pv2Kwh } = integrateBatteryEnergy(rows);
+  return { pv1Kwh, pv2Kwh };
 }
 
 export function pruneBattery() {

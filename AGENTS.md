@@ -578,6 +578,42 @@ EPIPE noise on every client disconnect).
   font-size step-down on both for extra headroom. Verified with a forced
   4-digit wattage ("discharging 1245 W") to confirm no code path can still
   split the number from its unit.
+- **"Today's Production" looked wrong, root cause: a real ~5h telemetry
+  gap silently zeroed instead of being flagged (2026-09-16)**: user reported
+  today's PV production figure looked too small. Queried
+  `battery_snapshots` directly and found a genuine 5h10min gap in local
+  telemetry, 09:05–14:15 — right through peak sun — after which collection
+  resumed normally (~4,000 rows/day at 30 s cadence otherwise). Root cause
+  wasn't bad arithmetic: `dischargedKwh`/`chargedKwh`/`pvKwh`/`pvToHomeKwh`/
+  `pvToBattKwh` for "today" were each computed by a trapezoid loop that
+  explicitly skips any pair of readings more than 30 min apart — correct
+  in principle (never guess across an outage), but the 5h chunk simply
+  contributed nothing, with no signal distinguishing "measured, genuinely
+  low" from "measured, but missing a chunk." Compounding it: THREE
+  independent copies of this exact loop existed (`server/index.js`'s
+  overview route, `server/welcome-ai.js`'s `pvKwhForDay`, and
+  `server/db.js`'s `getPvStringKwhForDay`), each free to drift; and a
+  SEPARATE bug in the opposite direction — the "Today" tile's flip-side bar
+  chart is built from `interp()`'s anchor interpolation, which had **no**
+  gap-size check at all, so it silently straight-line-guessed across the
+  very same 5h gap instead of dropping it, meaning the headline number and
+  its own flip-side chart could disagree about the same outage. Fix:
+  extracted the one shared `integrateBatteryEnergy(rows, {maxGapMs})`
+  (`server/db.js`) — used by all three former call sites — which keeps the
+  "skip gaps > 30 min" policy but now also returns `coveredMs`, letting
+  callers report what fraction of the window is real; gave `interp()` and
+  the grid `profile` builder in `server/index.js` the same 30-min gap guard
+  so bars and headline numbers can no longer disagree about a real outage;
+  and added `byPeriod.today.dataCoveragePct` to `/api/stats/overview`,
+  surfaced on the Dashboard's "Today" tile as an amber `.src-gap-note`
+  ("N% of today covered…") whenever coverage drops below 90% — the low
+  number now reads as "incomplete data," not a silent, unexplained low
+  reading. Verified `integrateBatteryEnergy` against a synthetic gap
+  matching the real one's length: the gap segment contributes zero and
+  `coveredMs` correctly reports only the non-gap minutes. The container was
+  recreated twice during today's unrelated deploys, rotating away the logs
+  from the actual 09:05–14:15 window, so the underlying cause of the
+  telemetry stall itself couldn't be root-caused from here.
 
 ## Battery realtime via MQTT (2026-09-10)
 

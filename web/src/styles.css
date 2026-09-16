@@ -684,6 +684,22 @@ pre {
   line-height: 1;
 }
 
+/* Today's tile only: flagged when integrateBatteryEnergy's coverage drops
+   below 90% — a real telemetry gap (see AGENTS.md, 2026-09-16) means the
+   day's totals are undercounted, not genuinely low. Shown instead of a
+   silent number so a gap reads as "incomplete," not "measured." */
+.src-gap-note {
+  background: #3a301d;
+  border: 1px solid #f7a44f44;
+  border-left: 3px solid #f7a44f;
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.6rem;
+  color: #f7a44f;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .src-rows {
   display: flex;
   flex-direction: column;

@@ -34,6 +34,7 @@ import {
   getLatestBattery,
   getBatteryHistory,
   getPvStringKwhForDay,
+  integrateBatteryEnergy,
   pruneBattery,
   savePvDaily,
   getPvDaily,
@@ -616,12 +617,14 @@ app.get("/api/stats/overview", (req, res) => {
   }
   const sorted = [...anchors.entries()].sort(([a], [b]) => a - b);
   const profile = [];
+  const MAX_GAP_MS = 30 * 60 * 1000;
   for (let i = 0; i < sorted.length; i++) {
     const [bt, cell] = sorted[i];
     profile.push({ t: bt, power: Math.round(cell.s / cell.c) });
     const next = sorted[i + 1];
     if (next) {
       const [nbt] = next;
+      if (nbt - bt > MAX_GAP_MS) continue; // real outage — don't guess across it
       const nv = next[1].s / next[1].c;
       for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
         const frac = (t - bt) / (nbt - bt);
@@ -677,6 +680,14 @@ app.get("/api/stats/overview", (req, res) => {
       if (!cellsAnchors.has(bt)) putInto(cellsAnchors, bt, Math.max(0, r.power));
     }
   }
+  // 2026-09-16 fix: this used to interpolate a straight line across ANY gap
+  // between anchors, no matter how long — a real multi-hour outage (see
+  // AGENTS.md) got smoothly guessed across instead of showing as missing,
+  // while the headline today-kWh totals below (integrateBatteryEnergy)
+  // correctly dropped that same gap — so the "Today" bar chart and its own
+  // headline number could disagree about the same outage. Both now share the
+  // same "don't guess across gaps > 30 min" policy (MAX_GAP_MS, declared
+  // above for the grid profile).
   const interp = (anchors) => {
     const sorted = [...anchors.entries()].sort(([a], [b]) => a - b);
     const byT = new Map();
@@ -686,6 +697,7 @@ app.get("/api/stats/overview", (req, res) => {
       const next = sorted[i + 1];
       if (next) {
         const [nbt] = next;
+        if (nbt - bt > MAX_GAP_MS) continue; // real outage — don't guess across it
         const nv = next[1].s / next[1].c;
         for (let t = bt + BUCKET; t < nbt; t += BUCKET) {
           const frac = (t - bt) / (nbt - bt);
@@ -748,32 +760,25 @@ app.get("/api/stats/overview", (req, res) => {
       }))
     : [];
 
-  // --- Battery (Solarbank) today: SOC + integrated discharge/charge kWh
-  // from the 30-s live snapshots (trapezoid, gaps > 30 min skipped).
+  // --- Battery (Solarbank) today: SOC + integrated discharge/charge/PV kWh
+  // from the 30-s live snapshots — shared trapezoid + gap policy, see
+  // integrateBatteryEnergy (db.js). todayDataCoveragePct reports how much of
+  // today's elapsed window actually had continuous data (2026-09-16: a real
+  // ~5h battery-telemetry outage silently zeroed today's PV production with
+  // no way to tell "measured, genuinely low" from "measured, but a chunk of
+  // the day is missing" — see AGENTS.md).
   const battRows = getBatteryHistory(dayStartMs, now);
-  let dischargedKwh = 0;
-  let chargedKwh = 0;
-  let pvKwh = 0;
-  let pvToHomeKwh = 0;
-  let pvToBattKwh = 0;
-  for (let i = 1; i < battRows.length; i++) {
-    const dt = (battRows[i].ts - battRows[i - 1].ts) / 3600000;
-    if (dt > 0.5) continue;
-    dischargedKwh += (((battRows[i - 1].output_w + battRows[i].output_w) / 2) * dt) / 1000;
-    chargedKwh += (((battRows[i - 1].charge_w + battRows[i].charge_w) / 2) * dt) / 1000;
-    pvKwh += (((battRows[i - 1].pv_w + battRows[i].pv_w) / 2) * dt) / 1000;
-    // PV reaching the house = pv_w − charge_w (the part not charging), only
-    // while the inverter outputs (output_power already includes the PV
-    // pass-through — see /api/flow for the validated model).
-    const pvHome0 = battRows[i - 1].output_w > 0 ? Math.max(0, battRows[i - 1].pv_w - battRows[i - 1].charge_w) : 0;
-    const pvHome1 = battRows[i].output_w > 0 ? Math.max(0, battRows[i].pv_w - battRows[i].charge_w) : 0;
-    pvToHomeKwh += (((pvHome0 + pvHome1) / 2) * dt) / 1000;
-    // PV loaded into the battery (informational — savings are booked at
-    // discharge time, NOT here, or the same PV energy would count twice).
-    const pvBatt0 = Math.min(battRows[i - 1].pv_w, battRows[i - 1].charge_w);
-    const pvBatt1 = Math.min(battRows[i].pv_w, battRows[i].charge_w);
-    pvToBattKwh += (((pvBatt0 + pvBatt1) / 2) * dt) / 1000;
-  }
+  const battEnergy = integrateBatteryEnergy(battRows);
+  const dischargedKwh = battEnergy.dischargedKwh;
+  const chargedKwh = battEnergy.chargedKwh;
+  const pvKwh = battEnergy.producedKwh;
+  const pvToHomeKwh = battEnergy.toHomeKwh;
+  const pvToBattKwh = battEnergy.toBattKwh;
+  const todayElapsedMs = Math.max(1, now - dayStartMs);
+  const todayDataCoveragePct = Math.max(
+    0,
+    Math.min(100, Math.round((battEnergy.coveredMs / todayElapsedMs) * 100)),
+  );
   const battLatest = latestBattery ?? getLatestBattery();
   const battery = battLatest
     ? {
@@ -858,6 +863,11 @@ app.get("/api/stats/overview", (req, res) => {
       pvProducedKwh: r2(pvKwh),
       // "Loaded into the battery" (from PV) — informational, no € attached.
       battInKwh: todayPvBattKwh,
+      // % of today's elapsed time actually covered by continuous telemetry
+      // (see integrateBatteryEnergy) — below 100 means a real gap dropped
+      // some of today's battery/PV numbers rather than under-measuring a
+      // genuinely quiet day. UI should flag low values, not hide them.
+      dataCoveragePct: todayDataCoveragePct,
     },
     week: {
       gridKwh: r2(weekImport),

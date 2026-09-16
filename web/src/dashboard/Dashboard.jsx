@@ -144,6 +144,12 @@ function SourceCard({ type, title, data, formatLabel }) {
             <span>{active.pvProducedKwh} kWh produced</span>
           </div>
         )}
+        {active.dataCoveragePct != null && active.dataCoveragePct < 90 && (
+          <div className="src-gap-note">
+            ⚠ {active.dataCoveragePct}% of today covered — a telemetry gap likely means actual
+            totals are higher than shown
+          </div>
+        )}
         <div className="src-rows">
           {rows.map((r) => (
             <div className="src-row" key={r.key}>

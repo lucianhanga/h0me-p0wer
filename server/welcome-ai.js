@@ -2,7 +2,13 @@
 // here comes from local DB rows or the fetched weather/PVGIS payloads — the
 // AI (welcome-ai call below) only interprets these numbers, never invents
 // them.
-import { getCloudTrend, getSnapshotRows, getFirstBatteryAfter, getBatteryHistory } from "./db.js";
+import {
+  getCloudTrend,
+  getSnapshotRows,
+  getFirstBatteryAfter,
+  getBatteryHistory,
+  integrateBatteryEnergy,
+} from "./db.js";
 import { localDate } from "./welcome-sources.js";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -28,26 +34,16 @@ function dailyImportRows(sn, monthsBack = 2) {
 // PV energy for a date (or day-so-far) from battery_snapshots, split per the
 // validated model: produced (Σ pvW), to_home (gated pvW − chargeW through
 // the inverter), to_batt (min(pvW, chargeW) into the cells). Shared by the
-// daily rollup (index.js) and the welcome/ask context.
+// daily rollup (index.js) and the welcome/ask context. See
+// integrateBatteryEnergy (db.js) for the shared gap-handling policy —
+// coveragePct is null when the window hasn't ended yet (dateStr is today)
+// and the caller doesn't know the window length; index.js's overview route
+// computes its own coverage against "now" instead.
 export function pvKwhForDay(dateStr) {
-  const r2 = (v) => Math.round(v * 100) / 100;
   const start = new Date(`${dateStr}T00:00:00`).getTime();
   const rows = getBatteryHistory(start, start + 86400000);
-  let produced = 0;
-  let toHome = 0;
-  let toBatt = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const dt = (rows[i].ts - rows[i - 1].ts) / 3600000;
-    if (dt > 0.5) continue;
-    produced += (((rows[i - 1].pv_w + rows[i].pv_w) / 2) * dt) / 1000;
-    const th0 = rows[i - 1].output_w > 0 ? Math.max(0, rows[i - 1].pv_w - rows[i - 1].charge_w) : 0;
-    const th1 = rows[i].output_w > 0 ? Math.max(0, rows[i].pv_w - rows[i].charge_w) : 0;
-    toHome += (((th0 + th1) / 2) * dt) / 1000;
-    const tb0 = Math.min(rows[i - 1].pv_w, rows[i - 1].charge_w);
-    const tb1 = Math.min(rows[i].pv_w, rows[i].charge_w);
-    toBatt += (((tb0 + tb1) / 2) * dt) / 1000;
-  }
-  return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
+  const { producedKwh, toHomeKwh, toBattKwh } = integrateBatteryEnergy(rows);
+  return { produced: producedKwh, toHome: toHomeKwh, toBatt: toBattKwh };
 }
 
 function avgImportByWeekday(rows, firstDate) {
