@@ -874,10 +874,68 @@ EPIPE noise on every client disconnect).
   `daysToPayback` = where the FORECAST crosses invested; `projections[]`
   1/2/3/5/10/15 y = `annualSavingsEur × years`; constant tariff, no
   degradation.
-- Amortization chart: measured cumulative (solid green) + forecast
-  cumulative (dashed blue, seasonal wave visible) vs. invested markLine,
-  break-even markPoint where the FORECAST crosses invested. Legend for both
-  lines. Styles: `.roi-*` at the end of styles.css.
+- Amortization chart: measured cumulative (solid green) + a trend-adjusted
+  "possible outcome" (dotted green, same color — see the rolling-forecast
+  entry below) vs. invested markLine, break-even markPoint where the
+  OUTLOOK crosses invested. Legend for both lines. Styles: `.roi-*` at the
+  end of styles.css.
+- **Rolling forecast / "possible outcome" + Performance Ratio tracking
+  (2026-09-16, user request — researched industry practice first, see
+  below)**: previously the chart drew TWO fully-separate lines from
+  installDate — measured (solid green) and the flat baseline forecast
+  (dashed BLUE) — running in parallel for the whole horizon, including the
+  already-measured period (redundant overlap) and never reacting to
+  whether the system was actually over- or under-performing the baseline.
+  Researched best practice first (forked WebSearch agent): confirmed (1)
+  PVGIS remains the right source for this scale/region (validated for
+  Europe, already applies the standard 14% system-loss default — this
+  codebase's existing baseline code already does this correctly); (2) the
+  standard PV-monitoring metric for actual-vs-expected output is
+  "Performance Ratio" (%), used as-is here as `performanceRatioPct`; (3)
+  the standard dashboard convention for actual-transitioning-to-forecast is
+  ONE series that changes line style (solid → dashed/dotted) at "now" —
+  NOT two differently-colored series, which risks reading a forecast as
+  fact; (4) trend-adjusting a forward projection by scaling the baseline's
+  remaining increments by the actual/expected ratio observed so far is a
+  legitimate, standard technique ("rolling forecast" in FP&A terms) — blend
+  the trend into the baseline's seasonal SHAPE, don't replace the shape or
+  discard the baseline; (5) explicit pitfalls to avoid: don't over-fit a
+  short/noisy window (this codebase already treats short measured windows
+  as "weak signal only" for the baseline itself — the new prompt below
+  carries the same caution), don't imply false precision, P50/P90
+  probabilistic forecasting is commercial-grade overkill at this scale
+  (skipped).
+  Implementation (`server/roi.js`): new `buildOutlook(installDate,
+  baseline, measured, totalInvestedEur)` — walks the SAME baseline seasonal
+  shape day-by-day through yesterday to get `baselineSoFarEur` (what the
+  fixed baseline alone predicted for the measured period), divides
+  `measured.savingsSoFarEur` by it for `performanceRatio`, then continues
+  FROM THE LAST MEASURED POINT (not from 0 — this is what makes the chart
+  line continuous rather than two overlapping series) using
+  `dailyIncrement × performanceRatio` for the rest of the horizon, yielding
+  `outlookSeries`/`outlookPaybackDate`/`daysToOutlookPayback`. The FIXED
+  baseline object itself is untouched (still "must not drift," per
+  roi-baseline.js) — outlook is a separate DERIVED quantity layered on top,
+  recomputed fresh on every `/api/roi` call (cheap, pure arithmetic, no AI).
+  A new `outlookNote` (ONE-TWO sentence AI interpretation of the tracking
+  numbers, same "AI narrates given numbers, never invents them" pattern as
+  `welcome-ai.js`/`roi-baseline.js`'s `reasoning`) is cached in kv store
+  `roi_outlook_note`, keyed by the measured window's last date — so it's
+  naturally recomputed once per day (when "yesterday" advances) rather than
+  on every 5-min poll; falls back to a deterministic template sentence
+  when AI is unconfigured or fails. Verified live: with only a 3-day
+  measured window, the AI correctly self-caveated ("This is an early 3-day
+  read... too soon to call a trend") per the prompt's explicit small-sample
+  rule — matches the research's stated pitfall to avoid.
+  Frontend (`RoiTab.jsx`): the chart's second series was renamed "Possible
+  outcome" and changed from blue dashed to the SAME green as "Saved
+  (measured)" with `lineStyle.type: "dotted"` — matching the researched
+  solid→dotted convention. New "Tracking" tile shows `performanceRatioPct`
+  (green ≥100%, red <100%). "Payback" tile's headline figure switched from
+  the flat baseline-only date to `outlookPaybackDate`; the original
+  baseline-plan date stays visible as a small sub-line, but only when it
+  differs from the outlook (avoids showing the same date twice for a
+  brand-new system with no measured drift yet).
 - **Product images + BOM PDF (2026-09-15)**: cached pictures in
   `server/roi-images/<ASIN>.jpg` (committed, ≤400px JPEG via `sips`) served
   by `GET /api/roi/image/:asin` (immutable cache; 404 = 1×1 GIF so `<img>`

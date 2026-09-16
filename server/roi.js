@@ -8,9 +8,12 @@ import {
   getPvDaily,
   getPvDailyDates,
   getStoredPeriodStarts,
+  kvGet,
+  kvSet,
 } from "./db.js";
 import { buildBomPdf } from "./roi-pdf.js";
 import { getBaseline, computeBaseline } from "./roi-baseline.js";
+import { parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
 
 // Bill of materials with SNAPSHOTTED purchase prices — user-editable config.
 // ROI math must use the prices paid, never live prices, so rows carry their
@@ -128,6 +131,148 @@ function buildForecast(installDate, baseline, totalInvestedEur) {
   return { forecastSeries, paybackDate, daysToPayback };
 }
 
+// "Possible outcome": a rolling forecast (2026-09-16, user request — see
+// AGENTS.md; industry term confirmed via research) that continues from the
+// LAST MEASURED point (not from 0, so the chart line is continuous) using
+// the baseline's seasonal SHAPE scaled by how the system has actually
+// performed so far. This is deliberately separate from buildForecast()'s
+// flat baseline-from-day-1 line: the baseline object itself stays fixed
+// (see roi-baseline.js's "must not drift" note) — only this DERIVED
+// quantity blends it with the current trend. performanceRatio = measured
+// savings so far ÷ what the baseline alone would have predicted for the
+// same days (the PV-monitoring "Performance Ratio" concept, expressed
+// against this system's own seasonal baseline rather than a physical
+// irradiance model, since that's the reference this app already has).
+function buildOutlook(installDate, baseline, measured, totalInvestedEur) {
+  if (!baseline?.annualSavingsEur || baseline.annualSavingsEur <= 0) {
+    return {
+      performanceRatio: null,
+      baselineSoFarEur: 0,
+      outlookSeries: [],
+      outlookPaybackDate: null,
+      daysToOutlookPayback: null,
+    };
+  }
+  const dailyAvg = baseline.annualSavingsEur / 365;
+  const startMs = new Date(`${installDate}T00:00:00`).getTime();
+  const measuredDays = measured.series.length;
+
+  // What the baseline ALONE would have predicted for the same measured
+  // period — the denominator for "ahead of or behind plan."
+  let baselineSoFar = 0;
+  for (let day = 1; day <= measuredDays; day++) {
+    const t = startMs + day * DAY_MS;
+    const month = new Date(t).getMonth();
+    baselineSoFar = r2(baselineSoFar + dailyAvg * baseline.monthlyDistribution[month] * 12);
+  }
+  // Don't over-fit a short/noisy window (research finding): the ratio is
+  // still exact math, but callers should treat it as a weak signal while
+  // measuredDays is small — same caveat roi-baseline.js already applies.
+  const performanceRatio = baselineSoFar > 0 ? r2(measured.savingsSoFarEur / baselineSoFar) : null;
+  const ratio = performanceRatio ?? 1;
+
+  const lastDate = measuredDays ? measured.series[measuredDays - 1].date : installDate;
+  const lastMs = new Date(`${lastDate}T00:00:00`).getTime();
+  const lastCum = measured.savingsSoFarEur;
+  const outlookSeries = [{ date: lastDate, cumulativeEur: lastCum }];
+  let cum = lastCum;
+  let outlookPaybackDate = lastCum >= totalInvestedEur ? lastDate : null;
+  let daysToOutlookPayback = outlookPaybackDate ? measuredDays : null;
+  let marginEndMs = outlookPaybackDate ? lastMs + POST_PAYBACK_MONTHS * 30.44 * DAY_MS : null;
+  for (let day = 1; day <= MAX_FORECAST_DAYS; day++) {
+    const t = lastMs + day * DAY_MS;
+    const month = new Date(t).getMonth();
+    cum = r2(cum + dailyAvg * baseline.monthlyDistribution[month] * 12 * ratio);
+    outlookSeries.push({ date: localDate(new Date(t)), cumulativeEur: cum });
+    if (outlookPaybackDate == null && cum >= totalInvestedEur) {
+      outlookPaybackDate = localDate(new Date(t));
+      daysToOutlookPayback = measuredDays + day;
+      marginEndMs = t + POST_PAYBACK_MONTHS * 30.44 * DAY_MS;
+    }
+    if (marginEndMs != null && t >= marginEndMs) break;
+  }
+  return { performanceRatio, baselineSoFarEur: baselineSoFar, outlookSeries, outlookPaybackDate, daysToOutlookPayback };
+}
+
+// One-line AI interpretation of the tracking numbers above — the AI only
+// narrates server-computed figures (same pattern as welcome-ai.js /
+// roi-baseline.js's `reasoning`), never invents them. Cached once per day
+// (keyed by the measured window's last date, which only changes once daily)
+// so this doesn't trigger an AI call on every 5-min poll.
+const OUTLOOK_NOTE_KEY = "roi_outlook_note";
+
+const OUTLOOK_NOTE_SCHEMA = {
+  name: "roi_outlook_note",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["note"],
+    properties: { note: { type: "string" } },
+  },
+};
+
+const OUTLOOK_NOTE_SYSTEM_PROMPT = `You write a ONE-to-TWO sentence "tracking" note for a home solar ROI dashboard, comparing MEASURED savings so far against a FIXED seasonal baseline for the same period.
+Hard rules:
+- Use ONLY the numbers given in the context. Never invent figures.
+- performanceRatioPct: measured ÷ baseline-predicted for the same days, as a percentage — over 100 means ahead of the seasonal plan, under 100 means behind it.
+- If measuredDays is small (under ~14), explicitly caveat that it's an early/short read, not a confirmed trend — do not overstate confidence.
+- Interpret, don't just restate the numbers verbatim — but only mention a specific cause (season, weather, a habit change) if it's plausible from the data given; otherwise keep it general.
+- Plain, friendly, ≤2 sentences. Currency EUR. Language: see language field.`;
+
+function fallbackOutlookNote(ctx) {
+  if (ctx.performanceRatioPct == null) return "Not enough measured days yet to compare against the baseline.";
+  const dir = ctx.performanceRatioPct >= 100 ? "ahead of" : "behind";
+  return `Currently tracking ${ctx.performanceRatioPct}% of the seasonal baseline — ${dir} plan.`;
+}
+
+async function computeOutlookNote(config, ctx) {
+  if (!config?.ai?.apiKey) return fallbackOutlookNote(ctx);
+  const user = JSON.stringify({ language: config.ai.language, ...ctx });
+  const body = (responseFormat) => ({
+    model: config.ai.model,
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: OUTLOOK_NOTE_SYSTEM_PROMPT },
+      { role: "user", content: user },
+    ],
+    response_format: responseFormat,
+  });
+  const url = `${config.ai.baseUrl}/chat/completions`;
+  const headers = { Authorization: `Bearer ${config.ai.apiKey}`, "Content-Type": "application/json" };
+  for (const format of [
+    { type: "json_schema", json_schema: OUTLOOK_NOTE_SCHEMA },
+    { type: "json_object" },
+  ]) {
+    try {
+      const j = await fetchJson(url, {
+        timeoutMs: 20000,
+        headers,
+        method: "POST",
+        body: JSON.stringify(body(format)),
+      });
+      const parsed = JSON.parse(j.choices[0].message.content);
+      if (typeof parsed.note === "string" && parsed.note) return parsed.note;
+    } catch (err) {
+      console.warn(`[roi] outlook note AI attempt failed (${err.message})`);
+    }
+  }
+  return fallbackOutlookNote(ctx);
+}
+
+async function getOutlookNote(lastDate, ctx) {
+  const hit = kvGet(OUTLOOK_NOTE_KEY);
+  if (hit?.value?.forDate === lastDate) return hit.value.note;
+  let config = null;
+  try {
+    config = parseWelcomeConfig();
+  } catch {
+    /* misconfigured — fall through to the deterministic note */
+  }
+  const note = await computeOutlookNote(config, ctx);
+  kvSet(OUTLOOK_NOTE_KEY, { forDate: lastDate, note });
+  return note;
+}
+
 async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
   // Rows flagged `excluded` stay listed but don't count toward the total.
@@ -161,11 +306,29 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     ? await computeBaseline(deps, measuredHint)
     : await getBaseline(deps, measuredHint);
 
+  // forecastSeries/paybackDate: the ORIGINAL flat baseline-from-day-1 plan
+  // — still computed (used as the "baseline plan" comparison date), but no
+  // longer the chart's primary line; see buildOutlook for the trend-adjusted
+  // "possible outcome" that continues from what's actually been measured.
   const { forecastSeries, paybackDate, daysToPayback } = buildForecast(
     installDate,
     baseline,
     totalInvestedEur,
   );
+  const outlook = buildOutlook(installDate, baseline, measured, totalInvestedEur);
+  const performanceRatioPct =
+    outlook.performanceRatio != null ? Math.round(outlook.performanceRatio * 100) : null;
+  const lastMeasuredDate = measured.series.length
+    ? measured.series[measured.series.length - 1].date
+    : installDate;
+  const outlookNote = await getOutlookNote(lastMeasuredDate, {
+    performanceRatioPct,
+    measuredDays: measured.measuredDays,
+    savingsSoFarEur: measured.savingsSoFarEur,
+    baselineSoFarEur: outlook.baselineSoFarEur,
+    baselinePaybackDate: paybackDate,
+    outlookPaybackDate: outlook.outlookPaybackDate,
+  });
   const projections = [1, 2, 3, 5, 10, 15].map((years) => {
     const cumulativeSavingsEur = r2(baseline.annualSavingsEur * years);
     return {
@@ -187,9 +350,14 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     projectedAnnualSavingsEur: baseline.annualSavingsEur,
     paybackDate,
     daysToPayback,
+    performanceRatioPct,
+    outlookPaybackDate: outlook.outlookPaybackDate,
+    daysToOutlookPayback: outlook.daysToOutlookPayback,
+    outlookNote,
     projections,
     series: measured.series,
     forecastSeries,
+    outlookSeries: outlook.outlookSeries,
   };
 }
 

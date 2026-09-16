@@ -1282,6 +1282,13 @@ pre {
   color: #e05c5c;
 }
 
+/* AI-narrated tracking note under the amortization chart — see roi.js
+   getOutlookNote. Numbers are always server-computed; this is prose only. */
+.roi-outlook-note {
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
 @media (max-width: 600px) {
   .roi-chart {
     height: 200px;
