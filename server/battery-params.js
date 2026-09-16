@@ -23,6 +23,26 @@ const CONSTANTS = {
 
 const numOrNull = (v) => (v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
+// Derived flow split (2026-09-16 bugfix): `outputW` is the TOTAL inverter AC
+// output — pvThrough + cellDischarge combined, per the validated flow model
+// (AGENTS.md "Flow model") — NOT battery discharge power on its own.
+// Anything that wants to know whether the battery is actually discharging
+// must use `cellsW`, not raw `outputW`. Previously only `/api/flow`
+// (index.js) computed this; `/api/battery/params` exposed raw `outputW`
+// directly, and BatteryTab.jsx's charge/discharge gauge compared raw
+// chargeW vs outputW — misreading pure PV pass-through (chargeW=0,
+// outputW>0) as "discharging", disagreeing with the Live tab's flow
+// diagram (which correctly showed idle/no cells activity). Both routes now
+// share this one derivation so they can't drift apart again.
+export function deriveBatteryFlow({ pvW = 0, chargeW = 0, outputW = 0 }) {
+  const pvToBattery = Math.min(pvW, chargeW);
+  // PV pass-through only exists while the inverter is actually outputting.
+  const pvToHome = outputW > 0 ? Math.max(0, pvW - chargeW) : 0;
+  const cellsW = Math.max(0, outputW - pvToHome);
+  const gridChargeW = Math.max(0, chargeW - pvToBattery);
+  return { pvToBattery, pvToHome, cellsW, gridChargeW };
+}
+
 async function ensureSiteId(anker, getLiveBattery) {
   if (anker.siteId) return anker.siteId;
   const live = getLiveBattery();
@@ -191,6 +211,7 @@ export async function getBatteryLimits(anker, getLiveBattery) {
 export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
   app.get("/api/battery/params", async (req, res) => {
     const b = getLiveBattery() ?? null;
+    const flow = b ? deriveBatteryFlow(b) : null;
     const live = b
       ? {
           ts: b.ts ?? null,
@@ -199,6 +220,9 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
           soc: b.soc ?? null,
           outputW: b.outputW ?? 0,
           chargeW: b.chargeW ?? 0,
+          // Actual battery discharge power — use this, not outputW, to
+          // decide "is the battery discharging" (see deriveBatteryFlow).
+          cellsW: flow.cellsW,
           pvW: b.pvW ?? 0,
           pv1W: b.pv1W ?? 0,
           pv2W: b.pv2W ?? 0,
@@ -211,7 +235,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
           chargingStatus: b.chargingStatus ?? null,
           errCode: b.errCode ?? null,
           // Charging beyond what PV covers = grid-sourced (usually 0).
-          gridToBatteryW: Math.max(0, (b.chargeW ?? 0) - Math.min(b.pvW ?? 0, b.chargeW ?? 0)),
+          gridToBatteryW: flow.gridChargeW,
           storedKwh: b.soc != null ? Math.round(((b.soc / 100) * CONSTANTS.capacityKwh) * 100) / 100 : null,
         }
       : null;

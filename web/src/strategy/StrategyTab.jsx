@@ -91,6 +91,17 @@ export default function StrategyTab() {
         ))}
       </div>
       {activeStrategy && <p className="muted">{activeStrategy.desc}</p>}
+      <div className="callout-warn">
+        <span className="callout-icon">⚠</span>
+        <p>
+          <strong>Frequent grid outages?</strong> Prefer Battery priority — House priority
+          continuously draws the battery down near its floor as normal behavior, leaving little
+          in reserve at any given moment; Battery priority keeps it topped up instead. Without a
+          Power Dock accessory, this Solarbank 2 Plus has no dedicated off-grid output of its
+          own — check the Anker app to confirm your setup actually delivers stored power during
+          an outage before relying on it.
+        </p>
+      </div>
 
       <h4>Battery discharge trigger</h4>
       <div className="controls">
@@ -159,22 +170,6 @@ export default function StrategyTab() {
               {d.wrote ? `preset written (${d.reason})` : d.reason}
               {state.lastWriteAt ? ` · last write ${new Date(state.lastWriteAt).toLocaleTimeString()}` : ""}
             </div>
-          </div>
-          <div className="card">
-            <div className="card-label">
-              {state.strategy === "battery_priority" && d.trigger !== "manual" ? "Charge ceiling" : "Discharge floor"}
-            </div>
-            {state.strategy === "battery_priority" && d.trigger !== "manual" ? (
-              <>
-                <div className="card-value">{d.chargeCeilingPct}%</div>
-                <div className="card-label">{d.atChargeCeiling ? "at ceiling — serving house" : "charging"}</div>
-              </>
-            ) : (
-              <>
-                <div className="card-value">{d.dischargeFloorPct}%</div>
-                <div className="card-label">account's configured reserve</div>
-              </>
-            )}
           </div>
         </div>
       )}
