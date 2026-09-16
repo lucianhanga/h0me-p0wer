@@ -1,13 +1,10 @@
-import dotenv from "dotenv";
+// MUST be the first import — see env.js for why (ES module import
+// hoisting means this has to run before power-plan.js/anker-cloud.js/etc.
+// are evaluated, not just before this file's OWN body runs).
+import "./env.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
-
-// .env lives at the project root, one level up from this file — resolve it
-// explicitly so the server works no matter where it is started from.
-dotenv.config({
-  path: path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env"),
-});
 import { WebSocketServer } from "ws";
 import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
@@ -147,6 +144,29 @@ function rollupPvDaily() {
   if (dateStr >= today) return;
   const v = pvKwhForDay(dateStr);
   savePvDaily(dateStr, v.produced, v.toHome, v.toBatt);
+}
+
+// Monday (local midnight) of the calendar week containing d.
+function mondayOf(d) {
+  const m = new Date(d);
+  m.setHours(0, 0, 0, 0);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  return m;
+}
+
+// Bucket 20-min {ts, power} cloud rows (getCloudDayPower/getCloudPvDayPower
+// shape) into a 24-length hourly kWh array (local hours 0-23), clamping
+// negative (export) power to 0 — shared by the "day" tile's current-day and
+// past-day flip-side bars so both use the same hour buckets.
+function hourlyKwhFromRows(rows) {
+  const sums = new Array(24).fill(0);
+  for (const r of rows) {
+    if (r.power == null) continue;
+    const hour = new Date(r.ts).getHours();
+    if (hour < 0 || hour > 23) continue;
+    sums[hour] += (Math.max(r.power, 0) * (20 / 60)) / 1000;
+  }
+  return sums;
 }
 
 // Stored PV totals over a date range (finished days only; today is added
@@ -750,9 +770,14 @@ app.get("/api/stats/overview", (req, res) => {
   const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
   // Attach per-day battery kWh (from the battery's cloud day trends).
   for (const r of monthRows) Object.assign(r, battKwhForDay(r.label));
+  // Calendar week (Monday..Sunday) containing today — NOT a rolling 7-day
+  // window (2026-09-16 fix: "This week" used to mean "the last 7 days,"
+  // which doesn't match the label or how This month/This year behave).
+  const weekStartMs = mondayOf(dayStartMs).getTime();
+  const weekEndMs = weekStartMs + 7 * 86400000;
   const weekRows = monthRows.filter((r) => {
     const t = new Date(`${r.label}T12:00:00`).getTime();
-    return t > now - 7 * 86400000 && t <= now;
+    return t >= weekStartMs && t < weekEndMs;
   });
 
   // --- Year: monthly kWh from cloud_history year rows.
@@ -957,19 +982,30 @@ app.get("/api/stats/overview", (req, res) => {
   // 30-min, summed in pairs — half-hourly bars were too dense/cluttered on
   // the flip side); week/month = per day (cloud month rows + battery
   // day-trends + pv_daily); year = per month.
+  //
+  // Always emit all 24 hourly slots (2026-09-16 fix: this used to only
+  // create a slot for hours that had profile data, so the chart's x-axis
+  // silently shrank/grew as the day went on instead of showing a stable
+  // 24-hour day with the not-yet-happened part visibly blank). Hours later
+  // than the current one are null (genuinely hasn't happened — a real gap,
+  // not a measured zero); the in-progress current hour shows its partial
+  // total so far, same as every other "today" figure in this app.
   const HOUR_MS = 3600 * 1000;
-  const hourlyToday = new Map();
+  const nowHour = new Date(now).getHours();
+  const hourlySums = Array.from({ length: 24 }, () => ({ grid: 0, batt: 0, pv: 0 }));
   for (const p of profile) {
-    const ht = Math.floor(p.t / HOUR_MS) * HOUR_MS;
-    const cur = hourlyToday.get(ht) ?? { label: ht, grid: 0, batt: 0, pv: 0 };
-    cur.grid += (Math.max(p.power, 0) * 0.5) / 1000;
-    cur.batt += (Math.max(p.cells ?? 0, 0) * 0.5) / 1000;
-    cur.pv += (Math.max(p.pvHome ?? 0, 0) * 0.5) / 1000;
-    hourlyToday.set(ht, cur);
+    const hour = new Date(p.t).getHours();
+    if (hour < 0 || hour > 23) continue;
+    hourlySums[hour].grid += (Math.max(p.power, 0) * 0.5) / 1000;
+    hourlySums[hour].batt += (Math.max(p.cells ?? 0, 0) * 0.5) / 1000;
+    hourlySums[hour].pv += (Math.max(p.pvHome ?? 0, 0) * 0.5) / 1000;
   }
-  byPeriod.today.bars = [...hourlyToday.values()]
-    .sort((a, b) => a.label - b.label)
-    .map((h) => ({ label: h.label, grid: r2(h.grid), batt: r2(h.batt), pv: r2(h.pv) }));
+  byPeriod.today.bars = Array.from({ length: 24 }, (_, h) => ({
+    label: dayStartMs + h * HOUR_MS,
+    grid: h > nowHour ? null : r2(hourlySums[h].grid),
+    batt: h > nowHour ? null : r2(hourlySums[h].batt),
+    pv: h > nowHour ? null : r2(hourlySums[h].pv),
+  }));
   const dayBars = (rows) =>
     rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: pvDayKwh(r.label) }));
   byPeriod.week.bars = dayBars(weekRows);
@@ -1048,30 +1084,35 @@ app.get("/api/stats/period", (req, res) => {
   function pvProducedDay(dateStr) {
     return getPvDaily(dateStr, dateStr)[0]?.produced ?? 0;
   }
-  // Grid import kWh + per-interval bars for one date (meter cloud day-trend).
+  // Grid import kWh + 24 hourly bars for one finished date (meter/battery/PV
+  // cloud day-trends). 2026-09-16 fixes: (1) bars used to be raw 20-min
+  // cloud buckets (~72/day) instead of the hourly granularity the "Today"
+  // tile uses, so the chart got visibly denser the moment you navigated
+  // back a day — now hourlyKwhFromRows buckets all three sources the same
+  // way "Today" does. (2) `pv` was hardcoded to 0 — the cloud's
+  // "solar_production" day-trend (cloud_pv_history, synced by
+  // syncCloudHistory/catchUpBatteryPvHistory) gives PRODUCTION shape, not
+  // the to-home/to-battery split, so it's used to shape pv_daily's correct
+  // to-home TOTAL proportionally across the day's hours rather than fed in
+  // directly (which would double-count against the "batt" cells bar for
+  // whatever charged the battery that day).
   function dayGrid(dateStr) {
-    let imp = 0;
-    const bars = [];
-    const battByHm = new Map();
-    if (battSn) {
-      for (const r of getCloudDayPower(battSn, dateStr, dateStr)) {
-        if (r.power == null) continue;
-        const hm = new Date(r.ts).toTimeString().slice(0, 5);
-        battByHm.set(hm, Math.max(0, (r.power * (20 / 60)) / 1000));
-      }
-    }
-    for (const r of getCloudDayPower(sn, dateStr, dateStr)) {
-      if (r.power == null) continue;
-      const kwh = (Math.max(r.power, 0) * (20 / 60)) / 1000;
-      imp += kwh;
-      bars.push({
-        label: r.ts,
-        grid: r2(kwh),
-        batt: r2(battByHm.get(new Date(r.ts).toTimeString().slice(0, 5)) ?? 0),
-        pv: 0,
-      });
-    }
-    return { imp: r2(imp), bars };
+    const gridH = hourlyKwhFromRows(getCloudDayPower(sn, dateStr, dateStr));
+    const battH = battSn ? hourlyKwhFromRows(getCloudDayPower(battSn, dateStr, dateStr)) : new Array(24).fill(0);
+    const pvProdH = hourlyKwhFromRows(getCloudPvDayPower(dateStr, dateStr));
+    const pvProdTotal = pvProdH.reduce((a, v) => a + v, 0);
+    const pvHomeTotal = pvKwhDay(dateStr);
+    const pvH =
+      pvProdTotal > 0 ? pvProdH.map((v) => (v / pvProdTotal) * pvHomeTotal) : new Array(24).fill(0);
+    const dayStartLocal = new Date(`${dateStr}T00:00:00`).getTime();
+    const bars = Array.from({ length: 24 }, (_, h) => ({
+      label: dayStartLocal + h * 3600000,
+      grid: r2(gridH[h]),
+      batt: r2(battH[h]),
+      pv: r2(pvH[h]),
+    }));
+    const imp = r2(gridH.reduce((a, v) => a + v, 0));
+    return { imp, bars };
   }
   function monthRows(ym) {
     if (!sn) return [];
@@ -1103,10 +1144,13 @@ app.get("/api/stats/period", (req, res) => {
     pvKwhSum = pvKwhDay(dateStr);
     pvProducedKwhSum = pvProducedDay(dateStr);
   } else if (type === "week") {
-    // Rolling 7-day window shifted back by whole weeks (matches the offset-0
-    // tile's semantics).
-    const end = new Date(dayStart.getTime() - (offset - 1) * 7 * 86400000);
-    const start = new Date(end.getTime() - 7 * 86400000);
+    // Calendar week (Monday..Sunday), offset whole weeks back from the
+    // current one (2026-09-16 fix: this used to be a rolling 7-day window
+    // ending "offset weeks ago," which doesn't match "This week" meaning
+    // the actual calendar week — see the matching fix in /api/stats/overview).
+    const thisMonday = mondayOf(dayStart);
+    const start = new Date(thisMonday.getTime() - offset * 7 * 86400000);
+    const end = new Date(start.getTime() + 7 * 86400000);
     periodStart = localDate(start);
     const lastDay = localDate(new Date(end.getTime() - 86400000));
     label = `${periodStart.slice(5)} – ${lastDay.slice(5)}`;
