@@ -298,9 +298,18 @@ export class PowerPlanController {
           reason = "refresh";
         }
       } else if (targetW > cur) {
-        // Step up only after the higher target holds continuously.
-        if (this.pendingUp?.target !== targetW) {
-          this.pendingUp = { target: targetW, since: now };
+        // Step up only after the target has stayed ABOVE cur continuously —
+        // NOT after it's been the exact same value continuously. targetW is
+        // demandW-derived and fluctuates with real house load essentially
+        // every tick, so requiring an exact match (2026-09-16 bug) reset
+        // this timer almost every tick and could never reach STEP_UP_HOLD_MS
+        // — the preset silently never stepped up at all. The hold only
+        // needs to survive a target that wobbles ACROSS the cur boundary
+        // (the documented intent — see the file header's PV-wobble
+        // simulation note), not one that merely changes magnitude while
+        // staying above it.
+        if (!this.pendingUp) {
+          this.pendingUp = { since: now };
         }
         const heldS = Math.round((now - this.pendingUp.since) / 1000);
         if (
