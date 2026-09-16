@@ -1511,22 +1511,19 @@ app.post("/api/power-plan/disable", async (req, res) => {
   }
 });
 app.post("/api/power-plan/strategy", (req, res) => {
-  const { strategy, trigger, tolerancePct } = req.body ?? {};
-  const strategies = ["house_priority", "battery_priority", "grid_zero_besteffort"];
-  const triggers = ["pv_zero", "grid_zero"];
+  const { strategy, trigger, manualDischarge } = req.body ?? {};
+  const strategies = ["house_priority", "battery_priority"];
+  const triggers = ["auto", "manual"];
   if (strategy !== undefined && !strategies.includes(strategy)) {
     return res.status(400).json({ error: `invalid strategy: ${strategy}` });
   }
   if (trigger !== undefined && !triggers.includes(trigger)) {
     return res.status(400).json({ error: `invalid trigger: ${trigger}` });
   }
-  if (
-    tolerancePct !== undefined &&
-    (typeof tolerancePct !== "number" || tolerancePct < 0 || tolerancePct > 20)
-  ) {
-    return res.status(400).json({ error: `invalid tolerancePct: ${tolerancePct}` });
+  if (manualDischarge !== undefined && typeof manualDischarge !== "boolean") {
+    return res.status(400).json({ error: `invalid manualDischarge: ${manualDischarge}` });
   }
-  powerPlan.setStrategy({ strategy, trigger, tolerancePct });
+  powerPlan.setStrategy({ strategy, trigger, manualDischarge });
   res.json(powerPlan.getState());
 });
 

@@ -3,43 +3,48 @@
 // Anker app. Goal: avoid the charge/discharge jojo around a fixed preset,
 // and let the user choose HOW PV/battery/grid should be prioritized.
 //
-// Strategy engine (2026-09-16). Three mutually-exclusive strategies:
-//   house_priority     -> target = min(pv, demand, max) while PV covers
-//                          something; once the discharge trigger fires,
-//                          target = min(max, demand) (battery tops up the
-//                          gap). This is the original 2026-09-15 algorithm,
-//                          generalized: the discharge trigger REPLACES the
-//                          old fuzzy isEveningBridge() heuristic with an
-//                          explicit user choice (see below).
-//   battery_priority    -> while soc < chargeCeilingPct AND pv > 0: target=0
-//                          (PV is deliberately withheld from the house so it
-//                          charges the battery instead; house demand comes
-//                          from the grid meanwhile — confirmed intentional
-//                          with the user, not a bug). Once the ceiling is
-//                          hit or PV drops to 0, falls back to
-//                          house_priority's rule (same discharge trigger
-//                          governs the handoff).
-//   grid_zero_besteffort -> the normal reserve guard is REPLACED (not just
-//                          capped) by effectiveFloor = dischargeFloorPct +
-//                          tolerancePct (tolerance has no Anker API
-//                          equivalent — always a locally-configured value,
-//                          default 3 points). While soc > effectiveFloor:
-//                          target = min(max, demand) UNCONDITIONALLY,
-//                          ignoring PV level and the discharge trigger
-//                          entirely (confirmed with the user). Below that
-//                          floor: target = 0 until SOC recovers.
-// Discharge trigger (house_priority / battery_priority only; ignored by
-// grid_zero_besteffort):
-//   pv_zero    -> shortfall branch fires only once pv <= 0 exactly.
-//   grid_zero  -> shortfall branch fires whenever pv < demand at all, i.e.
-//                 discharge immediately to keep grid import near zero
-//                 continuously (confirmed via a PV=400W/demand=600W
-//                 example). This makes house_priority+grid_zero converge to
-//                 the same shape as grid_zero_besteffort — they share the
-//                 fullDemandTarget() helper below, differing only in which
-//                 floor gates them.
+// Strategy engine (2026-09-16, simplified same day — see below). Two
+// mutually-exclusive strategies:
+//   house_priority   -> (the default) battery tops up the house continuously,
+//                        down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT,
+//                        regardless of PV level — via dischargeToTarget().
+//                        This ABSORBED what was briefly a separate 3rd
+//                        strategy ("grid ≈ 100 W best-effort") — the same
+//                        day it was decided House Priority should just BE
+//                        that behavior, and the 3rd option was removed.
+//   battery_priority -> while soc < chargeCeilingPct AND pv > 0: target=0
+//                        (PV is deliberately withheld from the house so it
+//                        charges the battery instead; house demand comes
+//                        from the grid meanwhile — confirmed intentional
+//                        with the user, not a bug). Otherwise: PV passes
+//                        straight through to the house (passthroughOnly()) —
+//                        the battery is NEVER asked to discharge under this
+//                        strategy (confirmed with the user: "will not
+//                        discharge at all").
+// Discharge trigger — auto | manual:
+//   auto   -> the strategy above decides (dischargeToTarget() for
+//             house_priority, passthroughOnly()-after-charging for
+//             battery_priority).
+//   manual -> a persisted `manualDischarge` boolean toggle OVERRIDES the
+//             selected strategy entirely (confirmed: "will overwrite
+//             whatever the strategy was selected before") — true ->
+//             dischargeToTarget(), false -> passthroughOnly(), regardless
+//             of `strategy`. Persisted (not time-limited like an earlier,
+//             now-removed "discharge now for 15 min" design) — a deliberate
+//             standing choice, not a one-off action.
 // Never above houseDemand in any branch => zero export by construction. The
 // device itself enforces its configured SOC reserve / charge limits on top.
+//
+// Grid target (GRID_TARGET_W env var, default 100 W) and discharge
+// tolerance (DISCHARGE_TOLERANCE_PCT env var, default 4 points) are BOTH
+// deployment-time constants, not user-adjustable at runtime (like
+// TARIFF_EUR_PER_KWH elsewhere in this codebase) — not exposed in the
+// Strategy tab UI, by request, to keep the UI to just the two dropdowns +
+// the manual toggle. dischargeToTarget() leaves demandW - GRID_TARGET_W for
+// PV+battery to cover (the original ask was "keep grid supply UNDER 100 W",
+// not literally 0), down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT
+// (padding the account's real reserve, since this mode bypasses the normal
+// PV-based restraint that would otherwise protect it).
 //
 // SOC limits (2026-09-15/16): the discharge floor ("reserve") and charge
 // ceiling ("max charging") are read from the SAME account config
@@ -79,6 +84,10 @@ const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
 // continuously for this long — cloud wobble around a 100 W boundary
 // otherwise makes the preset chase PV while the device lags ~1 min behind.
 const STEP_UP_HOLD_MS = 3 * 60 * 1000;
+// Deployment-time constants (2026-09-16) — see the file header for why
+// these aren't runtime/UI-adjustable.
+const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
+const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4);
 
 export class PowerPlanController {
   constructor(anker, getLiveBattery) {
@@ -93,8 +102,8 @@ export class PowerPlanController {
     this.originalRaw = null; // schedule as found before we took over (restore)
     this.template = null; // last-read parsed schedule (limits etc.)
     this.strategy = "house_priority";
-    this.trigger = "pv_zero";
-    this.tolerancePct = 3;
+    this.trigger = "auto";
+    this.manualDischarge = false;
     this.lastWrittenPower = null;
     this.lastWriteAt = 0;
     this.lastError = null;
@@ -105,19 +114,25 @@ export class PowerPlanController {
       this.originalRaw = saved.originalRaw ?? null;
       this.lastWrittenPower = saved.lastWrittenPower ?? null;
       this.lastWriteAt = saved.lastWriteAt ?? 0;
-      this.strategy = saved.strategy ?? "house_priority";
-      this.trigger = saved.trigger ?? "pv_zero";
-      this.tolerancePct = saved.tolerancePct ?? 3;
-      // 2026-09-16: state files from before the strategy engine have no
-      // `trigger` field — pv_zero is the closer, strictly-more-conservative
-      // analog of the deleted isEveningBridge() heuristic (never fires
-      // earlier than it would have), but it IS a behavior shift, so make it
-      // visible rather than silent for anyone upgrading with the controller
-      // already enabled.
-      if (this.enabled && saved.trigger === undefined) {
+      // Remap older strategy/trigger models (2026-09-16 had two revisions
+      // the same day) onto the current one, so an upgrade never silently
+      // lands on an invalid enum value:
+      //   - pre-strategy-engine files have no `trigger` at all.
+      //   - the short-lived 3-strategy/2-trigger model used
+      //     "grid_zero_besteffort" (-> house_priority, which now IS that
+      //     behavior) and "pv_zero"/"grid_zero" triggers (-> "auto", the
+      //     closest equivalent; "manual" didn't exist yet so it can't be
+      //     the right remap target).
+      const legacy = saved.trigger === undefined || saved.strategy === "grid_zero_besteffort" ||
+        saved.trigger === "pv_zero" || saved.trigger === "grid_zero";
+      this.strategy = saved.strategy === "grid_zero_besteffort" ? "house_priority" : (saved.strategy ?? "house_priority");
+      this.trigger =
+        saved.trigger === "pv_zero" || saved.trigger === "grid_zero" ? "auto" : (saved.trigger ?? "auto");
+      this.manualDischarge = saved.manualDischarge ?? false;
+      if (this.enabled && legacy) {
         console.log(
-          "[power-plan] upgraded: discharge-trigger model replaces the evening-bridge " +
-            "heuristic; defaulting to house_priority + pv_zero trigger",
+          "[power-plan] upgraded: simplified to house_priority/battery_priority + " +
+            `auto/manual trigger; remapped to strategy=${this.strategy}, trigger=${this.trigger}`,
         );
       }
     } catch {
@@ -136,7 +151,7 @@ export class PowerPlanController {
           lastWriteAt: this.lastWriteAt,
           strategy: this.strategy,
           trigger: this.trigger,
-          tolerancePct: this.tolerancePct,
+          manualDischarge: this.manualDischarge,
         }),
       );
       chmodSync(this.stateFile, 0o600);
@@ -196,45 +211,39 @@ export class PowerPlanController {
     return Math.max(0, Math.floor(v / step) * step);
   }
 
-  // Shared "serve full demand from PV+battery combined" building block —
-  // used by house_priority's/battery_priority's shortfall branch AND by
-  // grid_zero_besteffort's unconditional formula. The only thing that ever
-  // differs between callers is which floor gates the soc <= check.
-  fullDemandTarget(demandW, max, step) {
-    return this.roundDown(Math.min(max, demandW), step);
+  // Discharge continuously to cover demand (minus GRID_TARGET_W), regardless
+  // of PV level, down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT. Used
+  // by house_priority (always) and by the manual "discharge" toggle.
+  dischargeToTarget({ demandW, soc, dischargeFloorPct, max, step }) {
+    const effectiveFloor = dischargeFloorPct + DISCHARGE_TOLERANCE_PCT;
+    if (soc <= effectiveFloor) return 0;
+    return this.roundDown(Math.max(0, Math.min(max, demandW - GRID_TARGET_W)), step);
   }
 
-  computeHousePriority({ pvW, demandW, soc, trigger, dischargeFloorPct, max, step }) {
+  // Never ask the battery to discharge: PV (if any) passes straight through
+  // to the house, the rest comes from the grid. Used by battery_priority's
+  // fallback (once full/no PV) and by the manual "don't discharge" toggle.
+  passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
     if (soc <= dischargeFloorPct) return 0;
-    const shortfall = trigger === "grid_zero" ? pvW < demandW : pvW <= 0;
-    if (pvW <= 0 || shortfall) return this.fullDemandTarget(demandW, max, step);
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
-  computeBatteryPriority({ pvW, demandW, soc, trigger, dischargeFloorPct, chargeCeilingPct, max, step }) {
+  computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step }) {
     if (soc <= dischargeFloorPct) return 0;
     if (soc < chargeCeilingPct && pvW > 0) return 0; // withhold PV, charge the battery
-    return this.computeHousePriority({ pvW, demandW, soc, trigger, dischargeFloorPct, max, step });
-  }
-
-  computeGridZeroBestEffort({ demandW, soc, tolerancePct, dischargeFloorPct, max, step }) {
-    const effectiveFloor = dischargeFloorPct + (tolerancePct ?? 3);
-    if (soc <= effectiveFloor) return 0;
-    return this.fullDemandTarget(demandW, max, step);
+    return this.passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }); // never discharge
   }
 
   computeTarget(ctx) {
     const max = this.template?.max_load ?? 800;
     const step = this.template?.step ?? 10;
     const args = { ...ctx, max, step };
-    switch (ctx.strategy) {
-      case "battery_priority":
-        return this.computeBatteryPriority(args);
-      case "grid_zero_besteffort":
-        return this.computeGridZeroBestEffort(args);
-      default:
-        return this.computeHousePriority(args); // "house_priority"
+    if (ctx.trigger === "manual") {
+      return ctx.manualDischarge ? this.dischargeToTarget(args) : this.passthroughOnly(args);
     }
+    return ctx.strategy === "battery_priority"
+      ? this.computeBatteryPriority(args)
+      : this.dischargeToTarget(args); // "house_priority" (default)
   }
 
   // Called on every battery sync with the latest scen_info payload.
@@ -267,7 +276,7 @@ export class PowerPlanController {
         soc,
         strategy: this.strategy,
         trigger: this.trigger,
-        tolerancePct: this.tolerancePct,
+        manualDischarge: this.manualDischarge,
         dischargeFloorPct,
         chargeCeilingPct,
       });
@@ -327,7 +336,9 @@ export class PowerPlanController {
         soc,
         strategy: this.strategy,
         trigger: this.trigger,
-        tolerancePct: this.tolerancePct,
+        manualDischarge: this.manualDischarge,
+        gridTargetW: GRID_TARGET_W,
+        dischargeTolerancePct: DISCHARGE_TOLERANCE_PCT,
         targetW,
         wrote,
         reason,
@@ -371,10 +382,10 @@ export class PowerPlanController {
   // step-up-hold logic already re-arms itself the moment the computed
   // target differs from before, so a strategy switch is subject to the same
   // write discipline as any other target change).
-  setStrategy({ strategy, trigger, tolerancePct } = {}) {
+  setStrategy({ strategy, trigger, manualDischarge } = {}) {
     if (strategy !== undefined) this.strategy = strategy;
     if (trigger !== undefined) this.trigger = trigger;
-    if (tolerancePct !== undefined) this.tolerancePct = tolerancePct;
+    if (manualDischarge !== undefined) this.manualDischarge = manualDischarge;
     this.saveState();
   }
 
@@ -384,7 +395,9 @@ export class PowerPlanController {
       canRestore: this.originalRaw != null,
       strategy: this.strategy,
       trigger: this.trigger,
-      tolerancePct: this.tolerancePct,
+      manualDischarge: this.manualDischarge,
+      gridTargetW: GRID_TARGET_W,
+      dischargeTolerancePct: DISCHARGE_TOLERANCE_PCT,
       lastWrittenPower: this.lastWrittenPower,
       lastWriteAt: this.lastWriteAt || null,
       lastError: this.lastError,

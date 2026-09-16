@@ -1,24 +1,33 @@
 import { useEffect, useRef, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import BatteryTab from "../battery/BatteryTab.jsx";
 
 // Strategy tab: choose how the power-plan controller prioritizes PV vs
 // battery vs grid. Polls the same GET /api/power-plan PowerPlanCard.jsx uses
 // (one poll loop, shared shape). No enable/disable control here on purpose —
 // that stays exclusively on the Live tab's Power Plan card; see AGENTS.md.
 const STRATEGIES = [
-  { key: "house_priority", label: "House priority" },
-  { key: "battery_priority", label: "Battery priority" },
-  { key: "grid_zero_besteffort", label: "Grid ≈ 0 (best effort)" },
+  {
+    key: "house_priority",
+    label: "House priority",
+    desc: "The battery continuously tops up the house, leaving only a small grid target — down to the discharge floor plus a safety margin. This is the default, always-on mode.",
+  },
+  {
+    key: "battery_priority",
+    label: "Battery priority",
+    desc: "PV charges the battery first; the house draws from the grid meanwhile. Once the battery is full (or PV stops), any PV passes straight through to the house — the battery is never discharged under this strategy.",
+  },
 ];
-const TRIGGERS = [
-  { key: "pv_zero", label: "Until PV = 0" },
-  { key: "grid_zero", label: "Immediately (keep grid ≈ 0)" },
-];
+const TRIGGER_DESC = {
+  house_priority:
+    "Automatically applies House priority's behavior above — the battery keeps topping up the house.",
+  battery_priority:
+    "Automatically applies Battery priority's behavior above — the battery only ever charges, never discharges.",
+};
 
 export default function StrategyTab() {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [toleranceDraft, setToleranceDraft] = useState("");
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -27,9 +36,7 @@ export default function StrategyTab() {
       fetch("/api/power-plan")
         .then((r) => r.json())
         .then((s) => {
-          if (!mounted.current) return;
-          setState(s);
-          setToleranceDraft((d) => (d === "" ? String(s.tolerancePct ?? 3) : d));
+          if (mounted.current) setState(s);
         })
         .catch(() => {});
     load();
@@ -61,9 +68,8 @@ export default function StrategyTab() {
   if (!state) return <p className="muted">loading…</p>;
 
   const d = state.lastDecision;
-  const isGridZero = state.strategy === "grid_zero_besteffort";
-  const effectiveFloor =
-    d?.dischargeFloorPct != null ? d.dischargeFloorPct + (d.tolerancePct ?? 3) : null;
+  const isManual = state.trigger === "manual";
+  const activeStrategy = STRATEGIES.find((s) => s.key === state.strategy);
 
   return (
     <div>
@@ -84,47 +90,53 @@ export default function StrategyTab() {
           </button>
         ))}
       </div>
+      {activeStrategy && <p className="muted">{activeStrategy.desc}</p>}
 
-      {!isGridZero && (
-        <>
-          <h4>Discharge trigger</h4>
-          <div className="controls">
-            {TRIGGERS.map((t) => (
-              <button
-                key={t.key}
-                className={state.trigger === t.key ? "span-active" : ""}
-                disabled={busy}
-                onClick={() => setStrategy({ trigger: t.key })}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
+      <h4>Battery discharge trigger</h4>
+      <div className="controls">
+        <button
+          className={state.trigger === "auto" ? "span-active" : ""}
+          disabled={busy}
+          onClick={() => setStrategy({ trigger: "auto" })}
+        >
+          Auto
+        </button>
+        <button
+          className={state.trigger === "manual" ? "span-active" : ""}
+          disabled={busy}
+          onClick={() => setStrategy({ trigger: "manual" })}
+        >
+          Manual
+        </button>
+      </div>
+      <p className="muted">
+        {isManual
+          ? "Manual overrides the distribution strategy above entirely — the toggle below decides, regardless of which strategy is selected."
+          : (TRIGGER_DESC[state.strategy] ?? TRIGGER_DESC.house_priority)}
+      </p>
 
-      {isGridZero && (
+      {isManual && (
         <>
-          <h4>Tolerance above the discharge floor</h4>
           <div className="controls">
-            <input
-              type="number"
-              min="0"
-              max="20"
-              step="1"
-              value={toleranceDraft}
-              onChange={(e) => setToleranceDraft(e.target.value)}
-            />
             <button
+              className={state.manualDischarge ? "span-active" : ""}
               disabled={busy}
-              onClick={() => setStrategy({ tolerancePct: Number(toleranceDraft) })}
+              onClick={() => setStrategy({ manualDischarge: true })}
             >
-              Save
+              Discharge
+            </button>
+            <button
+              className={!state.manualDischarge ? "span-active" : ""}
+              disabled={busy}
+              onClick={() => setStrategy({ manualDischarge: false })}
+            >
+              Don't discharge
             </button>
           </div>
           <p className="muted">
-            Stops discharging at (discharge floor + tolerance) instead of the account's own
-            floor — a safety margin since this strategy ignores the normal reserve guard.
+            {state.manualDischarge
+              ? "Battery continuously tops up the house (same behavior as House priority), until you switch this off."
+              : "Battery never discharges (same behavior as Battery priority once full) — PV passes through to the house, the rest comes from the grid."}
           </p>
         </>
       )}
@@ -150,17 +162,12 @@ export default function StrategyTab() {
           </div>
           <div className="card">
             <div className="card-label">
-              {state.strategy === "battery_priority" ? "Charge ceiling" : "Discharge floor"}
+              {state.strategy === "battery_priority" && d.trigger !== "manual" ? "Charge ceiling" : "Discharge floor"}
             </div>
-            {state.strategy === "battery_priority" ? (
+            {state.strategy === "battery_priority" && d.trigger !== "manual" ? (
               <>
                 <div className="card-value">{d.chargeCeilingPct}%</div>
                 <div className="card-label">{d.atChargeCeiling ? "at ceiling — serving house" : "charging"}</div>
-              </>
-            ) : isGridZero ? (
-              <>
-                <div className="card-value">{effectiveFloor}%</div>
-                <div className="card-label">floor {d.dischargeFloorPct}% + tolerance {d.tolerancePct}%</div>
               </>
             ) : (
               <>
@@ -171,6 +178,8 @@ export default function StrategyTab() {
           </div>
         </div>
       )}
+
+      <BatteryTab />
     </div>
   );
 }
