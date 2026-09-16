@@ -499,6 +499,16 @@ const upsertCloudPvRow = db.prepare(`
   VALUES (?, ?, ?, ?, ?)
 `);
 
+// Which day period_starts are already stored (startup catch-up gap-finder,
+// same pattern as getStoredPeriodStarts).
+const selectPvPeriodStarts = db.prepare(`
+  SELECT DISTINCT period_start FROM cloud_pv_history WHERE period_type = ?
+`);
+
+export function getStoredPvPeriodStarts(type = "day") {
+  return new Set(selectPvPeriodStarts.all(type).map((r) => r.period_start));
+}
+
 export function saveCloudPvTrend(type, start, dataTrend) {
   const now = Date.now();
   for (const t of dataTrend) {

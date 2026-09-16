@@ -37,6 +37,7 @@ import {
   integrateBatteryEnergy,
   saveCloudPvTrend,
   getCloudPvDayPower,
+  getStoredPvPeriodStarts,
   sumCloudEnergyInGaps,
   pruneBattery,
   savePvDaily,
@@ -1424,6 +1425,75 @@ async function catchUpCloudHistory() {
   console.log("[cloud-sync] local history is up to date");
 }
 
+// Same idea as catchUpCloudHistory, but for the site-level battery
+// ("solarbank") and PV production ("solar_production") day-trends —
+// separate function because it needs latestBattery (populated by the
+// battery's own REST/MQTT sync, on a different timeline than the meter's
+// first snapshot that gates catchUpCloudHistory). Without this, a server
+// down for several consecutive days would only ever recover the MOST
+// RECENT day automatically (syncCloudHistory's ongoing today+yesterday
+// refresh) — older missed days would silently stay uncovered forever, the
+// same class of problem AGENTS.md documents for 2026-09-16's gap, just at
+// a longer timescale (2026-09-16, user follow-up: "will it check the
+// online account and recover as much as it can" for ANY future outage).
+async function catchUpBatteryPvHistory() {
+  if (!latestBattery?.sn || !latestBattery.siteId) return;
+
+  const storedBatt = getStoredPeriodStarts(latestBattery.sn, "day");
+  const storedPv = getStoredPvPeriodStarts("day");
+  const missing = [];
+  for (let i = BACKFILL_DAYS; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const start = localDate(d);
+    if (!storedBatt.has(start) || !storedPv.has(start) || i === 0) missing.push(start);
+  }
+  if (!missing.length) return;
+
+  console.log(`[cloud-sync] backfilling ${missing.length} day(s) of battery/PV history…`);
+  for (const start of missing) {
+    try {
+      const battData = await anker.getEnergyAnalysis({
+        siteId: latestBattery.siteId,
+        deviceSn: latestBattery.sn,
+        deviceType: "solarbank",
+        type: "day",
+        startTime: start,
+        endTime: "",
+      });
+      const battRows = (battData?.power ?? []).map((p) => ({
+        time: p.time,
+        power: p.value,
+        import_energy: "",
+        export_energy: "",
+      }));
+      saveCloudTrend(latestBattery.sn, "day", start, battRows);
+    } catch (err) {
+      console.warn(`[cloud-sync] battery backfill day ${start} failed: ${err.message}`);
+      break; // rate-limited or login issue — leave rest for the next round
+    }
+    await sleep(6000);
+
+    try {
+      const pvData = await anker.getEnergyAnalysis({
+        siteId: latestBattery.siteId,
+        deviceSn: latestBattery.sn ?? "",
+        deviceType: "solar_production",
+        type: "day",
+        startTime: start,
+        endTime: "",
+      });
+      const pvRows = (pvData?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
+      saveCloudPvTrend("day", start, pvRows);
+    } catch (err) {
+      console.warn(`[cloud-sync] PV backfill day ${start} failed: ${err.message}`);
+      break;
+    }
+    await sleep(6000);
+  }
+  console.log("[cloud-sync] battery/PV history is up to date");
+}
+
 // Wait for the first meter snapshot (for the SN), then catch up once and
 // keep history fresh every 15 minutes.
 const syncStarter = setInterval(() => {
@@ -1434,6 +1504,16 @@ const syncStarter = setInterval(() => {
   }
 }, 10000);
 syncStarter.unref();
+
+// Wait separately for the battery's own SN/site (populated by REST/MQTT
+// sync, not the meter poller) before attempting its history catch-up.
+const battPvSyncStarter = setInterval(() => {
+  if (latestBattery?.sn && latestBattery.siteId) {
+    clearInterval(battPvSyncStarter);
+    catchUpBatteryPvHistory();
+  }
+}, 10000);
+battPvSyncStarter.unref();
 
 // Single-port mode: serve the built frontend (web/dist) and fall back to
 // index.html for non-API GETs (SPA). In dev, Vite on :5173 is used instead.

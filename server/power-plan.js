@@ -93,6 +93,13 @@ const STEP_UP_HOLD_MS = 90 * 1000;
 // these aren't runtime/UI-adjustable.
 const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
 const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4);
+// Hard local safety switch (2026-09-16): a dev instance and production can
+// both run against the same real meter/Anker account at once (see AGENTS.md
+// dual-control note) — only ONE should ever hold the battery schedule.
+// Relying on "just don't call /enable" isn't enough (a copied state file,
+// a stray curl, a future automated test could flip it) — when this is set,
+// enable() refuses outright, regardless of persisted state or who calls it.
+const POWER_PLAN_DISABLE = process.env.POWER_PLAN_DISABLE === "true";
 
 export class PowerPlanController {
   constructor(anker, getLiveBattery) {
@@ -142,6 +149,13 @@ export class PowerPlanController {
       }
     } catch {
       /* no saved state — controller starts disabled */
+    }
+    if (POWER_PLAN_DISABLE && this.enabled) {
+      console.log(
+        "[power-plan] POWER_PLAN_DISABLE=true — forcing disabled despite saved state " +
+          "(this instance must never write to the real device)",
+      );
+      this.enabled = false;
     }
   }
 
@@ -392,6 +406,12 @@ export class PowerPlanController {
   }
 
   async enable() {
+    if (POWER_PLAN_DISABLE) {
+      throw new Error(
+        "power plan is disabled on this instance (POWER_PLAN_DISABLE=true) — " +
+          "this is likely a dev/secondary instance; enable it only on the primary",
+      );
+    }
     const { raw, parsed } = await this.readSchedule();
     if (!this.originalRaw) this.originalRaw = raw;
     this.template = parsed;
