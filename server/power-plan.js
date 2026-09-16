@@ -83,7 +83,12 @@ const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
 // controller exists to kill). Step UP only after the higher target holds
 // continuously for this long — cloud wobble around a 100 W boundary
 // otherwise makes the preset chase PV while the device lags ~1 min behind.
-const STEP_UP_HOLD_MS = 3 * 60 * 1000;
+// Lowered 90s -> from the original 3 min (2026-09-16, user request, after
+// the step-up-hold-never-fires fix made the hold's real-world lag visible)
+// — still comfortably above the ~1 min device response lag that motivates
+// the hold at all, so it shouldn't reintroduce PV-noise-chasing, while
+// responding noticeably faster to genuine demand/strategy changes.
+const STEP_UP_HOLD_MS = 90 * 1000;
 // Deployment-time constants (2026-09-16) — see the file header for why
 // these aren't runtime/UI-adjustable.
 const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
@@ -211,6 +216,27 @@ export class PowerPlanController {
     return Math.max(0, Math.floor(v / step) * step);
   }
 
+  // Reconcile our belief about the device's current preset against what's
+  // ACTUALLY on the device right now (2026-09-16 fix — a real incident, not
+  // theoretical: production was stopped for a while, then restarted; the
+  // persisted lastWrittenPower (0) was stale relative to the device's real
+  // schedule, but tick()'s write-discipline blindly trusted it, computed a
+  // matching target (0, correct for battery_priority), saw "no change
+  // needed", and never wrote anything — while the device kept discharging
+  // hundreds of watts under its actual, unreconciled preset. lastWrittenPower
+  // must reflect the DEVICE's truth after any restart/re-enable, not just
+  // whatever we last remembered before an unknown gap.
+  reconcileWrittenPower(parsed) {
+    const actual = parsed?.custom_rate_plan?.[0]?.ranges?.[0]?.power;
+    if (typeof actual === "number" && actual !== this.lastWrittenPower) {
+      console.log(
+        `[power-plan] reconciling: device schedule shows ${actual} W, we remembered ${this.lastWrittenPower} W`,
+      );
+      this.lastWrittenPower = actual;
+      this.saveState();
+    }
+  }
+
   // Discharge continuously to cover demand (minus GRID_TARGET_W), regardless
   // of PV level, down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT. Used
   // by house_priority (always) and by the manual "discharge" toggle.
@@ -265,6 +291,7 @@ export class PowerPlanController {
           this.originalRaw = raw;
           this.saveState();
         }
+        this.reconcileWrittenPower(parsed);
       }
       const { dischargeFloorPct, chargeCeilingPct } = await getBatteryLimits(
         this.anker,
@@ -284,6 +311,7 @@ export class PowerPlanController {
       const cur = this.lastWrittenPower;
       let shouldWrite = false;
       let reason = "within deadband";
+      let holdProgress = null; // {heldMs, totalMs} while waiting out the step-up hold
       if (cur == null) {
         shouldWrite = true;
         reason = "initial";
@@ -311,15 +339,16 @@ export class PowerPlanController {
         if (!this.pendingUp) {
           this.pendingUp = { since: now };
         }
-        const heldS = Math.round((now - this.pendingUp.since) / 1000);
-        if (
-          targetW - cur >= WRITE_MIN_DELTA_W &&
-          now - this.pendingUp.since >= STEP_UP_HOLD_MS
-        ) {
+        const heldMs = now - this.pendingUp.since;
+        const heldS = Math.round(heldMs / 1000);
+        if (targetW - cur >= WRITE_MIN_DELTA_W && heldMs >= STEP_UP_HOLD_MS) {
           shouldWrite = true;
           reason = `step up (held ${heldS}s)`;
         } else {
           reason = `holding up-step (${heldS}s/${STEP_UP_HOLD_MS / 1000}s)`;
+          if (targetW - cur >= WRITE_MIN_DELTA_W) {
+            holdProgress = { heldMs: Math.max(0, heldMs), totalMs: STEP_UP_HOLD_MS };
+          }
         }
       } else {
         this.pendingUp = null;
@@ -351,6 +380,7 @@ export class PowerPlanController {
         targetW,
         wrote,
         reason,
+        holdProgress,
         dischargeFloorPct,
         chargeCeilingPct,
         atChargeCeiling: soc >= chargeCeilingPct,
@@ -367,6 +397,7 @@ export class PowerPlanController {
     this.template = parsed;
     this.enabled = true;
     this.lastWriteAt = 0; // force an immediate write on next tick
+    this.reconcileWrittenPower(parsed); // don't trust a stale belief across a disable/gap
     this.saveState();
   }
 

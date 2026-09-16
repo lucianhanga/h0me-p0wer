@@ -28,6 +28,7 @@ const TRIGGER_DESC = {
 export default function StrategyTab() {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -45,6 +46,13 @@ export default function StrategyTab() {
       mounted.current = false;
       clearInterval(t);
     };
+  }, []);
+
+  // Ticks once a second so the step-up hold bar below counts down smoothly
+  // between the 10s /api/power-plan polls, instead of jumping in 10s steps.
+  useEffect(() => {
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
   }, []);
 
   async function setStrategy(patch) {
@@ -70,6 +78,20 @@ export default function StrategyTab() {
   const d = state.lastDecision;
   const isManual = state.trigger === "manual";
   const activeStrategy = STRATEGIES.find((s) => s.key === state.strategy);
+
+  // Step-up hold countdown: the controller found a higher target but is
+  // deliberately waiting out STEP_UP_HOLD_MS before writing it (anti-wobble
+  // hysteresis — see server/power-plan.js). Recomputed every tick of nowMs
+  // so the bar fills smoothly rather than jumping once per 10s poll.
+  const hold = d?.holdProgress;
+  let holdPct = 0;
+  let holdRemainingS = 0;
+  if (hold && d?.at) {
+    const startedAt = d.at - hold.heldMs;
+    const elapsedMs = Math.min(hold.totalMs, Math.max(0, nowMs - startedAt));
+    holdPct = Math.min(100, (elapsedMs / hold.totalMs) * 100);
+    holdRemainingS = Math.max(0, Math.ceil((hold.totalMs - elapsedMs) / 1000));
+  }
 
   return (
     <div>
@@ -170,6 +192,18 @@ export default function StrategyTab() {
               {d.wrote ? `preset written (${d.reason})` : d.reason}
               {state.lastWriteAt ? ` · last write ${new Date(state.lastWriteAt).toLocaleTimeString()}` : ""}
             </div>
+          </div>
+        </div>
+      )}
+
+      {hold && (
+        <div className="hold-progress">
+          <div className="hold-progress-label">
+            <span>Stepping up to {d.targetW} W</span>
+            <span>{holdRemainingS}s</span>
+          </div>
+          <div className="hold-progress-track">
+            <div className="hold-progress-fill" style={{ width: `${holdPct}%` }} />
           </div>
         </div>
       )}

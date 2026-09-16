@@ -416,6 +416,43 @@ h4 {
   margin: 1rem 0 0.4rem;
 }
 
+/* Strategy tab: step-up hold countdown — shown while the controller is
+   deliberately withholding a higher preset write until STEP_UP_HOLD_MS
+   elapses (anti-wobble hysteresis, see server/power-plan.js). */
+.hold-progress {
+  margin: 0.5rem 0 1rem;
+}
+
+.hold-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  color: #8b98a5;
+  font-size: 0.75rem;
+  margin-bottom: 0.3rem;
+}
+
+.hold-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: #0d1114;
+  border: 1px solid #2a3238;
+  overflow: hidden;
+}
+
+.hold-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f7a44f, #ff7a45);
+  transition: width 1s linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hold-progress-fill {
+    transition: none;
+  }
+}
+
 .error-box {
   background: #3a1d1d;
   border: 1px solid #e05c5c44;
