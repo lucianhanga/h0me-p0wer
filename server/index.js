@@ -1437,9 +1437,11 @@ async function syncBattery() {
   try {
     const info = await anker.getBatteryInfo();
     if (info) {
-      latestBattery = info;
+      // REST has no temperature field — carry the last MQTT-sourced value
+      // forward instead of blanking it on every 10 s REST sync.
+      latestBattery = { ...info, temperatureC: latestBattery?.temperatureC ?? null };
       lastCloudOkAt = Date.now();
-      saveBatterySnapshot(info);
+      saveBatterySnapshot(latestBattery);
       // Grid channel from the same call — the best available source when
       // Modbus is down; graphs merge it below local snapshots.
       if (info.gridToHomeW != null) {
@@ -1507,6 +1509,25 @@ app.post("/api/power-plan/disable", async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: err.message });
   }
+});
+app.post("/api/power-plan/strategy", (req, res) => {
+  const { strategy, trigger, tolerancePct } = req.body ?? {};
+  const strategies = ["house_priority", "battery_priority", "grid_zero_besteffort"];
+  const triggers = ["pv_zero", "grid_zero"];
+  if (strategy !== undefined && !strategies.includes(strategy)) {
+    return res.status(400).json({ error: `invalid strategy: ${strategy}` });
+  }
+  if (trigger !== undefined && !triggers.includes(trigger)) {
+    return res.status(400).json({ error: `invalid trigger: ${trigger}` });
+  }
+  if (
+    tolerancePct !== undefined &&
+    (typeof tolerancePct !== "number" || tolerancePct < 0 || tolerancePct > 20)
+  ) {
+    return res.status(400).json({ error: `invalid tolerancePct: ${tolerancePct}` });
+  }
+  powerPlan.setStrategy({ strategy, trigger, tolerancePct });
+  res.json(powerPlan.getState());
 });
 
 setInterval(() => {

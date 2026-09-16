@@ -281,15 +281,11 @@ EPIPE noise on every client disconnect).
   next to the other register*Route calls) aggregates:
   - **live**: latestBattery / getLatestBattery() DB fallback (soc, outputW,
     chargeW, pvW, pv1/2W, grid channels, gridToBatteryW, storedKwh).
-  - **config**: `get_site_device_param` **param_type "27"** (charge_upper_limit,
-    discharge_lower_limit, backup_reserve(+_switch), soc_calibration_enable)
-    — SLOW-changing, so it's cached **6 h in the kv store** (`battery_config`
-    key) to respect the endpoint's rate limit; `?refresh=1` forces a refetch,
-    stale cache is served when a refresh fails. **param_type "18"** (station
-    settings) is read with it and included only when non-empty. param_data is
-    a JSON STRING (same parse pattern as power-plan.js). NOT yet probed
-    against the real account from this branch — errors surface as
-    `error27`/`error18` fields, never as a route failure.
+  - **config**: SUPERSEDED 2026-09-16 — see "Strategy engine + battery
+    temperature + real charge limits" below. `get_power_cutoff` is now tried
+    first (the endpoint that actually works for this device), then
+    `param_type "18"`, then `"27"`; `limitsSource` in the response tells you
+    which one won (`power_cutoff`/`account`/`schedule`/`default`).
   - **features**: raw scen_info `feature_switch` (0w_feed = zero-export,
     soc_enable, multi_pv, heating, …) + charging_status/err_code/heating_power
     — `getBatteryInfo()` in anker-cloud.js maps them (featureSwitch,
@@ -317,10 +313,13 @@ EPIPE noise on every client disconnect).
   PV ≤ preset → all PV to home, cells top up the difference; PV > preset →
   preset to home, surplus charges the battery. Example: preset 600, PV 600
   → out 600, charge 0, grid covers the rest.
-- **Algorithm**: PV=0 → `min(800, houseDemand)`; PV>0 → `min(PV, houseDemand)`
-  (also covers battery-full — same formula, no separate branch needed);
-  clamp to [0, max_load], floor to step (10 W). Inputs from `scen_info`
-  (`pvW`, `homeLoadW`, `soc`) on the 10 s battery sync.
+- **Algorithm**: SUPERSEDED 2026-09-16 by the strategy engine below — this
+  exact formula is now `house_priority` + `pv_zero` trigger (the default,
+  applied automatically on upgrade). PV=0 → `min(800, houseDemand)`; PV>0 →
+  `min(PV, houseDemand)` (also covers battery-full — same formula, no
+  separate branch needed); clamp to [0, max_load], floor to step (10 W).
+  Inputs from `scen_info` (`pvW`, `homeLoadW`, `soc`) on the 10 s battery
+  sync.
   **Fixed 2026-09-15 (PV-rounding waste)**: the original PV>0 branch was
   `min(floor(PV/100)*100, houseDemand)` — flooring PV to the nearest 100 W
   rounded the preset BELOW actual PV even when PV < houseDemand, so up to
@@ -360,9 +359,108 @@ EPIPE noise on every client disconnect).
   (`.power-plan-state.json` next to the DB, mode 600, gitignored);
   **disable restores it byte-for-byte** (verified: back to 200 W flat).
   Enabled state survives restarts.
-- Routes: `GET/POST /api/power-plan[/enable|/disable]`; UI:
+- Routes: `GET/POST /api/power-plan[/enable|/disable]`, plus
+  `POST /api/power-plan/strategy` (2026-09-16, see below); UI:
   `web/src/live/PowerPlanCard.jsx` on the Live tab (status, target/preset,
   decision inputs, disable-and-restore button).
+
+## Strategy engine + battery temperature + real charge limits (2026-09-16)
+
+- **Three mutually-exclusive strategies** replace the single house-priority
+  algorithm (`server/power-plan.js`, `computeTarget()` split into a
+  dispatcher + `computeHousePriority`/`computeBatteryPriority`/
+  `computeGridZeroBestEffort`, all built on a shared `fullDemandTarget()` —
+  the "serve full demand from PV+battery combined" formula, since three of
+  the strategies/trigger combos reduce to exactly that with only the floor
+  differing):
+  - `house_priority` (default, = the original 2026-09-15 algorithm): PV
+    served to house first; once the discharge trigger fires (below), battery
+    tops up the gap.
+  - `battery_priority`: while `soc < chargeCeilingPct && pv > 0`, target=0 —
+    PV is deliberately withheld from the house so it charges the battery
+    instead, house demand comes from the grid meanwhile (confirmed
+    intentional with the user, not a bug). Falls back to `house_priority`
+    once the ceiling is hit or PV drops to 0.
+  - `grid_zero_besteffort`: the normal reserve guard is REPLACED by
+    `effectiveFloor = dischargeFloorPct + tolerancePct` (tolerance has no
+    Anker API equivalent, default 3 points, configurable). While above that
+    floor: target = full demand UNCONDITIONALLY, ignoring PV level and the
+    discharge trigger entirely.
+- **Discharge trigger** (`house_priority`/`battery_priority` only, ignored
+  by `grid_zero_besteffort`) REPLACES the old `isEveningBridge()` fuzzy
+  heuristic (70%-of-peak, noon guard — deleted entirely, no hidden third
+  mode): `pv_zero` fires the shortfall branch only at `pv <= 0`; `grid_zero`
+  fires it whenever `pv < demand` at all (discharge immediately to keep grid
+  import near zero continuously) — this makes `house_priority`+`grid_zero`
+  mathematically converge to `grid_zero_besteffort`'s shape, differing only
+  in which floor gates it.
+- **Persistence**: `.power-plan-state.json` gains `strategy`
+  (`"house_priority"` default), `trigger` (`"pv_zero"` default),
+  `tolerancePct` (`3` default) — old files without them load cleanly via
+  `??` defaults. An upgrade can't be byte-for-byte identical to the deleted
+  evening-bridge heuristic; `pv_zero` is the closer, strictly-more-conservative
+  analog (never fires earlier than the heuristic would have) — logged once
+  at startup (`"[power-plan] upgraded: ..."`) so the shift is visible, not
+  silent, for anyone upgrading with the controller already enabled.
+- **`POST /api/power-plan/strategy`**: partial update, body
+  `{strategy?, trigger?, tolerancePct?}`, validated against the known enum
+  values (+ `tolerancePct` clamped 0-20), calls `PowerPlanController
+  .setStrategy()`. Response is the same shape as `GET /api/power-plan`'s
+  `getState()` (now including the three new fields) — matches the existing
+  enable/disable convention (POST response *is* the new state). No new GET
+  route: `web/src/strategy/StrategyTab.jsx` (7th tab, `App.jsx`, positioned
+  after Battery/before Graph) shares the same `GET /api/power-plan` poll
+  loop `PowerPlanCard.jsx` already uses. The write-discipline hysteresis
+  (step-down-promptly / step-up-after-3min-hold / min-write-gap) is
+  unchanged and applies uniformly to all three strategies — it only ever
+  sees the final numeric target, so a strategy switch is naturally subject
+  to the same rules as any other target change. The Strategy tab does NOT
+  add an enable/disable control — that stays exclusively on
+  `PowerPlanCard.jsx` (Live tab), matching the existing "disable button
+  removed from the UI on purpose" decision.
+- **Real charge/discharge limits — `get_power_cutoff` (2026-09-16)**:
+  `param_type "18"`/`"27"` (`get_site_device_param`) are confirmed
+  genuinely empty on this account/device (A17C3, bare Solarbank 2, no power
+  dock) — NOT a parsing bug (that was already fixed the same day: `readParam()`
+  now handles both JSON-string `param_data`, used by schedule types
+  4/6/9/12/13, and already-parsed-object `param_data`, used by setting types
+  16/18/23/26/27/28/29/30). Confirmed against a matching community report
+  (`thomluther/anker-solix-api#304`): "site_device_parm query with station
+  parameter does not work for [SB2] yet" — bare SB2 systems must use
+  `POST power_service/v1/app/compatible/get_power_cutoff` with
+  `{site_id, device_sn}` instead (`device_sn` from `getLiveBattery()?.sn`).
+  `battery-params.js`'s `fetchConfig()` now tries this FIRST, then 18/27 as
+  unchanged fallbacks for other hardware generations (`applyLimits()`
+  reused as-is, same field names). Read-only — writing would additionally
+  need `set_power_cutoff` paired with an MQTT `0067`/`sb_soc_limits`
+  command per the community findings, out of scope for now.
+  **Bug fixed alongside this**: `config.limitsSource` used to be assigned
+  unconditionally after the 18/27 attempts, silently overwriting a
+  `"power_cutoff"` label the moment 18/27 returned anything — every
+  assignment is now `??=` so the first successful source wins, matching how
+  the numeric fields already behaved. Values: `"power_cutoff" | "account" |
+  "schedule" | "default"`, now shown as a badge in `BatteryTab.jsx`
+  (`.badge.ok` for real account data, `.badge.warn` for guessed values) —
+  it was computed before but never displayed.
+- **Battery temperature — MQTT only, no REST equivalent**: `server/mqtt.js`'s
+  `FIELDS_0405` map gains `aa` → `temperatureC` (signed, no scaling factor,
+  whole-degree °C) — confirmed via the community `_A17C1_0405` field map
+  (same message type this project already decodes for soc/pv/charge/
+  discharge). `decodeValue()`'s 1-byte paths (`0x01`/no-tag) return the raw
+  byte UNSIGNED, so a two's-complement correction (`raw > 127 ? raw - 256 :
+  raw`) is applied by hand for `signed: true` fields, without touching
+  `decodeValue()` itself (would change other fields' semantics). **Not yet
+  verified against the live device's actual wire type** for this field —
+  capture one with `MQTT_DEBUG=1` before trusting sub-zero readings.
+  Threaded through: `battery_snapshots.temperature_c` (new guarded
+  `ALTER TABLE` column, alongside `pv1_w`/`pv2_w`), `saveBatterySnapshot`/
+  `getLatestBattery()`, `/api/battery/params`'s `live.temperatureC`, a new
+  `ParamRow` in `BatteryTab.jsx`'s Status card. **`syncBattery()`'s REST
+  sync does a full replace of `latestBattery`** and REST has no temperature
+  field — changed to carry the last MQTT-sourced value forward
+  (`temperatureC: latestBattery?.temperatureC ?? null`) instead of blanking
+  it every 10 s; this is the first MQTT-only-enriched field in the app (MQTT
+  and REST previously always described the same field set).
 
 ## Battery realtime via MQTT (2026-09-10)
 

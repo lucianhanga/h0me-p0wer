@@ -186,8 +186,9 @@ db.exec(`
     to_home_w REAL
   )
 `);
-// Per-string PV columns added later — guarded for existing databases.
-for (const col of ["pv1_w REAL", "pv2_w REAL"]) {
+// Columns added later — guarded for existing databases. pv1_w/pv2_w:
+// per-string PV. temperature_c: main device temp (2026-09-16, MQTT-only).
+for (const col of ["pv1_w REAL", "pv2_w REAL", "temperature_c REAL"]) {
   try {
     db.exec(`ALTER TABLE battery_snapshots ADD COLUMN ${col}`);
   } catch {
@@ -196,8 +197,8 @@ for (const col of ["pv1_w REAL", "pv2_w REAL"]) {
 }
 
 const insertBattery = db.prepare(`
-  INSERT OR REPLACE INTO battery_snapshots (ts, soc, output_w, charge_w, pv_w, to_home_w, pv1_w, pv2_w)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT OR REPLACE INTO battery_snapshots (ts, soc, output_w, charge_w, pv_w, to_home_w, pv1_w, pv2_w, temperature_c)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const selectLatestBattery = db.prepare(`
@@ -213,7 +214,17 @@ const selectBatteryBetween = db.prepare(`
 `);
 
 export function saveBatterySnapshot(b) {
-  insertBattery.run(b.ts, b.soc, b.outputW, b.chargeW, b.pvW, b.toHomeW, b.pv1W ?? 0, b.pv2W ?? 0);
+  insertBattery.run(
+    b.ts,
+    b.soc,
+    b.outputW,
+    b.chargeW,
+    b.pvW,
+    b.toHomeW,
+    b.pv1W ?? 0,
+    b.pv2W ?? 0,
+    b.temperatureC ?? null,
+  );
 }
 
 export function getLatestBattery() {
@@ -230,6 +241,7 @@ export function getLatestBattery() {
     pv1W: r.pv1_w,
     pv2W: r.pv2_w,
     toHomeW: r.to_home_w,
+    temperatureC: r.temperature_c,
   };
 }
 

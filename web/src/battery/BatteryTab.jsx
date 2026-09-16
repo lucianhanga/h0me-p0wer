@@ -3,6 +3,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 
 const fmtW = (v) => (v == null ? "—" : `${Math.round(v)} W`);
 const fmtPct = (v) => (v == null ? "—" : `${v} %`);
+const fmtTemp = (v) => (v == null ? "—" : `${Math.round(v)} °C`);
 const onOff = (v) => (v == null ? "—" : v ? "on" : "off");
 const fmtTime = (ts) =>
   ts == null
@@ -161,6 +162,16 @@ export default function BatteryTab() {
                 : "—"
             }
           />
+          <ParamRow
+            k="Limits source"
+            v={
+              <span
+                className={`badge ${["power_cutoff", "account"].includes(config?.limitsSource) ? "ok" : "warn"}`}
+              >
+                {config?.limitsSource ?? "unknown"}
+              </span>
+            }
+          />
           <ParamRow k="Zero-export (0w feed)" v={onOff(features?.zeroExport)} />
           <ParamRow k="SOC calibration" v={onOff(config?.socCalibrationEnable)} />
           <ParamRow
@@ -174,6 +185,7 @@ export default function BatteryTab() {
 
         <div className="card">
           <div className="card-label">Status</div>
+          <ParamRow k="Temperature" v={fmtTemp(live?.temperatureC)} />
           <ParamRow k="Charging status" v={live?.chargingStatus ?? "—"} />
           <ParamRow k="Error code" v={live?.errCode ?? "—"} />
           <ParamRow k="Heating power" v={fmtW(live?.heatingPower)} />

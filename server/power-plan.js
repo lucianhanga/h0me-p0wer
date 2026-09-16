@@ -1,41 +1,64 @@
 // Power-plan controller: drives the Solarbank 2 output preset (custom rate
 // plan, param_type "6") instead of relying on the static schedule set in the
-// Anker app. Goal: avoid the charge/discharge jojo around a fixed preset and
-// push as much PV into the house as possible — without ever exporting.
+// Anker app. Goal: avoid the charge/discharge jojo around a fixed preset,
+// and let the user choose HOW PV/battery/grid should be prioritized.
 //
-// Algorithm (agreed with the user, 2026-09-15; PV rounding waste fixed
-// 2026-09-15):
-//   PV = 0          -> discharge min(800, houseDemand)        (SOC > reserve)
-//   PV > 0          -> output min(PV, houseDemand)  (all PV to house; target
-//                      is always <= PV here, so cells never engage — the
-//                      previous floor(PV/100)*100 rounded the preset BELOW
-//                      actual PV even when PV < houseDemand, misrouting up
-//                      to 99 W of under-demand PV to the battery for no
-//                      cycling benefit; also covers "battery full", which no
-//                      longer needs its own branch — same formula, excess PV
-//                      above houseDemand still charges the battery like
-//                      always, the device's own charge limit caps it)
-// Never above houseDemand => zero export by construction. The device itself
-// enforces its configured SOC reserve / charge limits on top.
+// Strategy engine (2026-09-16). Three mutually-exclusive strategies:
+//   house_priority     -> target = min(pv, demand, max) while PV covers
+//                          something; once the discharge trigger fires,
+//                          target = min(max, demand) (battery tops up the
+//                          gap). This is the original 2026-09-15 algorithm,
+//                          generalized: the discharge trigger REPLACES the
+//                          old fuzzy isEveningBridge() heuristic with an
+//                          explicit user choice (see below).
+//   battery_priority    -> while soc < chargeCeilingPct AND pv > 0: target=0
+//                          (PV is deliberately withheld from the house so it
+//                          charges the battery instead; house demand comes
+//                          from the grid meanwhile — confirmed intentional
+//                          with the user, not a bug). Once the ceiling is
+//                          hit or PV drops to 0, falls back to
+//                          house_priority's rule (same discharge trigger
+//                          governs the handoff).
+//   grid_zero_besteffort -> the normal reserve guard is REPLACED (not just
+//                          capped) by effectiveFloor = dischargeFloorPct +
+//                          tolerancePct (tolerance has no Anker API
+//                          equivalent — always a locally-configured value,
+//                          default 3 points). While soc > effectiveFloor:
+//                          target = min(max, demand) UNCONDITIONALLY,
+//                          ignoring PV level and the discharge trigger
+//                          entirely (confirmed with the user). Below that
+//                          floor: target = 0 until SOC recovers.
+// Discharge trigger (house_priority / battery_priority only; ignored by
+// grid_zero_besteffort):
+//   pv_zero    -> shortfall branch fires only once pv <= 0 exactly.
+//   grid_zero  -> shortfall branch fires whenever pv < demand at all, i.e.
+//                 discharge immediately to keep grid import near zero
+//                 continuously (confirmed via a PV=400W/demand=600W
+//                 example). This makes house_priority+grid_zero converge to
+//                 the same shape as grid_zero_besteffort — they share the
+//                 fullDemandTarget() helper below, differing only in which
+//                 floor gates them.
+// Never above houseDemand in any branch => zero export by construction. The
+// device itself enforces its configured SOC reserve / charge limits on top.
 //
-// SOC limits (2026-09-15, shared-source fix): the discharge floor ("reserve")
-// and charge ceiling ("max charging") are read from the SAME account config
-// (`battery-params.js`'s `getBatteryLimits()`, 6 h cache, param_type "27"
-// with a schedule/hardcoded fallback) the Battery tab already uses — not
-// guessed locally. Previously this controller read `reserved_soc` off the
-// schedule payload (param_type "6") directly, defaulting to 0 when absent;
-// on this account that field is typically absent, so the guard was
-// effectively disabled (battery could be discharged with no floor at all).
-// The charge ceiling doesn't change the PV>0 formula (target is always
-// <= PV there, so it never asks for MORE charging than PV already supplies;
-// raising target above houseDemand to "use up" a full battery would risk
-// exporting, which the device must never do) — it's surfaced in
-// `lastDecision.atChargeCeiling` for visibility/debugging only.
+// SOC limits (2026-09-15/16): the discharge floor ("reserve") and charge
+// ceiling ("max charging") are read from the SAME account config
+// (`battery-params.js`'s `getBatteryLimits()`, 6 h cache — now sourced from
+// get_power_cutoff, the endpoint that actually works for this bare-SB2
+// hardware, see battery-params.js) the Battery tab already uses — not
+// guessed locally. `atChargeCeiling` in `lastDecision` is informational
+// (used by battery_priority's own branch condition, not a separate export
+// guard — raising target above houseDemand to "use up" a full battery would
+// risk exporting, which the device must never do).
 //
 // Write path (spike-verified 2026-09-15): param_type "6", cmd 17 via
 // set_site_device_param; always TWO slots (Anker single-slot 0 W export bug).
 // Preset is only rewritten on a >= 50 W change (or as a 5-min refresh), so
-// the endpoint sees writes a few times per hour at most.
+// the endpoint sees writes a few times per hour at most. This write
+// discipline (below) is shared UNCHANGED by all three strategies — it only
+// ever sees the final numeric target, so a strategy switch is naturally
+// subject to the same step-down-promptly/step-up-after-hold hysteresis as
+// any other target change.
 
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
@@ -56,15 +79,6 @@ const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
 // continuously for this long — cloud wobble around a 100 W boundary
 // otherwise makes the preset chase PV while the device lags ~1 min behind.
 const STEP_UP_HOLD_MS = 3 * 60 * 1000;
-// Evening bridge (2026-09-15): during the sunset ramp-down the floor-step
-// rule lets the GRID cover the growing gap while the battery sits idle
-// waiting for PV=0. Once the day has clearly peaked (>= 300 W), it's past
-// noon, and PV fell below 70% of peak AND below house demand, switch to
-// demand mode — preset = min(demand, 800); per the preset semantics the
-// CELLS then top up the gap automatically. Same € on a flat tariff, but
-// grid import starts later and the battery reaches its reserve sooner
-// instead of idling through the ramp. The noon guard keeps the morning
-// ramp in charge mode.
 
 export class PowerPlanController {
   constructor(anker, getLiveBattery) {
@@ -78,6 +92,9 @@ export class PowerPlanController {
     this.enabled = false;
     this.originalRaw = null; // schedule as found before we took over (restore)
     this.template = null; // last-read parsed schedule (limits etc.)
+    this.strategy = "house_priority";
+    this.trigger = "pv_zero";
+    this.tolerancePct = 3;
     this.lastWrittenPower = null;
     this.lastWriteAt = 0;
     this.lastError = null;
@@ -88,6 +105,21 @@ export class PowerPlanController {
       this.originalRaw = saved.originalRaw ?? null;
       this.lastWrittenPower = saved.lastWrittenPower ?? null;
       this.lastWriteAt = saved.lastWriteAt ?? 0;
+      this.strategy = saved.strategy ?? "house_priority";
+      this.trigger = saved.trigger ?? "pv_zero";
+      this.tolerancePct = saved.tolerancePct ?? 3;
+      // 2026-09-16: state files from before the strategy engine have no
+      // `trigger` field — pv_zero is the closer, strictly-more-conservative
+      // analog of the deleted isEveningBridge() heuristic (never fires
+      // earlier than it would have), but it IS a behavior shift, so make it
+      // visible rather than silent for anyone upgrading with the controller
+      // already enabled.
+      if (this.enabled && saved.trigger === undefined) {
+        console.log(
+          "[power-plan] upgraded: discharge-trigger model replaces the evening-bridge " +
+            "heuristic; defaulting to house_priority + pv_zero trigger",
+        );
+      }
     } catch {
       /* no saved state — controller starts disabled */
     }
@@ -102,6 +134,9 @@ export class PowerPlanController {
           originalRaw: this.originalRaw,
           lastWrittenPower: this.lastWrittenPower,
           lastWriteAt: this.lastWriteAt,
+          strategy: this.strategy,
+          trigger: this.trigger,
+          tolerancePct: this.tolerancePct,
         }),
       );
       chmodSync(this.stateFile, 0o600);
@@ -157,34 +192,49 @@ export class PowerPlanController {
     };
   }
 
-  computeTarget({ pvW, demandW, soc, bridge = false, reserve = 0 }) {
-    const max = this.template?.max_load ?? 800;
-    const step = this.template?.step ?? 10;
-    let target;
-    if (soc <= reserve) target = 0;
-    else if (pvW <= 0 || bridge) target = Math.min(max, demandW);
-    else target = Math.min(pvW, demandW, max);
-    target = Math.max(0, Math.floor(target / step) * step);
-    return target;
+  roundDown(v, step) {
+    return Math.max(0, Math.floor(v / step) * step);
   }
 
-  // Evening bridge: true once the day peaked (>=300 W), it's past noon, and
-  // PV declined below 70% of peak and below house demand.
-  isEveningBridge(pvW, demandW) {
-    const d = new Date();
-    const dayKey = d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
-    if (this.peakDayKey !== dayKey) {
-      this.peakDayKey = dayKey;
-      this.pvPeakToday = 0;
+  // Shared "serve full demand from PV+battery combined" building block —
+  // used by house_priority's/battery_priority's shortfall branch AND by
+  // grid_zero_besteffort's unconditional formula. The only thing that ever
+  // differs between callers is which floor gates the soc <= check.
+  fullDemandTarget(demandW, max, step) {
+    return this.roundDown(Math.min(max, demandW), step);
+  }
+
+  computeHousePriority({ pvW, demandW, soc, trigger, dischargeFloorPct, max, step }) {
+    if (soc <= dischargeFloorPct) return 0;
+    const shortfall = trigger === "grid_zero" ? pvW < demandW : pvW <= 0;
+    if (pvW <= 0 || shortfall) return this.fullDemandTarget(demandW, max, step);
+    return this.roundDown(Math.min(pvW, demandW, max), step);
+  }
+
+  computeBatteryPriority({ pvW, demandW, soc, trigger, dischargeFloorPct, chargeCeilingPct, max, step }) {
+    if (soc <= dischargeFloorPct) return 0;
+    if (soc < chargeCeilingPct && pvW > 0) return 0; // withhold PV, charge the battery
+    return this.computeHousePriority({ pvW, demandW, soc, trigger, dischargeFloorPct, max, step });
+  }
+
+  computeGridZeroBestEffort({ demandW, soc, tolerancePct, dischargeFloorPct, max, step }) {
+    const effectiveFloor = dischargeFloorPct + (tolerancePct ?? 3);
+    if (soc <= effectiveFloor) return 0;
+    return this.fullDemandTarget(demandW, max, step);
+  }
+
+  computeTarget(ctx) {
+    const max = this.template?.max_load ?? 800;
+    const step = this.template?.step ?? 10;
+    const args = { ...ctx, max, step };
+    switch (ctx.strategy) {
+      case "battery_priority":
+        return this.computeBatteryPriority(args);
+      case "grid_zero_besteffort":
+        return this.computeGridZeroBestEffort(args);
+      default:
+        return this.computeHousePriority(args); // "house_priority"
     }
-    this.pvPeakToday = Math.max(this.pvPeakToday ?? 0, pvW);
-    return (
-      d.getHours() >= 12 &&
-      this.pvPeakToday >= 300 &&
-      pvW > 0 &&
-      pvW < demandW &&
-      pvW < 0.7 * this.pvPeakToday
-    );
   }
 
   // Called on every battery sync with the latest scen_info payload.
@@ -211,13 +261,15 @@ export class PowerPlanController {
         this.anker,
         this.getLiveBattery,
       );
-      const bridge = this.isEveningBridge(pvW, demandW);
       const targetW = this.computeTarget({
         pvW,
         demandW,
         soc,
-        bridge,
-        reserve: dischargeFloorPct,
+        strategy: this.strategy,
+        trigger: this.trigger,
+        tolerancePct: this.tolerancePct,
+        dischargeFloorPct,
+        chargeCeilingPct,
       });
       const now = Date.now();
       const cur = this.lastWrittenPower;
@@ -273,7 +325,9 @@ export class PowerPlanController {
         pvW,
         demandW,
         soc,
-        bridge,
+        strategy: this.strategy,
+        trigger: this.trigger,
+        tolerancePct: this.tolerancePct,
         targetW,
         wrote,
         reason,
@@ -312,10 +366,25 @@ export class PowerPlanController {
     }
   }
 
+  // Partial update — pass only the field(s) being changed. Takes effect on
+  // the next tick (no special hysteresis reset needed: the existing
+  // step-up-hold logic already re-arms itself the moment the computed
+  // target differs from before, so a strategy switch is subject to the same
+  // write discipline as any other target change).
+  setStrategy({ strategy, trigger, tolerancePct } = {}) {
+    if (strategy !== undefined) this.strategy = strategy;
+    if (trigger !== undefined) this.trigger = trigger;
+    if (tolerancePct !== undefined) this.tolerancePct = tolerancePct;
+    this.saveState();
+  }
+
   getState() {
     return {
       enabled: this.enabled,
       canRestore: this.originalRaw != null,
+      strategy: this.strategy,
+      trigger: this.trigger,
+      tolerancePct: this.tolerancePct,
       lastWrittenPower: this.lastWrittenPower,
       lastWriteAt: this.lastWriteAt || null,
       lastError: this.lastError,

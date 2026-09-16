@@ -26,6 +26,7 @@ const MSGTYPE_REALTIME_TRIGGER = "0057";
 const FIELDS_0405 = {
   a3: { key: "mainSoc", factor: 1 }, // main_battery_soc (controller only)
   ad: { key: "soc", factor: 1 }, // battery_soc (controller + expansions avg)
+  aa: { key: "temperatureC", factor: 1, signed: true }, // main device temp, °C
   ab: { key: "pvW", factor: 0.1 }, // photovoltaic_power
   ac: { key: "acOutputW", factor: 0.1 }, // ac_output_power
   b0: { key: "chargeW", factor: 0.01 }, // bat_charge_power
@@ -155,7 +156,7 @@ export class AnkerMqtt {
     this.anker = ankerClient;
     this.sn = batterySn;
     this.pn = pn;
-    this.onData = null; // set by caller: ({ts, soc, outputW, chargeW, pvW, toHomeW})
+    this.onData = null; // set by caller: ({ts, soc, outputW, chargeW, pvW, toHomeW, temperatureC})
     this.client = null;
     this.mqttInfo = null;
     this.connected = false;
@@ -317,7 +318,15 @@ export class AnkerMqtt {
       for (const [hexName, def] of Object.entries(FIELDS_0405)) {
         const f = msg.fields[hexName];
         if (!f) continue;
-        const raw = decodeValue(f);
+        let raw = decodeValue(f);
+        // decodeValue()'s 1-byte paths (type 0x01, or no tag at all) return
+        // the byte unsigned — for a field we know can go negative (only
+        // temperature so far), undo the two's-complement wrap by hand rather
+        // than making decodeValue() signed-by-default (would change every
+        // other 1-byte field's semantics too).
+        if (def.signed && (f.type === 0x01 || f.type === -1) && typeof raw === "number" && raw > 127) {
+          raw -= 256;
+        }
         if (typeof raw === "number" && Number.isFinite(raw)) {
           out[def.key] = applyFactor(raw, def.factor);
         }
@@ -331,6 +340,7 @@ export class AnkerMqtt {
         chargeW: out.chargeW ?? 0,
         pvW: out.pvW ?? 0,
         toHomeW: out.toHomeW ?? null,
+        temperatureC: out.temperatureC ?? null,
       };
       if (!this.loggedFirstData) {
         this.loggedFirstData = true;
