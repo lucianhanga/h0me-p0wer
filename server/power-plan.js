@@ -111,28 +111,39 @@ const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4)
 // ceiling before resuming withhold-and-charge — absorbs the standby-draw
 // wobble without flipping state every tick.
 const CHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.CHARGE_RESUME_HYSTERESIS_PCT ?? 3);
-// battery_priority's hold-at-ceiling probe step (2026-09-17, fourth
-// same-day revision — see computeBatteryPriority()'s comment for the full
-// reasoning). The hardware exposes only ONE flat output-power preset; the
-// device itself decides whether to source it from PV or cells. There is no
-// way to simultaneously (a) always ask for the true PV maximum and (b)
-// GUARANTEE the battery is never asked to cover any of it — discovering
-// "how much PV is actually available right now" requires asking the device
-// for more than currently reported, which risks a brief real pull from the
-// battery if the panels can't cover it. This is the best achievable
-// approximation: climb toward the safe ceiling in small, validated steps,
-// gated on deriveBatteryFlow()'s real cellsW (not the raw pvW reading,
-// which is a CONSEQUENCE of the last target written, not an independent
-// measurement — see the incident this same day where PV got stuck reading
-// ~2 W for 4+ minutes after a dip, because the previous version capped
-// target at that same stale reading). Any real discharge is caught and
-// reversed within one tick (write-discipline steps DOWN with no hold);
-// upward steps still need STEP_UP_HOLD_MS to actually reach the device
-// AND get validated by the next tick's real cellsW before climbing
-// further — so recovery from a deep dip to the full safe ceiling is slow
-// (worst case, tens of minutes) by design: this constant trades recovery
-// speed for the "never touch the battery" guarantee actually holding.
+// battery_priority's hold-at-ceiling probe (2026-09-17, fifth same-day
+// revision — see computeBatteryPriority()'s comment for the full history
+// and reasoning). The hardware exposes only ONE flat output-power preset;
+// the device decides internally whether to source it from PV or cells, so
+// discovering "how much PV is actually available beyond what's currently
+// reported" requires asking for more, which risks a brief real pull from
+// the battery if the panels can't cover it. This climbs toward the safe
+// ceiling in small, validated PROBE_STEP_W steps, gated on
+// deriveBatteryFlow()'s real cellsW — the one signal that reflects what
+// the CURRENTLY ACTIVE preset is actually doing, not what we're about to
+// ask for. Any real discharge corrects in exactly one step (the exact
+// observed amount, not a fixed decrement). PROBE_STEP_W smaller than
+// WRITE_MIN_DELTA_W would never actually reach the device.
 const PROBE_STEP_W = Number(process.env.PROBE_STEP_W ?? 50);
+// Minimum time between successive upward probe steps (2026-09-17, added
+// after a real incident: web research — thomluther/anker-solix-api, the
+// reference Solarbank reverse-engineering project, and Anker's own
+// support docs — confirmed Solarbank 2 only reports fresh telemetry to
+// Anker's cloud every ~5 MINUTES by default (worse than the ~1 min this
+// file previously assumed elsewhere), and the maintainer explicitly warns
+// against changing presets faster than every 2 minutes because the
+// telemetry can't keep up. An earlier version of this probe advanced its
+// candidate every 10 s tick regardless of whether the cloud had reported
+// on the PREVIOUS step yet — "confirmed safe" was frequently just stale
+// data, which both produced a visible "Home consumption rising with PV"
+// display artifact (the fast local grid meter reacting to real changes
+// the cloud hadn't caught up to) and undermined the actual safety
+// property. Set comfortably above the documented worst case so each step
+// is validated against telemetry that has genuinely had time to catch up
+// — recovery from a deep dip to the full safe ceiling is consequently
+// slow (tens of minutes), the accepted cost of the "never touch the
+// battery" guarantee actually holding rather than being aspirational.
+const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 5 * 60 * 1000);
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
 // dual-control note) — only ONE should ever hold the battery schedule.
@@ -158,6 +169,7 @@ export class PowerPlanController {
     this.manualDischarge = false;
     this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
+    this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
     this.lastWriteAt = 0;
     this.lastError = null;
@@ -310,35 +322,38 @@ export class PowerPlanController {
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
-  // battery_priority's hold-at-ceiling phase (2026-09-17, fourth same-day
-  // revision — first tried passthroughOnly() [uncapped by GRID_TARGET_W,
-  // wasted headroom], then dischargeToTarget() [PR #133, drew from the
-  // battery whenever PV fell short — explicitly rejected], then
-  // pvOnlyToGridTarget() [capped at raw current PV — self-defeating: on
-  // this hardware, reported PV is a CONSEQUENCE of the last target
-  // written, not an independent measurement, so a transient dip could
-  // write a near-zero target, the device would throttle the panels to
-  // match it, and the next reading would confirm "PV is low" forever —
-  // confirmed live, PV got stuck reading ~2 W for 4+ minutes after a dip].
-  // The user's hard requirement, stated twice, explicitly: the battery
-  // must NEVER be discharged once full — full stop, no exceptions — while
-  // the app should still do everything possible to maximize real PV use.
-  // Those two goals are in genuine tension: finding out how much PV is
-  // ACTUALLY available beyond what's currently reported REQUIRES asking
-  // the device for more, and the device may cover any shortfall from
-  // cells before we find out. There is no device-level "PV-only, up to
-  // X" primitive — the preset is a single flat power number and the
-  // device decides how to source it. This hill-climbs toward the safe
-  // ceiling in small PROBE_STEP_W steps, gated on deriveBatteryFlow()'s
-  // REAL cellsW (not pvW) — the one signal that isn't self-referential:
-  // it reflects what the CURRENTLY ACTIVE device preset is actually
-  // doing, not what we're about to ask for. Any real discharge is
-  // detected and reversed within one tick (existing step-down-promptly
-  // write discipline, no hold); each upward step must independently hold
-  // for STEP_UP_HOLD_MS AND get validated safe by the following tick
-  // before climbing further — slow (tens of minutes to fully recover from
-  // a deep dip) by design, because that's the cost of the "never touch
-  // the battery" guarantee actually holding rather than being aspirational.
+  // battery_priority's hold-at-ceiling phase (2026-09-17, fifth same-day
+  // revision — see git history for the four rejected earlier attempts:
+  // passthroughOnly() [uncapped by GRID_TARGET_W], dischargeToTarget()
+  // [drew from the battery whenever PV fell short — rejected],
+  // pvOnlyToGridTarget() [capped at raw current PV — self-defeating,
+  // caused a stuck-low PV lock], and a first hill-climb draft that
+  // advanced its own candidate every 10 s tick regardless of whether a
+  // write had even happened yet. That last bug was caught by the user
+  // noticing displayed "Home consumption" rising in lockstep with PV —
+  // web research (thomluther/anker-solix-api project, Anker's own
+  // support docs) confirmed Solarbank 2 only reports fresh telemetry to
+  // Anker's cloud every ~5 MINUTES by default (not ~1 min as this file
+  // previously assumed) — the maintainer explicitly warns against
+  // changing presets faster than every 2 minutes for exactly this
+  // reason. A probe advancing every 10 s was validating almost every
+  // step against STALE cloud data from before the PREVIOUS step had even
+  // been reported, which both produced the visible "Home" display
+  // artifact (grid, fast/local, reacting to real changes the cloud
+  // hadn't caught up to yet) and undermined the "never touch the
+  // battery" safety property itself (a "confirmed safe" reading might
+  // just be old data, not a real confirmation).
+  //
+  // Fix: the probe candidate is now computed FROM lastWrittenPower (what
+  // is verifiably, currently active on the device) rather than its own
+  // running internal state — so calling this function many times between
+  // actual writes recomputes the SAME candidate instead of compounding
+  // it. Upward steps are additionally gated by PROBE_MIN_INTERVAL_MS, set
+  // well above Anker's documented ~5 min reporting cadence, so each step
+  // is validated against telemetry that has had time to actually reflect
+  // it. Downward correction remains IMMEDIATE and ungated — "never touch
+  // the battery" means any detected discharge is corrected as fast as
+  // possible, not paced to match cloud latency.
   computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step, cellsW }) {
     if (soc <= dischargeFloorPct) return 0;
     if (soc >= chargeCeilingPct) {
@@ -348,24 +363,31 @@ export class PowerPlanController {
     }
     if (!this.holdingAtCeiling) {
       this.holdProbeW = 0; // start conservative every time we (re)enter hold
+      this.lastProbeUpAt = 0;
       if (pvW > 0) return 0; // withhold PV, charge the battery
     }
     const ceilingW = this.roundDown(Math.max(0, demandW - GRID_TARGET_W), step);
+    const now = Date.now();
     if (cellsW > 0) {
       // The battery IS being touched right now — drop straight back to
-      // what PV was actually covering (holdProbeW - cellsW), not a fixed
-      // small decrement. cellsW tells us EXACTLY how much of the current
-      // target the battery had to cover, so this corrects in ONE step no
-      // matter how hard PV crashed — a fixed-step retreat would take
-      // minutes to unwind a big drop (e.g. 14 steps / ~7 min for a
-      // 670 W-to-near-0 crash at 30 s between writes), which is far too
-      // slow given "never touch the battery" is a hard requirement, not a
-      // soft preference.
-      this.holdProbeW = Math.max(0, this.holdProbeW - cellsW);
-    } else if (this.holdProbeW < ceilingW) {
-      // Confirmed safe so far — cautiously test a bit more.
+      // what the CURRENTLY ACTIVE preset was actually covering
+      // (lastWrittenPower - cellsW, ground truth — not holdProbeW, which
+      // may be a not-yet-written candidate), not a fixed small decrement,
+      // so a hard PV crash corrects in ONE step. This also counts as
+      // "just tested" — don't immediately retry upward.
+      this.holdProbeW = Math.max(0, (this.lastWrittenPower ?? this.holdProbeW) - cellsW);
+      this.lastProbeUpAt = now;
+    } else if (this.holdProbeW < ceilingW && now - this.lastProbeUpAt >= PROBE_MIN_INTERVAL_MS) {
+      // Confirmed safe, and enough time has passed since the last probe
+      // for the cloud to have actually reported on it — try one step
+      // beyond the current candidate.
       this.holdProbeW = Math.min(this.holdProbeW + PROBE_STEP_W, ceilingW);
+      this.lastProbeUpAt = now;
     }
+    // else: leave holdProbeW UNCHANGED (do not snap back to whatever's
+    // currently written) — it must hold steady across ticks for the
+    // write-discipline's STEP_UP_HOLD_MS to ever actually see a
+    // continuously-elevated target and commit the write at all.
     return this.roundDown(this.holdProbeW, step);
   }
 

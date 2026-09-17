@@ -1312,6 +1312,77 @@ EPIPE noise on every client disconnect).
   wherever it left off. Also re-ran the untouched 94↔95 ceiling-hysteresis
   latch sequence through the same updated code — unaffected.
 
+## battery_priority: hill-climb probe was un-paced and self-defeating (2026-09-17, fifth same-day revision, found within the hour)
+
+- **User caught this live, minutes after the fourth revision above
+  shipped**: "when we are increasing the PV production looks like that
+  also the House consume is displayed as rising. but no extra consumers
+  are in the house. this values are actually coming correctly from the
+  Smart Meter Gen2 also, however I don't understand why." Three
+  screenshots showed PV/output and displayed "Home" rising in lockstep
+  (50→550→770 W and 667→905→1084 W over ~4 minutes) while grid dropped by
+  LESS than output rose — meaning `Home = grid + outputW` was
+  systematically overshooting during the ramp, not just noisy.
+- **Diagnosed at user's request via web research** (`thomluther/anker-solix-api`,
+  the reference Solarbank reverse-engineering project, and Anker's own
+  support docs — see GitHub issue #114 and `ha-anker-solix`'s INFO.md):
+  Solarbank 2 only reports fresh telemetry to Anker's cloud every **~5
+  MINUTES by default** — worse than the ~1 minute this file had assumed
+  everywhere else (`STEP_UP_HOLD_MS`'s original rationale). The project
+  maintainer explicitly warns against changing presets faster than every
+  2 minutes for exactly this reason: readings in between are frequently
+  stale, not a live measurement.
+- **This exposed a real, separate bug in the just-shipped hill-climb**,
+  not just a display quirk: `computeBatteryPriority()`'s `holdProbeW` was
+  advancing on EVERY 10 s tick as long as `cellsW == 0`, completely
+  decoupled from whether a write had even reached the device yet. With
+  writes gated behind `STEP_UP_HOLD_MS` (90 s), the internal candidate
+  could silently climb ~9 steps before the FIRST one was ever tested
+  against reality — and even once written, the very next tick's `cellsW`
+  reading was almost certainly still stale cloud data from before that
+  write could possibly have been reported. "Confirmed safe" was
+  frequently not a real confirmation at all — undermining the "never
+  touch the battery" guarantee this whole design exists to provide, not
+  just producing a cosmetic display artifact. (The fast local grid meter
+  reacting to the REAL, already-changed output while the cloud's reported
+  `outputW` lagged behind is what produced the visible "Home rising"
+  symptom specifically.)
+- **Fix, two parts**: (1) `holdProbeW` is now computed relative to
+  `lastWrittenPower` (ground truth — what's verifiably active on the
+  device right now) for retreats, and held STEADY (not reset every tick)
+  between probes, so write-discipline's own hold can actually observe a
+  continuously-elevated target and commit it — a first attempt at this
+  fix reset `holdProbeW` back to `lastWrittenPower` on every non-probing
+  tick, which prevented ANY write from ever completing (caught via a
+  full 35-minute closed-loop simulation with realistic write-discipline
+  timing, not just calling the function in a loop — see below). (2) new
+  `PROBE_MIN_INTERVAL_MS` (default 5 min, env-configurable) gates upward
+  steps only — set at Anker's documented worst-case reporting interval,
+  so each step has genuinely had time to be reported before the next is
+  attempted. Downward correction remains immediate and ungated, unchanged
+  from the previous revision.
+- **Revised, more honest recovery-time estimate**: verified via a
+  realistic closed-loop simulation (synthetic "device honors target from
+  PV first" hardware model, PLUS the actual write-discipline state
+  machine replicated tick-by-tick, not just `computeBatteryPriority()` in
+  isolation — an earlier, simpler simulation missed the "never actually
+  writes" bug entirely because it didn't model write-discipline at all).
+  With abundant PV, writes now commit roughly every 5-6.5 minutes (one
+  `PROBE_STEP_W`=50 W step each), reaching 350 W after 35 simulated
+  minutes — recovering to a typical ~670 W ceiling from a full dip would
+  take over an HOUR in the worst case, notably slower than the "tens of
+  minutes" estimated for the previous (buggy) revision. This is the
+  honest cost of `PROBE_MIN_INTERVAL_MS` actually respecting Anker's real
+  reporting cadence. A hard PV crash (799 W → 2 W) was still corrected
+  within one 10 s tick (`cellsW` detected, target dropped to 0
+  immediately, written on the very next write-discipline pass) — the
+  safety-critical direction is unaffected by the slower climb.
+- Also declined, in this same conversation, to reduce `STEP_UP_HOLD_MS`
+  from 90 s to 30 s as separately requested — explained that 30 s sits
+  BELOW the (now confirmed even longer than assumed) device/cloud lag,
+  which would reintroduce the exact preset-chasing problem that value
+  exists to prevent, now doubly so given this incident.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
