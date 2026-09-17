@@ -26,7 +26,12 @@ function ParamRow({ k, v }) {
 // Battery tab: animated SOC gauge (with the configured min/max markers right
 // on it) + every battery parameter, from GET /api/battery/params (10 s poll —
 // the slow-changing device config is cached server-side for 6 h).
-export default function BatteryTab() {
+// dischargeTolerancePct comes from the power-plan controller (StrategyTab's
+// /api/power-plan poll) — the account's discharge floor isn't actually where
+// the controller stops discharging; it pads that floor by this many points
+// as a safety margin (2026-09-17, user question: "why does it not go under
+// 14%" when the account floor shows 10%).
+export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +75,13 @@ export default function BatteryTab() {
   const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
   const minPct = config?.dischargeLowerLimitPct;
   const maxPct = config?.chargeUpperLimitPct;
+  // The account's configured floor is not where the controller actually
+  // stops discharging — dischargeToTarget() pads it by DISCHARGE_TOLERANCE_PCT
+  // as a safety margin (see power-plan.js). Shown as a second, distinct
+  // marker so "why does it stop at 14%, not 10%?" is answered on the gauge
+  // itself instead of only in server-side comments.
+  const effectiveFloorPct =
+    minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
   const usableKwh =
     minPct != null && maxPct != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
@@ -91,7 +103,14 @@ export default function BatteryTab() {
                   style={{ width: `${soc}%` }}
                 />
                 {minPct != null && (
-                  <div className="batt-tick" style={{ left: `${minPct}%` }} title={`min discharge ${minPct}%`} />
+                  <div className="batt-tick" style={{ left: `${minPct}%` }} title={`account discharge floor ${minPct}%`} />
+                )}
+                {effectiveFloorPct != null && (
+                  <div
+                    className="batt-tick batt-tick-floor"
+                    style={{ left: `${effectiveFloorPct}%` }}
+                    title={`controller won't discharge below ${effectiveFloorPct}% (${minPct}% floor + ${dischargeTolerancePct}% safety margin)`}
+                  />
                 )}
                 {maxPct != null && (
                   <div className="batt-tick" style={{ left: `${maxPct}%` }} title={`max charge ${maxPct}%`} />
@@ -107,6 +126,14 @@ export default function BatteryTab() {
               {minPct != null && (
                 <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
                   min {minPct}%
+                </span>
+              )}
+              {effectiveFloorPct != null && (
+                <span
+                  className="batt-tick-label batt-tick-label-floor"
+                  style={{ left: `${effectiveFloorPct}%` }}
+                >
+                  floor {effectiveFloorPct}%
                 </span>
               )}
               {maxPct != null && (
