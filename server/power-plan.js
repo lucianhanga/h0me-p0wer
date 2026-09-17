@@ -122,28 +122,37 @@ const CHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.CHARGE_RESUME_HYSTERESIS
 // deriveBatteryFlow()'s real cellsW — the one signal that reflects what
 // the CURRENTLY ACTIVE preset is actually doing, not what we're about to
 // ask for. Any real discharge corrects in exactly one step (the exact
-// observed amount, not a fixed decrement). PROBE_STEP_W smaller than
-// WRITE_MIN_DELTA_W would never actually reach the device.
-const PROBE_STEP_W = Number(process.env.PROBE_STEP_W ?? 50);
+// observed amount, not a fixed decrement, so a bigger step size doesn't
+// increase the WORST-CASE EXPOSURE TIME — still one ~10-20 s tick — only
+// its worst-case MAGNITUDE). 150 W (2026-09-17, raised from an initial
+// 50 W same day — full recovery at 50 W/step was over an hour, "still
+// very slow" per the user, and they explicitly asked to go faster after
+// seeing the first, more conservative revision of this same tuning
+// pass). PROBE_STEP_W smaller than WRITE_MIN_DELTA_W would never
+// actually reach the device.
+const PROBE_STEP_W = Number(process.env.PROBE_STEP_W ?? 150);
 // Minimum time between successive upward probe steps (2026-09-17, added
 // after a real incident: web research — thomluther/anker-solix-api, the
 // reference Solarbank reverse-engineering project, and Anker's own
 // support docs — confirmed Solarbank 2 only reports fresh telemetry to
 // Anker's cloud every ~5 MINUTES by default (worse than the ~1 min this
-// file previously assumed elsewhere), and the maintainer explicitly warns
-// against changing presets faster than every 2 minutes because the
-// telemetry can't keep up. An earlier version of this probe advanced its
-// candidate every 10 s tick regardless of whether the cloud had reported
-// on the PREVIOUS step yet — "confirmed safe" was frequently just stale
-// data, which both produced a visible "Home consumption rising with PV"
-// display artifact (the fast local grid meter reacting to real changes
-// the cloud hadn't caught up to) and undermined the actual safety
-// property. Set comfortably above the documented worst case so each step
-// is validated against telemetry that has genuinely had time to catch up
-// — recovery from a deep dip to the full safe ceiling is consequently
-// slow (tens of minutes), the accepted cost of the "never touch the
-// battery" guarantee actually holding rather than being aspirational.
-const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 5 * 60 * 1000);
+// file previously assumed elsewhere). That same research found the
+// maintainer's own explicit recommendation: don't change presets faster
+// than every 2 MINUTES — that, not 5, is the documented safe floor; 5 min
+// was this file's own extra-conservative first choice. Lowered to
+// exactly that floor (2026-09-17, same day, user asked for a faster
+// ramp) — NOT lowered further than this: going below the maintainer's
+// explicit recommendation is what reintroduces the stale-telemetry bug
+// this constant exists to prevent (see the incident this same day where
+// a 10 s-cadence probe validated "confirmed safe" against data that
+// couldn't possibly reflect the previous step yet). An earlier version
+// of this probe advanced its candidate every 10 s tick regardless of
+// whether the cloud had reported on the PREVIOUS step yet — "confirmed
+// safe" was frequently just stale data, which both produced a visible
+// "Home consumption rising with PV" display artifact (the fast local
+// grid meter reacting to real changes the cloud hadn't caught up to) and
+// undermined the actual safety property.
+const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 2 * 60 * 1000);
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
 // dual-control note) — only ONE should ever hold the battery schedule.
