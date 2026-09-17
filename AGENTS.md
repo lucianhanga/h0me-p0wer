@@ -1383,6 +1383,52 @@ EPIPE noise on every client disconnect).
   which would reintroduce the exact preset-chasing problem that value
   exists to prevent, now doubly so given this incident.
 
+## battery_priority: probe re-tuned for speed, live-verified against production (2026-09-17, sixth same-day revision)
+
+- **Confirmed live, same day, that the fifth revision above is correctly
+  deployed and working**: polled production's `/api/power-plan` via a
+  background Monitor loop and watched one full probe cycle complete in
+  real time — held at `holdProbeW=50` while `PROBE_MIN_INTERVAL_MS`
+  (then 5 min) elapsed, then `reason: "holding up-step (Ns/90s)"`
+  counting 10→30→40→60→80s, then `"step up (held 90s)"` with
+  `lastWrittenPower` actually updating to 100. The `v1.2.4` badge visible
+  in the user's browser was a stale cached frontend — the backend was
+  already newer. This is the first time this whole day's sequence of
+  fixes was verified against REAL production behavior over time, rather
+  than via simulation alone.
+- **User: "still only putting 100W... ramp up is going very slow" — asked
+  to speed it up.** The 5-minute `PROBE_MIN_INTERVAL_MS` chosen in the
+  fifth revision was this file's OWN extra-conservative choice — the
+  actual research finding was two numbers: Anker's ~5 min DEFAULT
+  reporting interval, and the maintainer's separate, explicit
+  RECOMMENDATION to not change presets faster than every 2 minutes. 5 min
+  was chosen out of caution beyond what was strictly required. Re-read
+  the research and lowered `PROBE_MIN_INTERVAL_MS` to exactly 2 minutes
+  (the documented floor) — explicitly NOT lower, since going below the
+  maintainer's own stated safe minimum is what caused today's earlier
+  bug. Declined an ambiguous user request to move two unspecified numbers
+  from "60/90" to "30/60" (didn't map onto any real constant combination)
+  and asked for clarification via AskUserQuestion rather than guess on a
+  safety-relevant parameter.
+- Combined with raising `PROBE_STEP_W` 50 W → 150 W (offered 100 W and
+  150 W as options via AskUserQuestion given the step-size/speed
+  trade-off; user picked 100 W then immediately said "I want it faster,"
+  so went straight to 150 W without another round-trip). Bigger steps
+  don't increase WORST-CASE EXPOSURE TIME (a real discharge still
+  corrects within one ~10-20 s tick, since the correction subtracts the
+  exact observed `cellsW`, not a fixed amount) — only worst-case
+  MAGNITUDE of a single brief touch, which was disclosed explicitly
+  before implementing.
+- Verified via the same realistic closed-loop simulation (real
+  write-discipline timing, not just calling the function in a loop): full
+  ramp from 0 to a 670 W ceiling now takes **~9.5 minutes** (5 steps ×
+  ~2 min interval, `STEP_UP_HOLD_MS`'s 90 s comfortably fits inside each
+  2-min window) — down from over an hour with the previous (50 W /
+  5 min) settings. Re-verified the hard-crash correction is unaffected:
+  799 W → 2 W still corrects to target=0 within one 10-20 s tick,
+  regardless of step size, because the retreat calculation is always
+  exact (`lastWrittenPower - cellsW`), never a fixed decrement.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
