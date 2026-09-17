@@ -120,20 +120,18 @@ launchctl load ~/Library/LaunchAgents/com.h0mep0wer.server.plist
 
 ## Deploy (Docker, production)
 
-Every merge to `main` publishes an image to
-`ghcr.io/lucianhanga/h0me-p0wer:latest` (GitHub Actions → CI + Publish).
+Builds locally from source on the production host — no registry involved.
 
 ```sh
 # one-time setup
-mkdir h0me-p0wer && cd h0me-p0wer
-curl -O https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/docker-compose.yml
-curl -o .env https://raw.githubusercontent.com/lucianhanga/h0me-p0wer/main/.env.example
+git clone https://github.com/lucianhanga/h0me-p0wer.git && cd h0me-p0wer
+cp .env.example .env
 $EDITOR .env          # credentials + METER_IP + TARIFF_EUR_PER_KWH + AI_*
 chmod 600 .env        # secrets stay only on this machine
 
 # run / update
-docker compose pull
-docker compose up -d
+git pull --ff-only
+docker compose up -d --build
 ```
 
 The dashboard is then on `http://<server>:3001`. SQLite + the power-plan

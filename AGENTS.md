@@ -802,14 +802,18 @@ EPIPE noise on every client disconnect).
 - `docker-compose.yml`: port 3001, named volume `h0me-p0wer-data` for SQLite,
   `env_file: .env` (untracked, chmod 600 on the server), `TZ=Europe/Berlin`,
   `restart: unless-stopped`, healthcheck on `/api/live`.
-- GitHub Actions: `ci.yml` (deps, vite build, node --check, offline smoke
-  test on :3100) + `publish.yml` (build+push to GHCR on main,
-  `ghcr.io/lucianhanga/h0me-p0wer:latest|sha-<sha>`, public image).
+- GitHub Actions: `ci.yml` only (deps, vite build, node --check, offline
+  smoke test on :3100) — **no image publish step** (2026-09-17, user
+  request: `publish.yml`/GHCR removed entirely from the pipeline, along
+  with the previously-published packages under
+  `ghcr.io/lucianhanga/h0me-p0wer`). Production builds locally from source
+  instead (`docker-compose.yml`'s `build: .`, no `image:` line).
 - Secrets never enter git or the image: server-local `.env` only.
 - **Meter allows ONE Modbus TCP connection** — no parallel instances. For
   dev+prod coexistence: `MODBUS_TRANSIENT=true` + `POLL_INTERVAL_MS=20000`
   (connect-read-disconnect per cycle instead of a permanent connection).
-- Deployment/update flow documented in README "Deploy (Docker, production)".
+- Deployment/update flow documented in README "Deploy (Docker, production)"
+  — `git pull --ff-only && docker compose up -d --build`.
 
 ## FlipTile — generic flippable tile (2026-09-13)
 

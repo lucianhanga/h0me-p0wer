@@ -1,7 +1,6 @@
 services:
   h0me-p0wer:
-    image: ghcr.io/lucianhanga/h0me-p0wer:latest
-    build: . # `docker compose build` for a local build without GHCR
+    build: . # local build only — no registry involved; `docker compose up -d --build` after a git pull
     container_name: h0me-p0wer
     ports:
       - "3001:3001"
