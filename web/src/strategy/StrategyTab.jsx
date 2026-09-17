@@ -25,10 +25,61 @@ const TRIGGER_DESC = {
     "Automatically applies Battery priority's behavior above — the battery only ever charges, never discharges.",
 };
 
+// Strategy help modal (2026-09-17, user request): reuses the Ask feature's
+// modal chrome (.ask-backdrop/.ask-panel/.ask-close are generic despite the
+// name). Explicitly covers Auto vs. Manual too — not just the two
+// strategies — since "Manual silently overrides whichever strategy is
+// selected" was the exact thing that confused a user this same session.
+function StrategyHelp({ onClose }) {
+  return (
+    <div className="ask-backdrop" onClick={onClose}>
+      <div className="ask-panel card" onClick={(e) => e.stopPropagation()}>
+        <button className="ask-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        <h4 style={{ marginTop: 0 }}>Distribution strategies</h4>
+        <p>
+          <strong>House priority</strong> — the battery continuously tops up the house from
+          stored energy, leaving only a small grid target. It draws down toward its floor as
+          normal, ongoing behavior. This is the default, always-on mode.
+        </p>
+        <p className="muted">
+          Use it for everyday operation: minimize grid import continuously, regardless of how
+          sunny it is.
+        </p>
+        <p>
+          <strong>Battery priority</strong> — while the battery isn't full, PV is deliberately
+          withheld from the house so it charges the battery instead; house demand is covered from
+          the grid meanwhile. Once the battery is full (or there's no PV), it passes straight
+          through to the house — the battery itself is never discharged under this strategy.
+        </p>
+        <p className="muted">
+          Use it to prioritize a full battery — e.g. ahead of expected grid outages, or to bank
+          today's sun rather than spend it immediately.
+        </p>
+        <h4>Battery discharge trigger</h4>
+        <p>
+          <strong>Auto</strong> — the strategy selected above decides continuously.
+        </p>
+        <p>
+          <strong>Manual</strong> — a fixed Discharge / Don't discharge toggle overrides whichever
+          strategy is selected, until you switch it back to Auto.
+        </p>
+        <p className="muted">
+          Manual fully replaces the strategy pick above while it's active — a common source of
+          confusion if you forget it's on. If the battery isn't behaving like your selected
+          strategy, check here first.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function StrategyTab() {
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const [showHelp, setShowHelp] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -99,7 +150,18 @@ export default function StrategyTab() {
         {state.enabled ? "power plan active" : "power plan off — set on the Live tab"}
       </UpdatedStamp>
 
-      <h4>Distribution strategy</h4>
+      <h4 className="strategy-head">
+        Distribution strategy
+        <button
+          className="help-btn"
+          onClick={() => setShowHelp(true)}
+          title="What do these strategies do?"
+          aria-label="Strategy help"
+        >
+          ?
+        </button>
+      </h4>
+      {showHelp && <StrategyHelp onClose={() => setShowHelp(false)} />}
       <div className="controls">
         {STRATEGIES.map((s) => (
           <button

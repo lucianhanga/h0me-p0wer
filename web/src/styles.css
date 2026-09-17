@@ -416,6 +416,37 @@ h4 {
   margin: 1rem 0 0.4rem;
 }
 
+/* Strategy tab heading + inline help button (2026-09-17). */
+.strategy-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.help-btn {
+  background: none;
+  border: 1px solid #2a3238;
+  border-radius: 50%;
+  color: #8b98a5;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  width: 1.15rem;
+  height: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.help-btn:hover {
+  color: #e8ecef;
+  border-color: #5a6672;
+}
+
 /* Strategy tab: step-up hold countdown — shown while the controller is
    deliberately withholding a higher preset write until STEP_UP_HOLD_MS
    elapses (anti-wobble hysteresis, see server/power-plan.js). */

@@ -1002,6 +1002,35 @@ EPIPE noise on every client disconnect).
   HOW it behaves differently (keeps the battery topped up instead of
   continuously drawing it toward its floor), in `.callout-warn` on the
   Strategy tab.
+- **Strategy help modal (2026-09-17, user request)**: a `?` button next to
+  the "Distribution strategy" heading opens `StrategyHelp` (inline
+  component in `StrategyTab.jsx`), reusing the Ask feature's modal chrome
+  (`.ask-backdrop`/`.ask-panel`/`.ask-close` — generic despite the name,
+  not duplicated). Covers both strategies (description + a concrete usage
+  scenario each) AND the Auto/Manual discharge trigger — deliberately
+  included even though only asked about strategies, since "Manual silently
+  overrides whichever strategy is selected" was the EXACT thing that
+  confused a user earlier this same session; the help text ends with "if
+  the battery isn't behaving like your selected strategy, check here
+  first" pointing straight at that failure mode.
+- **Month tile bars: always emit the full month (2026-09-17, same
+  reasoning as the earlier today/week/day-tile padding fix)**:
+  `byPeriod.month.bars` used to `.filter((r) => r.label <= todayDs)`,
+  dropping future days entirely rather than showing them as empty — so
+  the month tile's flip-side chart's x-axis grew day by day through the
+  month instead of showing a stable full-month axis with the unfilled
+  remainder visibly blank. Now built as `Array.from({length:
+  daysInCurMonth}, ...)` — every day 1..last-day-of-month gets a bar;
+  days after `todayDs` get `{grid: null, batt: null, pv: null}` (a real
+  gap, not a measured zero), days up to and including today use their
+  real (possibly 0) values. Only the CURRENT month (`/api/stats/overview`)
+  needed this — past months navigated via `/api/stats/period?type=month`
+  are always already-complete, so every day in them is real by
+  construction; no padding needed there. Verified via the API response
+  directly (30 days for September, real values through the 17th, `null`
+  from the 18th on) — the rendering itself needed no frontend change since
+  `BackBars.jsx` already treats `null` as a gap, the same behavior already
+  verified for the Today tile's hourly padding.
 
 ## Dashboard channel audit (2026-09-15)
 

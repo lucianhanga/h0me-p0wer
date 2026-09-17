@@ -1009,7 +1009,29 @@ app.get("/api/stats/overview", (req, res) => {
   const dayBars = (rows) =>
     rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: r.disKwh ?? 0, pv: pvDayKwh(r.label) }));
   byPeriod.week.bars = dayBars(weekRows);
-  byPeriod.month.bars = dayBars(monthRowsCur.filter((r) => r.label <= todayDs));
+  // Always emit every day of the CURRENT month (2026-09-17 fix, same
+  // reasoning as today's hourly bars above): this used to filter out days
+  // past today entirely, so the month tile's flip-side chart shrank to
+  // however many days had elapsed instead of showing a stable full-month
+  // axis with the not-yet-happened remainder visibly blank. Days after
+  // today are null (a real gap, not a measured zero); today itself and
+  // earlier use their real (possibly 0) values.
+  {
+    const monthByDate = new Map(monthRowsCur.map((r) => [r.label, r]));
+    const [monthY, monthM] = ym.split("-").map(Number);
+    const daysInCurMonth = new Date(monthY, monthM, 0).getDate();
+    byPeriod.month.bars = Array.from({ length: daysInCurMonth }, (_, i) => {
+      const label = `${ym}-${String(i + 1).padStart(2, "0")}`;
+      if (label > todayDs) return { label, grid: null, batt: null, pv: null };
+      const r = monthByDate.get(label);
+      return {
+        label,
+        grid: r ? r.importKwh : 0,
+        batt: r ? (r.disKwh ?? 0) : 0,
+        pv: pvDayKwh(label),
+      };
+    });
+  }
   byPeriod.year.bars = yearRows.map((r) => {
     const [y, m] = r.label.split("-").map(Number);
     let batt = 0;
