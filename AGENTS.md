@@ -1160,6 +1160,41 @@ EPIPE noise on every client disconnect).
   with no binary threshold in this controller's own logic to add
   hysteresis to.
 
+## battery_priority: hold phase must USE the full battery, not just pass through PV (2026-09-17, same-day correction)
+
+- **User caught this deployed within hours of the hysteresis fix above**:
+  "the calculation how much to put in house when the battery is full...
+  should put as much as you can but leave still 100w from the grid. I
+  observed that the power is limited to a very small amount from the PVs."
+  Confirmed live against production: `soc: 95` (at the ceiling,
+  `holdingAtCeiling: true`), `pvW: 321`, `demandW: 774`, but
+  `targetW: 320` — the hold phase was still calling `passthroughOnly()`,
+  which caps the served amount at raw current PV, leaving 454 W (774-320)
+  to come from the grid instead of the intended ~`GRID_TARGET_W` (100 W).
+  A full battery sitting idle while the house pulls most of its demand
+  from grid defeats the entire point of having charged it — this
+  contradicts the ORIGINAL design intent (serve as much as possible, only
+  ~100 W held back for grid) even though it matched what had been
+  separately confirmed earlier in the strategy's design ("the battery is
+  NEVER asked to discharge under this strategy") — that earlier
+  confirmation is now understood to describe the CHARGING phase only, not
+  the hold phase once full.
+- Fix: `computeBatteryPriority()`'s hold branch now calls
+  `dischargeToTarget()` (the same house_priority formula — serve
+  `demandW - GRID_TARGET_W` from PV+battery together) instead of
+  `passthroughOnly()`. So battery_priority now reads as: charge hard
+  (target=0, PV entirely withheld) until the ceiling, then behave exactly
+  like house_priority until SOC has drained `CHARGE_RESUME_HYSTERESIS_PCT`
+  points below the ceiling, then charge hard again — that constant now
+  doubles as "how far a full battery is allowed to discharge before
+  recharging resumes," not just a tiny standby-draw buffer. Verified:
+  simulating the exact production reading
+  (`soc:95, pvW:321, demandW:774`) through the fixed
+  `computeBatteryPriority()` now returns `670` (674 = demand-100, rounded
+  down to the 10 W step) instead of the old `320`; re-ran the original
+  94↔95 hysteresis sequence too — the resume-charging latch still fires
+  correctly at SOC 92, unaffected by this change.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
