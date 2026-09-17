@@ -1032,6 +1032,96 @@ EPIPE noise on every client disconnect).
   `BackBars.jsx` already treats `null` as a gap, the same behavior already
   verified for the Today tile's hourly padding.
 
+## House-demand consistency, one savings calc, Welcome strategy-awareness (2026-09-17)
+
+- **CRITICAL: "house W" swung 600→1000→200→600 across two strategy
+  switches — two different formulas for the same quantity, neither
+  despiked**: user report. Traced to two separate bugs: (1) `power-plan.js`
+  ALWAYS read the battery's own cloud-reported `homeLoadW`
+  (`scene.home_load_power`, from `anker-cloud.js`'s `getBatteryInfo()`),
+  while `/api/flow` preferred `grid (fast local meter) + battery.outputW`
+  whenever the meter was available — two independently-computed formulas
+  for the exact same physical quantity, occasionally disagreeing (this is
+  also why the Live tab's flow diagram could show a too-low "Home" box —
+  screenshot showed Home=Grid=213W with PV entirely charging, i.e. the
+  `grid+outputW` path, still susceptible to the second bug below). (2)
+  neither was despiked: Anker's own cloud telemetry can report a
+  transient, wrong-looking value for a poll or two right after a
+  preset/strategy change (the device is mid-transition — same class of lag
+  as the Home Power Usage chart artifact earlier this session, but here
+  feeding the power-plan CONTROLLER's target computation directly, not
+  just a display). Fix: one function, `refreshHomeConsumption()`
+  (`index.js`), computed once per 10s tick and used by BOTH `/api/flow`'s
+  `home.consumption` and the value passed into `powerPlan.tick()` —
+  prefers grid+outputW (fast local meter case), falls back to homeLoadW
+  only when grid itself came FROM the battery (cloud-live, where combining
+  two battery-derived numbers would double up on the same lag source), and
+  despikes the result with a median-of-3 (rejects an isolated bad reading
+  without lagging behind a genuine, sustained demand change the way
+  averaging would).
+- **One canonical savings calculation, production-based, used everywhere
+  (2026-09-17, user request)**: user noticed the Dashboard's "saved €"
+  (previously `pvToHomeKwh + cellsKwh` × tariff — energy that's ALREADY
+  reached the house) understated real value on a day that mostly charged
+  the battery for later. Since this system enforces zero export and the
+  baseload always exceeds PV output, every produced kWh avoids a grid
+  import SOMEWHERE — today or after a battery round-trip — so "produced"
+  is the correct basis, not "already consumed." New `server/savings.js`
+  exports ONE function, `savedEur(producedKwh, tariffEurPerKwh)`, imported
+  by `index.js` (Dashboard's `byPeriod.*`/`/api/stats/period`),
+  `roi.js` (`measuredSavings()` — per-day, using `pv_daily.produced`,
+  previously `to_home + cells`), `roi-baseline.js` (wraps its own
+  ratio-derived kWh — the ratio itself is a deliberate, documented
+  exception for a structural reason, not a different formula), and
+  `welcome.js` (overrides the AI's own `endOfDay.estimatedSavingsEur`/
+  `week.estimateEur` post-call — same "AI narrates, server computes"
+  pattern already used for `reasoning` fields elsewhere). Verified live:
+  Dashboard's `today.savedEur` and Welcome's `endOfDay.estimatedSavingsEur`
+  now produce the IDENTICAL number (0.49) for the same day — previously
+  Dashboard would have shown a different, lower figure. Per-row € labels
+  on the Dashboard's "PV direct"/"From battery" lines were dropped (they
+  no longer sum to the new total) — those rows show kWh only now, matching
+  how "To battery" already did.
+- **Welcome AI now reflects the active power-plan strategy (2026-09-17,
+  user request)**: previously the briefing narrated live numbers with no
+  awareness of house_priority vs. battery_priority vs. a Manual override —
+  it could describe the battery "topping up the house tonight" even when
+  battery_priority means it never will. `buildContext()` now includes a
+  `strategy` object with a pre-resolved `effectiveBehavior` string (NOT
+  left for the model to work out — Manual silently overriding the selected
+  strategy is exactly the logic already duplicated once for
+  StrategyHelp's modal; a third independent reimplementation inside a
+  prompt would be a third place to get it wrong). Verified live: with the
+  power plan disabled, the AI correctly wrote "The power plan is off, so
+  any later supply to the house depends on the device's own static
+  schedule rather than the app's strategy" in `endOfDay.note`, and applied
+  the same awareness to `week.upcoming` unprompted for that specific field
+  — the general instruction ("ground statusQuo/endOfDay/week in
+  effectiveBehavior") was enough.
+- **"Right now" refreshes on its own lazy 30-min cadence (2026-09-17, user
+  request, refined mid-request from "add a 30-min background timer" to
+  "reuse the same on-demand pattern the rest of the app already uses")**:
+  the main briefing only refreshes every 2h (fixed slots) — too slow for a
+  card meant to read as "this exact moment," but running the WHOLE
+  pipeline (geocode/weather/PVGIS/full schema) more often would be
+  wasteful for fields that don't need it. New dedicated, SMALL AI call
+  (`callStatusQuoAI`/`STATUS_QUO_SCHEMA`, `welcome-ai.js`) — just live
+  battery + strategy numbers in, one sentence out — triggered lazily by
+  `GET /api/welcome` finding `today.statusQuoUpdatedAt` more than 30 min
+  old (`refreshStatusQuoIfStale`, `welcome.js`), same "never block the
+  client, refresh in the background" philosophy as the main refresh, just
+  a shorter TTL and a much smaller payload. Only fires when the MAIN
+  payload is otherwise fresh (a full refresh already updates statusQuo, so
+  triggering both at once would be two concurrent AI calls for the same
+  field). `today.statusQuoUpdatedAt` is a real, separate timestamp from
+  the tab's overall `generatedAt` — shown on the "Right now" card itself
+  ("refreshed HH:MM").
+- **Battery gauge: near-full gets its own color (2026-09-17, user
+  request)**: `lvlClass` gains a 4th tier, `lvl-full` (blue gradient) for
+  soc > 90%, distinct from "just healthy" (`lvl-high`, green, > 50%) — a
+  topped-up battery now reads at a glance instead of looking the same as
+  "healthy but not full."
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

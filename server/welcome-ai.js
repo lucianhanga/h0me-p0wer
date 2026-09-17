@@ -156,6 +156,37 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
           sunriseSoc: sunriseBatt?.soc ?? null,
         }
       : { socNow: null, outputW: null, chargeW: null, pvNowW: null, pvLiveToday: pvMaxToday > 0, sunriseSoc: sunriseBatt?.soc ?? null },
+    // 2026-09-17 (user request): the briefing must reflect what strategy the
+    // battery is actually running under, not just current numbers — the
+    // same behavior/numbers mean something different under house_priority
+    // vs. battery_priority. effectiveBehavior is pre-resolved here (not
+    // left for the AI to work out) because Manual silently overrides the
+    // selected strategy — the exact same logic as StrategyTab's help modal,
+    // duplicated in one clear sentence so the model can't get it wrong.
+    strategy: buildStrategyContext(deps.getPowerPlanState?.()),
+  };
+}
+
+export function buildStrategyContext(s) {
+  if (!s) return null;
+  let effectiveBehavior;
+  if (!s.enabled) {
+    effectiveBehavior = "power plan is OFF — the device runs its own static schedule, not this app's strategy logic";
+  } else if (s.trigger === "manual") {
+    effectiveBehavior = s.manualDischarge
+      ? "MANUAL override: battery continuously discharges to the house (same shape as house_priority), REGARDLESS of the selected strategy below"
+      : "MANUAL override: battery never discharges, PV passes straight through to the house (same shape as battery_priority once full), REGARDLESS of the selected strategy below";
+  } else if (s.strategy === "battery_priority") {
+    effectiveBehavior = "battery_priority: PV charges the battery first while it isn't full (house draws from the grid meanwhile); the battery is never discharged under this strategy";
+  } else {
+    effectiveBehavior = "house_priority: the battery continuously tops up the house from stored energy, down to its floor plus a safety margin";
+  }
+  return {
+    enabled: s.enabled,
+    selectedStrategy: s.strategy,
+    trigger: s.trigger,
+    manualDischarge: s.manualDischarge,
+    effectiveBehavior,
   };
 }
 
@@ -222,6 +253,7 @@ Hard rules:
 - today.statusQuo: ONE or TWO lively sentences that read like a snapshot of THIS EXACT MOMENT — battery.socNow, battery.pvNowW, battery.outputW/chargeW from the context. Present tense ("the battery is at…", "right now the panels are…"), not a forecast and not a recap of the whole day.
 - week.upcoming: look ONLY at the forecast days in "week" that are still AHEAD (today and earlier are already in the past) — what the weather means for production/consumption over what's left of the calendar week. Reference specific upcoming weekdays when the forecast is notably better or worse than the rest.
 - week.estimate/estimateKwh/estimateEur: a projection for how the REST of the CALENDAR week (through Sunday) will likely turn out — production total and rough savings — consistent with production.weekKwh and tariffEurPerKwh. This is a forward-looking estimate, not a summary of days already past (that's a separate, deterministic card the app builds itself).
+- strategy.effectiveBehavior describes what the battery is ACTUALLY doing right now — it can differ from what the strategy name alone implies (e.g. a Manual override). Ground statusQuo, endOfDay, and week.upcoming/estimate in it: if the effective behavior says the battery never discharges, don't predict it topping up the house tonight or over the week — describe the grid covering that demand instead; if it says the battery continuously discharges, reflect that as the ongoing pattern, not a one-off.
 - Estimates (production, end-of-day battery, savings, week) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly — statusQuo can be shorter/punchier, it's a quick glance, not a report.`;
 
@@ -265,6 +297,65 @@ export async function callWelcomeAI(config, context) {
   throw new Error("all AI attempts failed");
 }
 
+// --- "Right now" mini-refresh (2026-09-17, user request) -------------------
+// The full briefing only refreshes every 2 h (fixed slots) — too slow for a
+// card that's meant to read as "this exact moment." Rather than run the
+// WHOLE pipeline (geocode/weather/PVGIS/full schema) more often, this is a
+// small, separate, dedicated AI call — just the live battery numbers in,
+// one sentence out — cheap enough to refresh lazily whenever a request
+// finds it more than 30 min old (see welcome.js's refreshStatusQuoIfStale).
+
+const STATUS_QUO_SCHEMA = {
+  name: "welcome_status_quo",
+  schema: {
+    type: "object",
+    additionalProperties: false,
+    required: ["statusQuo"],
+    properties: { statusQuo: { type: "string" } },
+  },
+};
+
+const STATUS_QUO_SYSTEM_PROMPT = `Write ONE or TWO lively sentences describing THIS EXACT MOMENT for a home solar+battery dashboard's "Right now" card.
+Hard rules:
+- Use ONLY battery.socNow/pvNowW/outputW/chargeW and strategy.effectiveBehavior from the context. Never invent numbers.
+- Present tense ("the battery is at…", "right now the panels are…") — a snapshot, not a forecast or a recap.
+- Ground it in strategy.effectiveBehavior: if the battery never discharges under the active behavior, don't describe it feeding the house even if outputW briefly reads nonzero (sensor noise) — describe what's actually happening (charging, idle, or passthrough).
+- Plain, friendly, short — this is a quick glance, not a report. Language: see language field.`;
+
+export function fallbackStatusQuo(context) {
+  return context.battery?.socNow != null
+    ? `Battery at ${context.battery.socNow}% right now, panels making ${context.battery.pvNowW ?? 0} W.`
+    : "Live battery status isn't available right now.";
+}
+
+export async function callStatusQuoAI(config, context) {
+  const user = JSON.stringify({ language: config.ai.language, ...context });
+  const body = (responseFormat) => ({
+    model: config.ai.model,
+    reasoning_effort: "low",
+    messages: [
+      { role: "system", content: STATUS_QUO_SYSTEM_PROMPT },
+      { role: "user", content: user },
+    ],
+    response_format: responseFormat,
+  });
+  const url = `${config.ai.baseUrl}/chat/completions`;
+  const headers = { Authorization: `Bearer ${config.ai.apiKey}`, "Content-Type": "application/json" };
+  for (const format of [
+    { type: "json_schema", json_schema: STATUS_QUO_SCHEMA },
+    { type: "json_object" },
+  ]) {
+    try {
+      const j = await fetchJson(url, { timeoutMs: 20000, headers, method: "POST", body: JSON.stringify(body(format)) });
+      const parsed = JSON.parse(j.choices[0].message.content);
+      if (typeof parsed.statusQuo === "string" && parsed.statusQuo) return parsed.statusQuo;
+    } catch (err) {
+      console.warn(`[welcome] status-quo AI attempt failed (${err.message})`);
+    }
+  }
+  return fallbackStatusQuo(context);
+}
+
 // Deterministic stand-in when the AI is unreachable: same response shape,
 // numbers prorated from PVGIS by today's forecast radiation vs. the month's
 // average, template prose instead of AI prose.
@@ -281,9 +372,7 @@ export function buildFallback(config, context) {
   const icon = context.today == null ? "cloud" : context.today.weathercode < 2 ? "sun" : context.today.weathercode < 60 ? "cloud-sun" : context.today.weathercode < 80 ? "cloud" : "rain";
   const todayEur = todayKwh != null ? Math.round(todayKwh * context.tariffEurPerKwh * 100) / 100 : 0;
   const weekEur = weekKwh != null ? Math.round(weekKwh * context.tariffEurPerKwh * 100) / 100 : 0;
-  const statusQuo = context.battery.socNow != null
-    ? `Battery at ${context.battery.socNow}% right now, panels making ${context.battery.pvNowW ?? 0} W.`
-    : "Live battery status isn't available right now.";
+  const statusQuo = fallbackStatusQuo(context);
   return {
     greeting: `Welcome! ${context.weekday}, ${context.date} — sunrise ${context.sun.sunrise}, sunset ${context.sun.sunset}.`,
     today: {

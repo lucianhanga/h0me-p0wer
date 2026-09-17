@@ -14,6 +14,7 @@ import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow } from "./battery-params.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
+import { savedEur } from "./savings.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -208,6 +209,47 @@ function getGridLive() {
   return { power: null, ts: null, source: "meter" };
 }
 
+// Single source of truth for "how much is the house drawing right now" —
+// used by BOTH /api/flow (Live tab) and the power-plan controller/Strategy
+// tab, refreshed once per 10 s tick below (2026-09-17 fix, user report: the
+// Strategy tab's "house W" swung 600 -> 1000 -> 200 -> 600 across two
+// strategy switches, and the Live tab's flow diagram showed a matching
+// too-low Home reading). Root cause was two-fold: (1) power-plan.js ALWAYS
+// read the battery's own cloud-reported homeLoadW, while /api/flow
+// preferred the fast local grid meter + battery output when available —
+// two different formulas for the exact same physical quantity, computed
+// independently, occasionally disagreeing; (2) neither was despiked, so a
+// single bad cloud reading right after a preset change (the device is
+// mid-transition — same class of lag as the Home Power Usage chart
+// artifact, but here feeding the CONTROLLER's target computation directly,
+// not just a display) showed up as a real, visible swing. Fix: one
+// function, used everywhere, computed once per tick and despiked with a
+// median-of-3 (rejects an isolated bad reading without lagging behind a
+// genuine, sustained demand change the way an averaging filter would).
+// Prefers grid (meter, or any independently-sourced grid reading) +
+// battery output; falls back to the battery's own reported homeLoadW only
+// when grid itself came FROM the battery (cloud-live) — combining two
+// battery-derived numbers there would double up on the same lag source
+// instead of adding information.
+const homeLoadHistory = [];
+function despikeHomeLoad(raw) {
+  if (raw == null) return raw;
+  homeLoadHistory.push(raw);
+  if (homeLoadHistory.length > 3) homeLoadHistory.shift();
+  const sorted = [...homeLoadHistory].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+let latestHomeConsumptionW = null;
+function refreshHomeConsumption() {
+  const gl = getGridLive();
+  const raw =
+    gl.source !== "cloud-live" && gl.power != null && latestBattery?.outputW != null
+      ? Math.max(gl.power, 0) + latestBattery.outputW
+      : (latestBattery?.homeLoadW ?? null);
+  latestHomeConsumptionW = despikeHomeLoad(raw);
+  return latestHomeConsumptionW;
+}
+
 // Per-string PV kWh for today, memoized for 30 s — /api/flow is polled every
 // 5 s per client and the trapezoid scans the whole day's battery_snapshots.
 let pvStringKwhCache = { date: null, at: 0, result: { pv1Kwh: 0, pv2Kwh: 0 } };
@@ -273,13 +315,12 @@ app.get("/api/flow", (req, res) => {
         source: b ? "online" : null,
       },
       home: {
-        consumption:
-          // Cloud-live: the app's own Home Load (grid_to_home + to_home).
-          gridSource === "cloud-live" && b?.homeLoadW != null
-            ? b.homeLoadW
-            : grid != null
-              ? Math.max(grid, 0) + outputW
-              : null,
+        // Shared, despiked computation — see refreshHomeConsumption() above
+        // for why (2026-09-17: this used to be computed inline here with a
+        // DIFFERENT formula than the power-plan controller used, and
+        // un-despiked, so the two could disagree and both could show a
+        // transient bad reading right after a preset change).
+        consumption: latestHomeConsumptionW,
       },
     },
   });
@@ -863,9 +904,9 @@ app.get("/api/stats/overview", (req, res) => {
     homeKwh: Math.round((importKwh + dischargedKwh) * 100) / 100,
   };
 
-  // Costs from kWh × tariff. Battery discharge = avoided grid import, so its
-  // "savings" are discharged kWh × price (only counts once PV exists; for
-  // grid-charged batteries this overstates savings — noted in AGENTS.md).
+  // Costs from kWh × tariff (what was actually SPENT on grid import — a
+  // different quantity from "saved," which is production-based; see
+  // savings.js).
   const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
   const eur = (kwh) => Math.round(kwh * tariff * 100) / 100;
   const weekImport = weekRows.reduce((a, r) => a + r.importKwh, 0);
@@ -878,7 +919,7 @@ app.get("/api/stats/overview", (req, res) => {
     week: eur(weekImport),
     month: eur(monthImport),
     year: eur(yearImport),
-    batterySavingsToday: eur(dischargedKwh),
+    batterySavingsToday: savedEur(pvKwh, tariff),
   };
 
   // Consumption by source per period (dashboard tiles), uniform per-day
@@ -967,14 +1008,19 @@ app.get("/api/stats/overview", (req, res) => {
   for (const p of [byPeriod.week, byPeriod.month, byPeriod.year]) {
     p.homeKwh = r2(p.gridKwh + p.battKwh + p.pvKwh);
   }
-  // Money view per source: grid = spent, battery/PV = saved (discharge and
-  // direct PV are avoided grid import at the same tariff — overstated for a
-  // grid-charged battery, same caveat as costs.batterySavingsToday).
-  // battInKwh deliberately gets NO € — it is booked when discharged.
+  // Money view: grid = spent; savedEur = the ONE canonical savings figure,
+  // production-based (savings.js — 2026-09-17 fix, see there for why).
+  // gridEur/battEur/pvEur stay as per-row kWh×tariff figures for the
+  // individual "PV direct"/"From battery" lines (informational — they no
+  // longer sum to savedEur, since that's now produced-based, not
+  // consumed-based; the frontend shows kWh only on those rows, not €, to
+  // avoid implying they do). battInKwh deliberately gets NO € — it's PV
+  // already counted inside pvProducedKwh, not a separate flow.
   for (const p of Object.values(byPeriod)) {
     p.gridEur = eur(p.gridKwh);
     p.battEur = eur(p.battKwh);
     p.pvEur = eur(p.pvKwh);
+    p.savedEur = savedEur(p.pvProducedKwh, tariff);
   }
 
   // Stacked-bar data for the tiles' flip sides: per-bucket kWh split by
@@ -1243,6 +1289,7 @@ app.get("/api/stats/period", (req, res) => {
       gridEur: eur(gridKwh),
       battEur: eur(battKwhSum),
       pvEur: eur(pvKwhSum),
+      savedEur: savedEur(pvProducedKwhSum, tariff),
       bars,
     },
   });
@@ -1284,6 +1331,7 @@ registerWelcomeRoute(app, {
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
   getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
+  getPowerPlanState: () => powerPlan.getState(),
 });
 
 // ROI tab: payback of the BOM investment from measured savings, DB only.
@@ -1752,7 +1800,8 @@ app.post("/api/power-plan/strategy", (req, res) => {
 });
 
 setInterval(() => {
-  powerPlan.tick(latestBattery);
+  const homeLoadW = refreshHomeConsumption();
+  powerPlan.tick(latestBattery ? { ...latestBattery, homeLoadW } : latestBattery);
 }, 10 * 1000).unref();
 
 poller.start();

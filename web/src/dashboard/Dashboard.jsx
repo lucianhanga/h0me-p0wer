@@ -70,10 +70,13 @@ export default function Dashboard() {
 // savings are booked when the battery discharges, never twice).
 // ‹ › in the title row navigates the card through past periods
 // (/api/stats/period, offset ≥ 1); flip side shows the same period's bars.
+// PV direct/From battery deliberately have NO per-row € — the ONE savings
+// figure (active.savedEur, production-based — see server/savings.js) isn't
+// their sum, so showing per-row €s next to it would look inconsistent.
 const SRC_ROWS = [
   { key: "gridKwh", eur: "gridEur", label: "Grid", color: "#f7a44f" },
-  { key: "pvKwh", eur: "pvEur", label: "PV direct", color: "#5fce80", saved: true },
-  { key: "battKwh", eur: "battEur", label: "From battery", color: "#c084fc", saved: true },
+  { key: "pvKwh", label: "PV direct", color: "#5fce80" },
+  { key: "battKwh", label: "From battery", color: "#c084fc" },
 ];
 const BATT_IN_ROW = { key: "battInKwh", label: "To battery", color: "#8b98a5", stored: true };
 
@@ -106,7 +109,6 @@ function SourceCard({ type, title, data, formatLabel }) {
   }
 
   const active = offset === 0 || !past ? data : past;
-  const savedEur = Math.round((active.battEur + active.pvEur) * 100) / 100;
   // Today (offset 0) also reports PV→battery; past periods don't have it.
   const rows = active.battInKwh != null ? [...SRC_ROWS, BATT_IN_ROW] : SRC_ROWS;
   return (
@@ -157,15 +159,15 @@ function SourceCard({ type, title, data, formatLabel }) {
               <span className="src-label">{r.label}</span>
               <span className="src-value">
                 <span className="src-kwh">{active[r.key]} kWh</span>
-                <span className="src-eur">
-                  {r.stored ? "stored" : `€${active[r.eur]}${r.saved ? " saved" : ""}`}
-                </span>
+                {(r.stored || r.eur) && (
+                  <span className="src-eur">{r.stored ? "stored" : `€${active[r.eur]} spent`}</span>
+                )}
               </span>
             </div>
           ))}
         </div>
         <div className="src-money">
-          spent €{active.gridEur} · saved €{savedEur}
+          spent €{active.gridEur} · saved €{active.savedEur}
         </div>
       </div>
     </FlipTile>
