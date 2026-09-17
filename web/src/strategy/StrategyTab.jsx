@@ -116,12 +116,9 @@ export default function StrategyTab() {
       <div className="callout-warn">
         <span className="callout-icon">⚠</span>
         <p>
-          <strong>Frequent grid outages?</strong> Prefer Battery priority — House priority
-          continuously draws the battery down near its floor as normal behavior, leaving little
-          in reserve at any given moment; Battery priority keeps it topped up instead. Without a
-          Power Dock accessory, this Solarbank 2 Plus has no dedicated off-grid output of its
-          own — check the Anker app to confirm your setup actually delivers stored power during
-          an outage before relying on it.
+          <strong>Frequent grid outages?</strong> Prefer Battery priority — it keeps the battery
+          topped up instead of continuously drawing it down near its floor, so there's more
+          charge in reserve whenever the grid actually goes out.
         </p>
       </div>
 
@@ -208,7 +205,7 @@ export default function StrategyTab() {
         </div>
       )}
 
-      <BatteryTab />
+      <BatteryTab dischargeTolerancePct={state.dischargeTolerancePct} />
     </div>
   );
 }

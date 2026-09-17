@@ -1307,12 +1307,13 @@ pre {
 }
 
 /* The wrap is the positioning context for the min/max tick labels that sit
-   just below the gauge. */
+   just below the gauge. Extra bottom margin fits the second (floor) label
+   row when the discharge-tolerance marker is shown. */
 .batt-gauge-wrap {
   position: relative;
   display: flex;
   align-items: center;
-  margin: 0.5rem 0 1.5rem;
+  margin: 0.5rem 0 2.2rem;
 }
 
 .batt-gauge-body {
@@ -1409,6 +1410,21 @@ pre {
   font-size: 0.7rem;
   color: #c084fc;
   white-space: nowrap;
+}
+
+/* Effective discharge floor (account floor + DISCHARGE_TOLERANCE_PCT safety
+   margin, see power-plan.js) — a second marker close to the account's raw
+   min-discharge tick, so it gets its own color and a second label row
+   instead of overlapping "min N%" (2026-09-17, user question: "why does it
+   stop at 14%, not 10%?"). */
+.batt-tick.batt-tick-floor {
+  background: #f7a44f;
+  opacity: 0.9;
+}
+
+.batt-tick-label.batt-tick-label-floor {
+  top: calc(100% + 0.95rem);
+  color: #f7a44f;
 }
 
 .batt-gauge-center {

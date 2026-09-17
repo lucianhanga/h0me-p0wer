@@ -68,6 +68,26 @@ const GRAPHS = [
   },
 ];
 
+// "Home" is the only series that SUMS two independently-polled feeds: the
+// fast local grid meter (~5 s) and the battery's own reported output, which
+// can lag the real power flow by up to ~1 min (device + cloud relay — see
+// power-plan.js's STEP_UP_HOLD_MS comment). A fast preset/strategy change
+// shows up in the grid meter before the battery's OWN telemetry catches up,
+// producing a momentary dip-then-bump that isn't a real consumption change
+// (2026-09-17, user report — see AGENTS.md). A light 1-2-1 weighted moving
+// average smooths that seam without blurring genuinely fast GRID transients
+// (still shown raw via the separate Grid range envelope, untouched here) or
+// the single-source battery/PV series (no cross-feed lag to smooth there).
+function smoothHome(values) {
+  return values.map((v, i) => {
+    if (v == null) return v;
+    const prev = values[i - 1];
+    const next = values[i + 1];
+    if (prev == null || next == null) return v;
+    return Math.round(((prev + v * 2 + next) / 4) * 100) / 100;
+  });
+}
+
 function rowValue(key, r, envelopeOn) {
   switch (key) {
     case "pvHome":
@@ -209,10 +229,14 @@ export default function GraphTab() {
       function applyRows(rows) {
         // Resolution-aware envelope: collapse to the mean above 5-min buckets.
         const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
+        const homeSmoothed = smoothHome(rows.map((r) => rowValue("home", r, envelopeOn)));
         chart.setOption({
           series: def.series.map((s) => ({
             name: s.name,
-            data: rows.map((r) => [r.t, rowValue(s.key, r, envelopeOn)]),
+            data:
+              s.key === "home"
+                ? rows.map((r, i) => [r.t, homeSmoothed[i]])
+                : rows.map((r) => [r.t, rowValue(s.key, r, envelopeOn)]),
           })),
         });
       }

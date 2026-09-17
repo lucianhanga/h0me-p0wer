@@ -949,6 +949,60 @@ EPIPE noise on every client disconnect).
   one compact line per item (28px thumb + ellipsized name + right-aligned
   numbers) with a "Download PDF" button in the card header.
 
+## Home-line chart smoothing, effective discharge floor, outage copy (2026-09-17)
+
+- **"Home Power Usage" chart momentary dip-then-bump when a strategy change
+  hits — diagnosed, then smoothed**: user reported a brief anomaly right
+  when switching to House Priority — the white "Home" line dipped sharply
+  then bumped above baseline before settling, looking like consumption
+  itself had changed. Traced with raw `/api/timeseries` data for the exact
+  window: `home` is a FRONTEND-derived value, `homeOf(r) = grid +
+  max(battOut, 0)` (`web/src/graph/GraphTab.jsx`) — it SUMS two
+  independently-polled feeds with different cadences/latency: the local
+  grid meter (~5 s, Modbus) and the battery's own reported output, which
+  can lag the real physical power flow by up to ~1 min (device + Anker
+  cloud relay — same lag `STEP_UP_HOLD_MS` in `power-plan.js` already
+  documents and budgets for). When the preset changed and the battery
+  started discharging, the grid meter registered the reduced import
+  almost immediately while the battery's OWN telemetry for that same
+  15–30 s bucket still read close to its pre-change value — summing an
+  "already changed" number with a "not yet reported" number produced a
+  real but MISLEADING low reading, not an actual consumption drop
+  (confirmed: home read ~577 W → 267 W → 780 W → back to ~568 W within
+  under 3 minutes, i.e. essentially unchanged start-to-end). Fix: a light
+  1-2-1 weighted moving average (`smoothHome()`), applied ONLY to the
+  `home` series' rendered values — NOT to raw `grid`/`gridMin`/`gridMax`
+  (would blur genuinely fast grid transients, defeating the Grid-range
+  envelope's whole purpose) and not to the single-source battery/PV series
+  (`pvHome`/`battCells`/etc. — no cross-feed lag to smooth there, only
+  `home` sums two feeds). Verified against the actual diagnosed window:
+  roughly halves the dip/bump's deviation from baseline at fine (15 s)
+  bucket resolution; the effect is stronger still at the coarser buckets
+  (~2 min) a 24 h-view chart actually renders at.
+- **Effective discharge floor (account floor + safety margin) wasn't shown
+  on the battery gauge**: user noticed the battery stops discharging
+  around 14%, not the 10% floor shown on the gauge, and asked where the
+  extra 4% comes from. Answer: `dischargeToTarget()` (`power-plan.js`)
+  pads the account's configured floor by `DISCHARGE_TOLERANCE_PCT` (env
+  var, default 4) as a safety margin — that padded value was previously
+  only visible in server-side comments/logic, never surfaced in the UI.
+  Fix: `StrategyTab.jsx` now passes `dischargeTolerancePct` (from its
+  existing `/api/power-plan` poll) down to `<BatteryTab>` as a prop;
+  `BatteryTab.jsx` computes `effectiveFloorPct = minPct +
+  dischargeTolerancePct` and renders it as a SECOND, amber-colored tick +
+  label ("floor 14%") next to the existing purple "min 10%" tick — on its
+  own label row (`.batt-tick-label-floor`, offset one line down) since the
+  two ticks sit only 4 percentage points apart and would otherwise
+  horizontally collide, especially on phone widths (see the earlier
+  mobile-text-overflow audit this session).
+- **Outage callout rewritten**: dropped the device-model name
+  ("Solarbank 2 Plus"), the Power Dock accessory caveat, and the
+  "check the Anker app" hedge (user: "don't mention... and ...") — now
+  states only WHEN to prefer Battery priority (frequent grid outages) and
+  HOW it behaves differently (keeps the battery topped up instead of
+  continuously drawing it toward its floor), in `.callout-warn` on the
+  Strategy tab.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
