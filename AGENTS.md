@@ -1199,6 +1199,45 @@ EPIPE noise on every client disconnect).
   94↔95 hysteresis sequence too — the resume-charging latch still fires
   correctly at SOC 92, unaffected by this change.
 
+## battery_priority: PV-only at ceiling, don't touch the battery (2026-09-17, second same-day correction)
+
+- **The `dischargeToTarget()` fix directly above was itself wrong** — caught
+  within the same conversation, before it had even been deployed to
+  production long enough to matter. User's exact words: "the battery is
+  full and it stopped loading it — now I want to dump all the produced
+  power into the house — also don't touch the battery anymore, it should
+  only [use] the power from the PVs — also it should observe that it takes
+  about 100w from the grid." `dischargeToTarget()` draws from the battery
+  to fill `demandW - GRID_TARGET_W` whenever PV alone falls short — that IS
+  "touching the battery," directly contradicting the requirement. The
+  correct formula sits between the two prior attempts: use as much PV as
+  is useful (never artificially below it — requirement "dump all the
+  produced power"), but never above it either (never draws from the
+  battery — requirement "don't touch the battery"), capped at
+  `demandW - GRID_TARGET_W` so the grid still keeps its ~100 W margin even
+  when PV alone could nearly cover full demand (requirement "observe ~100w
+  from grid") — same rationale as `GRID_TARGET_W` everywhere else in this
+  file (avoid a literal 0 W grid crossing). New method
+  `pvOnlyToGridTarget()`: `target = min(pvW, demandW - GRID_TARGET_W, max)`.
+  `passthroughOnly()` is now used ONLY by the manual "don't discharge"
+  toggle (uncapped by `GRID_TARGET_W` — that toggle's semantics weren't
+  part of this change and weren't asked to change).
+- Verified against four scenarios before touching the code (plain JS
+  simulation of the formula, not yet wired into the class): the exact
+  production reading (`pv:321, demand:774`) → `320` (matches what the user
+  originally saw and confirms wanting — the SAME number `dischargeToTarget`
+  had "corrected" away from, now correctly reverted), PV nearly covering
+  demand (`pv:700`) → `670` (grid gets ~104 W), PV exceeding demand
+  entirely (`pv:900`) → `670` (same cap; the un-routed 230 W of PV can only
+  trickle into the already-full battery or get curtailed by the device —
+  flagged to the user as an expected, bounded side effect, not exported,
+  not something this preset can prevent outright), low PV (`pv:50`) → `50`
+  (grid covers the rest, no cap in effect). Then re-verified all of this
+  plus the untouched 94↔95 ceiling-hysteresis latch through the actual
+  class methods — all consistent. `house_priority` remains completely
+  unaffected by either correction on this day — it has no charge/hold
+  switch and always uses `dischargeToTarget()` unconditionally.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
