@@ -1784,7 +1784,7 @@ app.post("/api/power-plan/disable", async (req, res) => {
 });
 app.post("/api/power-plan/strategy", (req, res) => {
   const { strategy, trigger, manualDischarge } = req.body ?? {};
-  const strategies = ["house_priority", "battery_priority"];
+  const strategies = ["house_priority", "battery_priority", "anker_app"];
   const triggers = ["auto", "manual"];
   if (strategy !== undefined && !strategies.includes(strategy)) {
     return res.status(400).json({ error: `invalid strategy: ${strategy}` });

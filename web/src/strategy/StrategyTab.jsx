@@ -17,6 +17,11 @@ const STRATEGIES = [
     label: "Battery priority",
     desc: "PV charges the battery first; the house draws from the grid meanwhile. Once the battery is full (or PV stops), any PV passes straight through to the house — the battery is never discharged under this strategy.",
   },
+  {
+    key: "anker_app",
+    label: "Anker app",
+    desc: "h0me-p0wer writes nothing — the device runs whatever schedule you've configured directly in the Anker mobile app. Unlike turning the power plan off entirely (Live tab), this keeps everything else — live numbers, the Strategy tab itself — active; it just stops overwriting the preset, so anything you set in the Anker app stays in effect.",
+  },
 ];
 const TRIGGER_DESC = {
   house_priority:
@@ -57,6 +62,17 @@ function StrategyHelp({ onClose }) {
           Use it to prioritize a full battery — e.g. ahead of expected grid outages, or to bank
           today's sun rather than spend it immediately.
         </p>
+        <p>
+          <strong>Anker app</strong> — h0me-p0wer writes nothing at all; the device runs whatever
+          schedule you've set directly in the Anker mobile app. Different from turning the whole
+          power plan off on the Live tab: that restores a one-time snapshot from whenever this app
+          first took over, which goes stale the moment you edit anything afterward. This mode never
+          writes, so your Anker-app settings stay in effect for as long as you leave it selected.
+        </p>
+        <p className="muted">
+          Use it when you want to hand control back to Anker's own automation (e.g. its AI mode) or
+          test a manual schedule there without this app fighting you over it.
+        </p>
         <h4>Battery discharge trigger</h4>
         <p>
           <strong>Auto</strong> — the strategy selected above decides continuously.
@@ -68,7 +84,8 @@ function StrategyHelp({ onClose }) {
         <p className="muted">
           Manual fully replaces the strategy pick above while it's active — a common source of
           confusion if you forget it's on. If the battery isn't behaving like your selected
-          strategy, check here first.
+          strategy, check here first. Doesn't apply to Anker app mode — there's nothing for it to
+          override there, since h0me-p0wer isn't writing anything.
         </p>
       </div>
     </div>
@@ -127,7 +144,8 @@ export default function StrategyTab() {
   if (!state) return <p className="muted">loading…</p>;
 
   const d = state.lastDecision;
-  const isManual = state.trigger === "manual";
+  const isAnkerApp = state.strategy === "anker_app";
+  const isManual = !isAnkerApp && state.trigger === "manual";
   const activeStrategy = STRATEGIES.find((s) => s.key === state.strategy);
 
   // Step-up hold countdown: the controller found a higher target but is
@@ -175,37 +193,43 @@ export default function StrategyTab() {
         ))}
       </div>
       {activeStrategy && <p className="muted">{activeStrategy.desc}</p>}
-      <div className="callout-warn">
-        <span className="callout-icon">⚠</span>
-        <p>
-          <strong>Frequent grid outages?</strong> Prefer Battery priority — it keeps the battery
-          topped up instead of continuously drawing it down near its floor, so there's more
-          charge in reserve whenever the grid actually goes out.
-        </p>
-      </div>
+      {!isAnkerApp && (
+        <div className="callout-warn">
+          <span className="callout-icon">⚠</span>
+          <p>
+            <strong>Frequent grid outages?</strong> Prefer Battery priority — it keeps the battery
+            topped up instead of continuously drawing it down near its floor, so there's more
+            charge in reserve whenever the grid actually goes out.
+          </p>
+        </div>
+      )}
 
-      <h4>Battery discharge trigger</h4>
-      <div className="controls">
-        <button
-          className={state.trigger === "auto" ? "span-active" : ""}
-          disabled={busy}
-          onClick={() => setStrategy({ trigger: "auto" })}
-        >
-          Auto
-        </button>
-        <button
-          className={state.trigger === "manual" ? "span-active" : ""}
-          disabled={busy}
-          onClick={() => setStrategy({ trigger: "manual" })}
-        >
-          Manual
-        </button>
-      </div>
-      <p className="muted">
-        {isManual
-          ? "Manual overrides the distribution strategy above entirely — the toggle below decides, regardless of which strategy is selected."
-          : (TRIGGER_DESC[state.strategy] ?? TRIGGER_DESC.house_priority)}
-      </p>
+      {!isAnkerApp && (
+        <>
+          <h4>Battery discharge trigger</h4>
+          <div className="controls">
+            <button
+              className={state.trigger === "auto" ? "span-active" : ""}
+              disabled={busy}
+              onClick={() => setStrategy({ trigger: "auto" })}
+            >
+              Auto
+            </button>
+            <button
+              className={state.trigger === "manual" ? "span-active" : ""}
+              disabled={busy}
+              onClick={() => setStrategy({ trigger: "manual" })}
+            >
+              Manual
+            </button>
+          </div>
+          <p className="muted">
+            {isManual
+              ? "Manual overrides the distribution strategy above entirely — the toggle below decides, regardless of which strategy is selected."
+              : (TRIGGER_DESC[state.strategy] ?? TRIGGER_DESC.house_priority)}
+          </p>
+        </>
+      )}
 
       {isManual && (
         <>
@@ -233,7 +257,19 @@ export default function StrategyTab() {
         </>
       )}
 
-      {d && (
+      {d && isAnkerApp && (
+        <div className="cards">
+          <div className="card">
+            <div className="card-label">Live numbers (not being written)</div>
+            <div className="card-value" style={{ fontSize: "1rem" }}>
+              PV {d.pvW} W · house {d.demandW} W · SOC {d.soc}%
+            </div>
+            <div className="card-label">{d.reason}</div>
+          </div>
+        </div>
+      )}
+
+      {d && !isAnkerApp && (
         <div className="cards">
           <div className="card">
             <div className="card-label">Target output</div>

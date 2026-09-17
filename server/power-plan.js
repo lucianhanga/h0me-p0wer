@@ -3,8 +3,27 @@
 // Anker app. Goal: avoid the charge/discharge jojo around a fixed preset,
 // and let the user choose HOW PV/battery/grid should be prioritized.
 //
-// Strategy engine (2026-09-16, simplified same day — see below). Two
+// Strategy engine (2026-09-16, simplified same day — see below). Three
 // mutually-exclusive strategies:
+//   anker_app        -> (2026-09-17, user request) this app writes NOTHING —
+//                        the device runs whatever schedule/behavior the user
+//                        has configured directly in the Anker mobile app.
+//                        Distinct from the overall enabled/disabled toggle
+//                        (Live tab): that restores a ONE-TIME snapshot taken
+//                        whenever the controller first took over, which goes
+//                        stale the moment the user edits anything in the
+//                        Anker app afterward. anker_app never writes at all,
+//                        so whatever the user sets stays in effect
+//                        indefinitely, not just until the next tick.
+//                        tick() short-circuits before any read/write; no
+//                        target, no decision beyond "not writing" — see the
+//                        early-return block below. Switching INTO or OUT OF
+//                        this strategy invalidates the cached schedule
+//                        template (setStrategy()) so the next active tick
+//                        re-reads and reconciles lastWrittenPower against
+//                        whatever the device actually has, instead of
+//                        trusting a belief that predates the user's own
+//                        Anker-app edits.
 //   house_priority   -> (the default) battery tops up the house continuously,
 //                        down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT,
 //                        regardless of PV level — via dischargeToTarget().
@@ -428,6 +447,24 @@ export class PowerPlanController {
     // must be gated on.
     const { cellsW } = deriveBatteryFlow({ pvW, chargeW: info.chargeW ?? 0, outputW: info.outputW ?? 0 });
     if (demandW == null || soc == null) return;
+    if (this.strategy === "anker_app") {
+      // Never read, never write — the device runs whatever the user has
+      // configured directly in the Anker app. Still surface live numbers
+      // in lastDecision for the Strategy tab, just no target/write fields.
+      this.lastError = null;
+      this.lastDecision = {
+        at: Date.now(),
+        pvW,
+        demandW,
+        soc,
+        cellsW,
+        strategy: this.strategy,
+        trigger: this.trigger,
+        manualDischarge: this.manualDischarge,
+        reason: "anker_app — not writing, device follows its own Anker-app schedule",
+      };
+      return;
+    }
     try {
       if (!this.template) {
         const { parsed, raw } = await this.readSchedule();
@@ -578,7 +615,17 @@ export class PowerPlanController {
   // target differs from before, so a strategy switch is subject to the same
   // write discipline as any other target change).
   setStrategy({ strategy, trigger, manualDischarge } = {}) {
-    if (strategy !== undefined) this.strategy = strategy;
+    if (strategy !== undefined) {
+      if (strategy !== this.strategy && (strategy === "anker_app" || this.strategy === "anker_app")) {
+        // Entering or leaving anker_app: the device's real preset may have
+        // changed independently (the user editing it directly in the Anker
+        // app) without this controller ever knowing. Force the next active
+        // tick to re-read the schedule and reconcile lastWrittenPower
+        // against reality instead of trusting a now-possibly-stale belief.
+        this.template = null;
+      }
+      this.strategy = strategy;
+    }
     if (trigger !== undefined) this.trigger = trigger;
     if (manualDischarge !== undefined) this.manualDischarge = manualDischarge;
     this.saveState();
