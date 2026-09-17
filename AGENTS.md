@@ -1487,6 +1487,23 @@ EPIPE noise on every client disconnect).
   regardless of strategy) — confirmed via a direct `node` simulation
   instead, matching the pattern used for the server-side verification.
 
+## Dashboard source-card: dropped the redundant per-row Grid €-spent (2026-09-17, user request)
+
+- User: "remove from the tiles the spent under the grid because its anyway
+  listed in the lower part of the tile." The Grid row in `SourceCard`
+  showed an inline `€X spent` (from `SRC_ROWS`'s `eur: "gridEur"` field),
+  while the card's bottom summary line (`spent €{gridEur} · saved
+  €{savedEur}`) already showed the exact same figure — the row's `eur`
+  key was the ONLY thing driving that inline text (PV direct/From battery
+  never had one; only the "To battery" row's `stored` label used the same
+  conditional slot). Dropped `eur: "gridEur"` from the Grid row and
+  simplified the conditional to just `r.stored && <span
+  className="src-eur">stored</span>`. Verified visually via Playwright
+  against the dev server across all four period tiles (Today/This
+  Week/This Month/This Year) — Grid rows now show only the kWh value, the
+  bottom summary line is unaffected, "To battery"'s "stored" label
+  (Today's tile only) still renders correctly.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
