@@ -16,22 +16,26 @@
 //                        (PV is deliberately withheld from the house so it
 //                        charges the battery instead; house demand comes
 //                        from the grid meanwhile — confirmed intentional
-//                        with the user, not a bug). Once full: behaves
-//                        exactly like house_priority — dischargeToTarget(),
-//                        serving demand down to GRID_TARGET_W using
-//                        PV+battery together (2026-09-17 correction: an
-//                        earlier version used passthroughOnly() here,
-//                        capping the served amount at raw current PV and
-//                        leaving a full, unused battery while the house
-//                        pulled most of its demand from grid — not the
-//                        intended behavior; a full battery should get
-//                        used). The charge/hold switch is latched with
-//                        CHARGE_RESUME_HYSTERESIS_PCT, not a bare
-//                        threshold — see that constant's comment for why.
+//                        with the user, not a bug). Once full:
+//                        pvOnlyToGridTarget() — route PV straight to the
+//                        house (never above pvW — the battery is NEVER
+//                        asked to discharge under this strategy, full
+//                        stop), capped at demandW - GRID_TARGET_W so the
+//                        grid still keeps its ~100 W margin even when PV
+//                        alone could cover more. (2026-09-17, two
+//                        corrections same day: a first pass used
+//                        passthroughOnly() here uncapped by GRID_TARGET_W;
+//                        a second pass then over-corrected to
+//                        dischargeToTarget(), which drew from the battery
+//                        to fill the gap — explicitly rejected: "don't
+//                        touch the battery anymore, it should only [use]
+//                        the power from the PVs".) The charge/hold switch
+//                        is latched with CHARGE_RESUME_HYSTERESIS_PCT, not
+//                        a bare threshold — see that constant's comment.
 // Discharge trigger — auto | manual:
 //   auto   -> the strategy above decides (dischargeToTarget() for
-//             house_priority, and for battery_priority once full;
-//             target=0 for battery_priority while still charging).
+//             house_priority; pvOnlyToGridTarget() for battery_priority
+//             once full, target=0 while still charging).
 //   manual -> a persisted `manualDischarge` boolean toggle OVERRIDES the
 //             selected strategy entirely (confirmed: "will overwrite
 //             whatever the strategy was selected before") — true ->
@@ -108,10 +112,11 @@ const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4)
 // house, pull 100% of demand from grid) just to claw that 1 point back,
 // then flipped straight back to passthrough at the ceiling — a visible
 // jojo between chargeCeilingPct and chargeCeilingPct-1 every few minutes.
-// Once the ceiling is reached, hold house_priority-style discharge (serve
-// demand down to GRID_TARGET_W from PV+battery) until SOC has actually
-// dropped this many points below it — so this also doubles as "how far a
-// full battery is allowed to drain before withhold-and-charge resumes."
+// Once the ceiling is reached, hold pvOnlyToGridTarget() (PV-only, battery
+// never discharges) until SOC has actually dropped this many points below
+// it before resuming withhold-and-charge — absorbs the standby-draw wobble
+// (and any small trickle-charge from PV left unrouted by the
+// GRID_TARGET_W cap) without flipping state every tick.
 const CHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.CHARGE_RESUME_HYSTERESIS_PCT ?? 3);
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
@@ -282,11 +287,30 @@ export class PowerPlanController {
   }
 
   // Never ask the battery to discharge: PV (if any) passes straight through
-  // to the house, the rest comes from the grid. Used by battery_priority's
-  // fallback (once full/no PV) and by the manual "don't discharge" toggle.
+  // to the house, the rest comes from the grid. Used by the manual "don't
+  // discharge" toggle only — battery_priority's own hold phase uses
+  // pvOnlyToGridTarget() below (same "never touch the battery" rule, plus
+  // the GRID_TARGET_W margin).
   passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
     if (soc <= dischargeFloorPct) return 0;
     return this.roundDown(Math.min(pvW, demandW, max), step);
+  }
+
+  // battery_priority's hold-at-ceiling phase (2026-09-17, second correction
+  // same day — PR #133's dischargeToTarget() drew from the battery to hit
+  // demand-GRID_TARGET_W, which is exactly the "touching the battery" the
+  // user does NOT want once full; confirmed explicitly: "don't touch the
+  // battery anymore, it should only [use] the power from the PVs"). Route
+  // as much PV as is useful straight to the house — never above pvW (the
+  // battery is never asked to discharge), capped at demandW - GRID_TARGET_W
+  // so the grid still keeps its usual ~100 W margin even when PV alone
+  // could cover more (same rationale as GRID_TARGET_W everywhere else:
+  // avoid a literal 0 W grid crossing). Any PV beyond this cap has nowhere
+  // to go but a small trickle into the already-full battery — bounded by
+  // the resume hysteresis, not something this preset can prevent outright.
+  pvOnlyToGridTarget({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
+    if (soc <= dischargeFloorPct) return 0;
+    return this.roundDown(Math.max(0, Math.min(pvW, demandW - GRID_TARGET_W, max)), step);
   }
 
   computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step }) {
@@ -297,15 +321,7 @@ export class PowerPlanController {
       this.holdingAtCeiling = false;
     }
     if (!this.holdingAtCeiling && pvW > 0) return 0; // withhold PV, charge the battery
-    // Full (or holding, within the resume hysteresis band): a full battery
-    // should get USED, not left idle while the house pulls mostly from grid
-    // (2026-09-17 correction — passthroughOnly() capped the served amount
-    // at raw current PV, e.g. 320 W of a 774 W demand, leaving 454 W to the
-    // grid instead of the intended ~GRID_TARGET_W). Behave like
-    // house_priority instead: serve demand down to GRID_TARGET_W using
-    // PV+battery together, discharging the now-full battery back down to
-    // the resume threshold before withhold-and-charge kicks in again.
-    return this.dischargeToTarget({ demandW, soc, dischargeFloorPct, max, step });
+    return this.pvOnlyToGridTarget({ pvW, demandW, soc, dischargeFloorPct, max, step });
   }
 
   computeTarget(ctx) {
