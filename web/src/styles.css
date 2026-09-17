@@ -1131,6 +1131,12 @@ pre {
     box-shadow: 0 0 0 4px #5fce8000;
   }
 }
+/* "Right now" refreshes independently, every 30 min at most (welcome.js) —
+   its own small timestamp so that's visible on the card itself. */
+.wx-status-quo-stamp {
+  font-size: 0.7rem;
+  margin-top: 0.5rem;
+}
 @media (max-width: 600px) {
   .wx-today { gap: 0.75rem; }
   .wx-icon { width: 44px; height: 44px; }
@@ -1373,6 +1379,12 @@ pre {
   left: 4px;
   border-radius: 8px;
   transition: width 1s ease;
+}
+
+/* Near-full (>90%, 2026-09-17 user request) gets its own color, distinct
+   from "just healthy" (lvl-high), so a topped-up battery reads at a glance. */
+.batt-gauge-fill.lvl-full {
+  background: linear-gradient(180deg, #6bb8f5, #3d8fe0);
 }
 
 .batt-gauge-fill.lvl-high {

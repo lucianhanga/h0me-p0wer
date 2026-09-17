@@ -7,7 +7,16 @@ import { kvGet, kvSet } from "./db.js";
 import {
   parseWelcomeConfig, geocode, fetchWeather, fetchPvgis,
 } from "./welcome-sources.js";
-import { buildContext, callWelcomeAI, buildFallback, callAskAI } from "./welcome-ai.js";
+import {
+  buildContext,
+  callWelcomeAI,
+  buildFallback,
+  callAskAI,
+  callStatusQuoAI,
+  fallbackStatusQuo,
+  buildStrategyContext,
+} from "./welcome-ai.js";
+import { savedEur } from "./savings.js";
 
 // Fixed briefing times (local clock): every 2 h from 6:00 to 22:00 — 9 AI
 // calls/day, each updated with the day's actuals so far. Stale = cache older
@@ -27,6 +36,12 @@ function lastSlotMs(now = new Date()) {
 // one outage block AI briefings until the next slot.
 const FALLBACK_TTL_MS = 15 * 60 * 1000;
 const CACHE_KEY = "welcome:latest";
+// "Right now" (today.statusQuo) refreshes independently of the main 2h
+// slots (2026-09-17, user request) — lazily, whenever a GET request finds
+// it older than this, not on its own background timer (user: "update it
+// schedule based... when an app is requesting it and if its older than 30
+// minutes, update it again").
+const STATUS_QUO_TTL_MS = 30 * 60 * 1000;
 // How often the scheduler checks staleness (a no-op while the cache is fresh).
 const SCHEDULER_TICK_MS = 60 * 1000;
 // Post-startup delay before the first scheduled refresh — lets the meter and
@@ -58,6 +73,16 @@ export function registerWelcomeRoute(app, deps) {
     }
     const payload = {
       ...ai,
+      // The AI proposes these while narrating (schema requires them for
+      // internal consistency), but the actual NUMBER is always overridden
+      // with the one canonical, production-based calculation (savings.js,
+      // 2026-09-17 fix — was previously just the AI's own arithmetic,
+      // which could drift from what Dashboard/ROI show for the same day).
+      endOfDay: { ...ai.endOfDay, estimatedSavingsEur: savedEur(context.pvProducedTodayKwh, config.tariff) },
+      week: { ...ai.week, estimateEur: savedEur(ai.production?.weekKwh, config.tariff) },
+      // A full refresh naturally refreshes statusQuo too — timestamp it so
+      // the lazy 30-min mini-refresh below knows it doesn't need to.
+      today: { ...ai.today, statusQuoUpdatedAt: new Date().toISOString() },
       aiPowered,
       generatedAt: new Date().toISOString(),
       stale: false,
@@ -99,6 +124,51 @@ export function registerWelcomeRoute(app, deps) {
     await inflight;
   }
 
+  // Lightweight "Right now" mini-refresh — see welcome-ai.js's
+  // callStatusQuoAI for why this is separate from the main briefing.
+  // Merges into whatever's cached rather than replacing it; a no-op if
+  // there's nothing cached yet (the main refresh will produce the first
+  // statusQuo on its own).
+  let statusQuoInflight = null;
+  async function refreshStatusQuo(config) {
+    const cached = kvGet(CACHE_KEY);
+    if (!cached?.value) return;
+    const batt = deps.getLiveBattery?.() ?? null;
+    const context = {
+      battery: batt
+        ? { socNow: batt.soc, outputW: batt.outputW, chargeW: batt.chargeW, pvNowW: batt.pvW ?? null }
+        : { socNow: null, outputW: null, chargeW: null, pvNowW: null },
+      strategy: buildStrategyContext(deps.getPowerPlanState?.()),
+      language: config.ai.language,
+    };
+    const statusQuo = config.ai.apiKey
+      ? await callStatusQuoAI(config, context)
+      : fallbackStatusQuo(context);
+    kvSet(CACHE_KEY, {
+      ...cached.value,
+      today: { ...cached.value.today, statusQuo, statusQuoUpdatedAt: new Date().toISOString() },
+    });
+  }
+
+  function statusQuoStale() {
+    const cached = kvGet(CACHE_KEY);
+    if (!cached?.value) return false; // nothing to refresh into yet
+    const updatedAt = cached.value.today?.statusQuoUpdatedAt;
+    if (!updatedAt) return true; // pre-existing cache from before this field existed
+    return Date.now() - new Date(updatedAt).getTime() > STATUS_QUO_TTL_MS;
+  }
+
+  // Fire-and-forget, same "never make the client wait" philosophy as the
+  // main refresh — only called when the MAIN payload is otherwise fresh
+  // (a full refresh already updates statusQuo, so triggering both at once
+  // would just be two concurrent AI calls for the same field).
+  function refreshStatusQuoIfStale(config) {
+    if (!statusQuoStale()) return;
+    statusQuoInflight ??= refreshStatusQuo(config)
+      .catch((err) => console.warn(`[welcome] status-quo refresh failed: ${err.message}`))
+      .finally(() => (statusQuoInflight = null));
+  }
+
   function loadConfig() {
     try {
       return parseWelcomeConfig();
@@ -131,7 +201,13 @@ export function registerWelcomeRoute(app, deps) {
       return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
     }
     const fresh = freshCache();
-    if (fresh) return res.json({ ok: true, data: fresh.value });
+    if (fresh) {
+      // Main payload's slot hasn't rolled over — but "Right now" has its
+      // own, shorter TTL (see refreshStatusQuoIfStale); a no-op when it's
+      // not actually stale yet.
+      refreshStatusQuoIfStale(config);
+      return res.json({ ok: true, data: fresh.value });
+    }
     const cached = kvGet(CACHE_KEY);
     if (cached) {
       // Never make the client wait: serve what we have (flagged stale) and

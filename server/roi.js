@@ -14,6 +14,7 @@ import {
 import { buildBomPdf } from "./roi-pdf.js";
 import { getBaseline, computeBaseline } from "./roi-baseline.js";
 import { parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
+import { savedEur } from "./savings.js";
 
 // Bill of materials with SNAPSHOTTED purchase prices — user-editable config.
 // ROI math must use the prices paid, never live prices, so rows carry their
@@ -78,16 +79,22 @@ function measuredSavings(battSn, installDate, tariff) {
   const endMs = new Date(`${yesterday}T00:00:00`).getTime();
   for (let t = startMs; t <= endMs; t += DAY_MS) {
     const date = localDate(new Date(t));
-    const pvToHomeKwh = pvByDate.get(date)?.to_home ?? 0;
+    const row = pvByDate.get(date);
+    // pvKwh/battKwh stay as the physical to-home/cells flow (informational
+    // — where the energy actually went); the € figure is production-based
+    // (savings.js, 2026-09-17 fix — was to-home+cells here too, which
+    // undercounts a day that mostly charged the battery for later).
+    const pvToHomeKwh = row?.to_home ?? 0;
+    const producedKwh = row?.produced ?? 0;
     const { cellsKwh, hasRows } = cellsKwhForDay(battSn, date);
     if (pvByDate.has(date) || hasRows) measuredDays++;
-    const savedEur = r2((pvToHomeKwh + cellsKwh) * tariff);
-    savingsSoFar = r2(savingsSoFar + savedEur);
+    const dayEur = savedEur(producedKwh, tariff) ?? 0;
+    savingsSoFar = r2(savingsSoFar + dayEur);
     series.push({
       date,
       pvKwh: r2(pvToHomeKwh),
       battKwh: r2(cellsKwh),
-      savedEur,
+      savedEur: dayEur,
       cumulativeEur: savingsSoFar,
     });
   }

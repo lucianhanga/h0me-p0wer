@@ -80,13 +80,12 @@ function YesterdayCard() {
   }, []);
 
   if (!y) return null;
-  const saved = Math.round((y.battEur + y.pvEur) * 100) / 100;
   return (
     <section className="card">
       <SpeakButton
         id="yesterday"
         className="speak-corner"
-        text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${saved}.`}
+        text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${y.savedEur}.`}
       />
       <h3>Yesterday</h3>
       <p className="wx-big">
@@ -96,7 +95,7 @@ function YesterdayCard() {
         grid {y.gridKwh} kWh · battery {y.battKwh} kWh · PV {y.pvKwh} kWh direct
       </p>
       <p className="muted">
-        ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{saved}
+        ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{y.savedEur}
       </p>
     </section>
   );
@@ -127,13 +126,12 @@ function ThisWeekSoFarCard() {
   }, []);
 
   if (!w) return null;
-  const saved = Math.round((w.battEur + w.pvEur) * 100) / 100;
   return (
     <section className="card">
       <SpeakButton
         id="weekSoFar"
         className="speak-corner"
-        text={`This week so far: ${w.homeKwh} kilowatt-hours used, ${w.pvProducedKwh} produced by the panels, ${w.gridKwh} from the grid, ${w.battKwh} from the battery. Spent ${w.gridEur} euros, saved ${saved}.`}
+        text={`This week so far: ${w.homeKwh} kilowatt-hours used, ${w.pvProducedKwh} produced by the panels, ${w.gridKwh} from the grid, ${w.battKwh} from the battery. Spent ${w.gridEur} euros, saved ${w.savedEur}.`}
       />
       <h3>This week so far</h3>
       <p className="wx-big">
@@ -143,7 +141,7 @@ function ThisWeekSoFarCard() {
         grid {w.gridKwh} kWh · battery {w.battKwh} kWh · PV {w.pvKwh} kWh direct
       </p>
       <p className="muted">
-        ☀ {w.pvProducedKwh} kWh produced · spent €{w.gridEur} · saved €{saved}
+        ☀ {w.pvProducedKwh} kWh produced · spent €{w.gridEur} · saved €{w.savedEur}
       </p>
     </section>
   );
@@ -259,6 +257,15 @@ export default function WelcomeTab() {
           <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">produced today</span></p>
           <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
           <p className="muted">{gt.pvLiveToday ? "measured" : "estimated — PV still planned"} · {data.production.reasoning}</p>
+          {data.today.statusQuoUpdatedAt && (
+            <p className="muted wx-status-quo-stamp">
+              refreshed{" "}
+              {new Date(data.today.statusQuoUpdatedAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </p>
+          )}
         </section>
 
         <section className="card">

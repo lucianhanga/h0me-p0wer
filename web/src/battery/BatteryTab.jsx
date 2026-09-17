@@ -59,7 +59,9 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
 
   const { live, config, features, constants } = data;
   const soc = live?.soc ?? 0;
-  const lvlClass = soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  // 2026-09-17: near-full gets its own color (user request) — distinct from
+  // "just healthy" (lvl-high) so a topped-up battery reads at a glance.
+  const lvlClass = soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
   // 2026-09-16 fix: outputW is the TOTAL inverter output (PV pass-through +
   // cell discharge combined, see server/battery-params.js's
   // deriveBatteryFlow) — comparing it directly misread pure PV pass-through

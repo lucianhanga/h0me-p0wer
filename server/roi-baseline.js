@@ -11,6 +11,7 @@ import {
   fetchJson,
   localDate,
 } from "./welcome-sources.js";
+import { savedEur } from "./savings.js";
 
 const KV_KEY = "roi_baseline";
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -126,7 +127,11 @@ function validateEstimate(est, pvgisYearlyKwh, tariff) {
   const drift = r4(1 - monthlyDistribution.reduce((a, b) => a + b, 0));
   const maxIdx = monthlyDistribution.indexOf(Math.max(...monthlyDistribution));
   monthlyDistribution[maxIdx] = r4(monthlyDistribution[maxIdx] + drift);
-  const annualSavingsEur = r2(annualPvKwh * selfConsumptionRatio * tariff);
+  // Uses the same canonical kWh×tariff arithmetic as everywhere else
+  // (savings.js) — the ratio here is a deliberate, documented exception
+  // (a deployment-time derate for a structural reason, e.g. an
+  // undersized battery), not a different formula.
+  const annualSavingsEur = savedEur(annualPvKwh * selfConsumptionRatio, tariff);
   return {
     annualPvKwh: r2(annualPvKwh),
     selfConsumptionRatio,
