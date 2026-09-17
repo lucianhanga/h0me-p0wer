@@ -1429,6 +1429,64 @@ EPIPE noise on every client disconnect).
   regardless of step size, because the retreat calculation is always
   exact (`lastWrittenPower - cellsW`), never a fixed decrement.
 
+## Third strategy: `anker_app` — hand control back to the Anker app (2026-09-17, user request)
+
+- **User request**: "add to the strategy also manual where you let the user
+  to set up what he want in anker app." A genuinely different escape hatch
+  from the existing enabled/disabled toggle on the Live tab: disabling the
+  whole power plan restores `originalRaw`, a ONE-TIME snapshot captured
+  whenever the controller first took over — it goes stale the moment the
+  user edits anything in the Anker app afterward, and drops all of this
+  app's own monitoring/decision display along with it. `anker_app` instead
+  simply never reads or writes the schedule at all, for as long as it's
+  selected, while everything else (live PV/demand/SOC numbers, the
+  Strategy tab itself) stays active — so whatever the user configures
+  directly in the Anker app (including e.g. Anker's own AI mode) just
+  stays in effect, indefinitely, not just until the next tick.
+- Named `anker_app`, not `manual` — `trigger` already uses `"manual"` for
+  the discharge-toggle override, and reusing the word for a THIRD,
+  unrelated concept (a strategy that skips the whole write pipeline) would
+  have been confusing on the wire and in the UI.
+- **`tick()`** short-circuits immediately after computing live
+  `pvW`/`demandW`/`soc`/`cellsW` when `strategy === "anker_app"` — never
+  calls `readSchedule()`/`writeSchedule()`, never runs the write-discipline
+  state machine at all. `lastDecision` still gets the live numbers (for
+  the Strategy tab to display) but no `targetW`/`wrote`/`holdProgress` —
+  just `reason: "anker_app — not writing, device follows its own
+  Anker-app schedule"`.
+- **`setStrategy()`** now invalidates the cached `this.template` whenever
+  a strategy CHANGE crosses INTO or OUT OF `anker_app` (either direction)
+  — forces the next active-strategy tick to re-read the schedule and run
+  `reconcileWrittenPower()` against whatever the device ACTUALLY has,
+  rather than trusting a `lastWrittenPower` belief that predates
+  potential user edits made via the Anker app while this app wasn't
+  writing. Verified directly: constructed a controller, entered
+  `anker_app` with a pre-cached template and confirmed zero write calls
+  across a tick; switched to `battery_priority` and confirmed the
+  template was nulled and the following tick correctly reconciled
+  `lastWrittenPower` from a mocked device read (0), not a stale prior
+  value.
+- **`server/index.js`**: `anker_app` added to the `/api/power-plan/strategy`
+  validation enum alongside `house_priority`/`battery_priority`.
+- **`web/src/strategy/StrategyTab.jsx`**: third button in the strategy
+  picker; when selected, the "Battery discharge trigger" section and the
+  grid-outage callout are hidden entirely (neither applies — there's no
+  write pipeline for a trigger to affect, and the outage callout compares
+  House vs. Battery priority specifically). The decision cards swap to a
+  single "Live numbers (not being written)" card showing PV/house/SOC and
+  the reason string, instead of the Target-output/Decision-inputs pair
+  used by the two active strategies (which reference `targetW`/`wrote`,
+  meaningless here). `StrategyHelp` modal extended with a third
+  paragraph explaining the distinction from the Live tab's disable
+  toggle, plus a note that the discharge-trigger section doesn't apply
+  in this mode. Verified visually via Playwright against the dev server
+  (`POWER_PLAN_DISABLE=true`, confirmed `enabled:false`) — button group,
+  description, help modal all render correctly; the live-numbers card
+  itself couldn't be exercised in this specific screenshot since a
+  disabled controller never ticks (`lastDecision` stays `null`
+  regardless of strategy) — confirmed via a direct `node` simulation
+  instead, matching the pattern used for the server-side verification.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
