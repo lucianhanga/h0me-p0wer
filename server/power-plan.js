@@ -20,7 +20,11 @@
 //                        straight through to the house (passthroughOnly()) —
 //                        the battery is NEVER asked to discharge under this
 //                        strategy (confirmed with the user: "will not
-//                        discharge at all").
+//                        discharge at all"). The charge/hold switch is
+//                        latched with CHARGE_RESUME_HYSTERESIS_PCT, not a
+//                        bare threshold — see that constant's comment for
+//                        why (the unit's own standby draw otherwise causes
+//                        a visible jojo right at the ceiling).
 // Discharge trigger — auto | manual:
 //   auto   -> the strategy above decides (dischargeToTarget() for
 //             house_priority, passthroughOnly()-after-charging for
@@ -93,6 +97,17 @@ const STEP_UP_HOLD_MS = 90 * 1000;
 // these aren't runtime/UI-adjustable.
 const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
 const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4);
+// Charge/hold hysteresis for battery_priority (2026-09-17, real production
+// incident: at a fixed chargeCeilingPct threshold, the unit's OWN standby/
+// BMS draw — a few watts, continuous, not something this app controls or
+// can prevent — nudges SOC down ~1 point even while "full". A bare
+// threshold snapped straight back into target=0 (withhold ALL PV from the
+// house, pull 100% of demand from grid) just to claw that 1 point back,
+// then flipped straight back to passthrough at the ceiling — a visible
+// jojo between chargeCeilingPct and chargeCeilingPct-1 every few minutes.
+// Once the ceiling is reached, hold passthrough (dump PV to the house)
+// until SOC has actually dropped this many points below it.
+const CHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.CHARGE_RESUME_HYSTERESIS_PCT ?? 3);
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
 // dual-control note) — only ONE should ever hold the battery schedule.
@@ -116,6 +131,7 @@ export class PowerPlanController {
     this.strategy = "house_priority";
     this.trigger = "auto";
     this.manualDischarge = false;
+    this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
     this.lastWrittenPower = null;
     this.lastWriteAt = 0;
     this.lastError = null;
@@ -270,7 +286,12 @@ export class PowerPlanController {
 
   computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step }) {
     if (soc <= dischargeFloorPct) return 0;
-    if (soc < chargeCeilingPct && pvW > 0) return 0; // withhold PV, charge the battery
+    if (soc >= chargeCeilingPct) {
+      this.holdingAtCeiling = true;
+    } else if (soc <= chargeCeilingPct - CHARGE_RESUME_HYSTERESIS_PCT) {
+      this.holdingAtCeiling = false;
+    }
+    if (!this.holdingAtCeiling && pvW > 0) return 0; // withhold PV, charge the battery
     return this.passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }); // never discharge
   }
 
@@ -398,6 +419,7 @@ export class PowerPlanController {
         dischargeFloorPct,
         chargeCeilingPct,
         atChargeCeiling: soc >= chargeCeilingPct,
+        holdingAtCeiling: this.holdingAtCeiling,
       };
     } catch (err) {
       this.lastError = err.message;

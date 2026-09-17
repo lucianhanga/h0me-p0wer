@@ -1122,6 +1122,44 @@ EPIPE noise on every client disconnect).
   topped-up battery now reads at a glance instead of looking the same as
   "healthy but not full."
 
+## battery_priority charge/hold hysteresis (2026-09-17)
+
+- **User observation: a small, continuous few-watt jojo at the top of
+  charge — SOC bouncing 94%↔95% — while `battery_priority` was active in
+  production**. Confirmed live against `/api/power-plan`: strategy
+  `battery_priority`, `soc: 95`, `chargeCeilingPct: 95`,
+  `atChargeCeiling: true`, correctly in passthrough (`targetW: 160` ≈ the
+  live `pvW: 166`, rounded down to `step`). The few watts themselves are
+  the Solarbank unit's OWN standby/BMS/wifi housekeeping draw — continuous,
+  not something this app writes a preset for or can prevent, and normal for
+  this hardware class; **that part is intended**. What was NOT intended:
+  `computeBatteryPriority()` used a bare `soc < chargeCeilingPct` threshold
+  with no hysteresis, so the instant that standby draw nudged SOC down by
+  the 1 point the device reports in, the controller snapped straight back
+  into `target=0` — withholding ALL PV from the house and pulling 100% of
+  demand from the grid — purely to claw back that 1 point, then flipped
+  straight back to passthrough the moment SOC touched the ceiling again.
+  At a typical few-hundred-watt house load this toggled the "does the
+  house get any PV right now" answer every few minutes, for a fluctuation
+  that isn't otherwise meaningful. Fix: `computeBatteryPriority()` now
+  latches into a hold state (`this.holdingAtCeiling`) the moment
+  `soc >= chargeCeilingPct`, and only leaves it (resumes charging) once SOC
+  has dropped `CHARGE_RESUME_HYSTERESIS_PCT` (env var, default 3) points
+  below the ceiling — deployment-time constant, same category as
+  `GRID_TARGET_W`/`DISCHARGE_TOLERANCE_PCT`, not user-adjustable in the UI.
+  `holdingAtCeiling` is also surfaced in `lastDecision` for visibility,
+  alongside the existing (now slightly narrower-scoped) `atChargeCeiling`
+  informational field. Verified with a standalone simulation feeding the
+  real production SOC sequence (95, 94, 95, 94, 93, 92, …) through
+  `computeBatteryPriority()` directly: target now holds steady at the
+  passthrough value (160 W) through the entire 95→93 wobble and only drops
+  to 0 (resumes charging) at SOC 92, exactly 3 points below the ceiling as
+  designed — the visible on/off toggling is gone. `house_priority` is
+  unaffected — it has no charge/hold switch at all; PV surplus beyond its
+  served target charges the battery automatically at the device level,
+  with no binary threshold in this controller's own logic to add
+  hysteresis to.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
