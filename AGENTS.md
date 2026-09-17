@@ -1238,6 +1238,80 @@ EPIPE noise on every client disconnect).
   unaffected by either correction on this day — it has no charge/hold
   switch and always uses `dischargeToTarget()` unconditionally.
 
+## battery_priority: hold-phase hill-climb, gated on real cellsW (2026-09-17, fourth same-day revision)
+
+- **The `pvOnlyToGridTarget()` fix directly above was ALSO wrong** — live
+  timeseries (`GET /api/timeseries?range=1h` against production) showed PV
+  had been ~799 W (near the 800 W panel cap) minutes earlier, then crashed
+  to ~2 W and stayed there for 4+ consecutive minutes once the hold phase
+  started capping target at that reading. Root cause: on this hardware,
+  reported PV is NOT an independent measurement — the device only draws as
+  much PV as it currently needs for output+charging, so it's a
+  CONSEQUENCE of the last target this app wrote. Capping target at
+  "current PV" creates a self-reinforcing lock: a transient dip writes a
+  low target, the device throttles the panels to match it, the next
+  reading confirms "PV is low," and there is no way out without ever
+  asking the device for more than it currently reports.
+- **User's requirement, restated twice, emphatically, with no exception
+  accepted**: "the battery has to stay untouched" AND "do anything in
+  your power to produce as much as possible... just get about 100w only
+  from grid." These are in genuine tension on THIS hardware: discovering
+  how much PV is actually available beyond the current reading requires
+  asking for more output, and the device may cover any shortfall from
+  cells before the next reading reveals it wasn't safe. There is no
+  device-level "PV-only, up to X" preset — `custom_rate_plan` is a single
+  flat power number; the device decides internally how to source it.
+  Explored (and rejected) writing the literal device `max_load` directly,
+  reasoning "if it's more than the house needs, the device's own Anker-app
+  settings limit it anyway" — kept this app's own `demandW`-based cap
+  regardless: the file's zero-export-by-construction invariant is meant as
+  a first line of defense that doesn't depend on the device's real-time
+  `0w_feed` protection being fast enough on its own (same reasoning
+  `STEP_UP_HOLD_MS` documents elsewhere in this file — the device lags by
+  about a minute).
+- **Fix: a closed-loop hill-climb, gated on `deriveBatteryFlow()`'s real
+  `cellsW`** (`battery-params.js` — the one existing, validated signal for
+  "is the battery ACTUALLY discharging right now," already shared between
+  `/api/flow` and `/api/battery/params` so it can't drift). New
+  `PROBE_STEP_W` (default 50 W, matching `WRITE_MIN_DELTA_W` — a smaller
+  step would never actually get written) and per-instance `holdProbeW`
+  state. Every tick while holding at the ceiling: if `cellsW > 0` (the
+  currently-active preset really did pull from cells), drop
+  `holdProbeW -= cellsW` — the EXACT amount observed, landing back at the
+  true safe level in one correction, not a fixed decrement (a fixed 50 W
+  retreat would take ~14 write-cycles / ~7 minutes to unwind a
+  670 W→near-0 crash, given `MIN_WRITE_GAP_MS`=30s between writes — far
+  too slow for a hard requirement). If `cellsW == 0` (confirmed safe),
+  cautiously climb `holdProbeW += PROBE_STEP_W`, capped at
+  `demandW - GRID_TARGET_W`. `holdProbeW` resets to 0 every time the
+  controller re-enters the hold phase (never assumes yesterday's validated
+  level still holds). `cellsW` itself is computed once per tick in
+  `tick()` from the live `pvW`/`chargeW`/`outputW` already available on
+  `latestBattery`, using the SAME `deriveBatteryFlow()` those other two
+  routes use — not reimplemented a third time. Threaded through
+  `computeTarget()`'s existing `{...ctx}` spread into
+  `computeBatteryPriority()`, and surfaced as `holdProbeW`/`cellsW` in
+  `lastDecision` for visibility.
+- **Honest limitation, stated explicitly rather than glossed over**: this
+  cannot GUARANTEE literal zero battery involvement, ever — only that any
+  touch is detected and corrected within one tick (write-discipline steps
+  DOWN with no hold delay), never sustained. Recovery from a deep dip back
+  up to the full safe ceiling is deliberately slow (tens of minutes in the
+  worst case — climbing costs one `PROBE_STEP_W` per validated
+  `STEP_UP_HOLD_MS`-held-and-confirmed cycle) — the acknowledged cost of
+  the "never touch the battery" guarantee actually holding rather than
+  being aspirational.
+- Verified via a synthetic closed-loop simulation (not live — no way to
+  safely reproduce a hard PV crash against real hardware on demand):
+  modeled "the device honors target from PV first, cells cover any
+  shortfall" and ran the controller through three phases — ramping 0→670 W
+  in exact 50 W steps while PV was abundant (799 W, matching the incident
+  before the crash); PV crashing to 2 W, where the very next tick corrects
+  target from 670 straight to 0 (one-step correction, not a multi-minute
+  trickle); PV recovering to 700 W, where the climb resumes cleanly from
+  wherever it left off. Also re-ran the untouched 94↔95 ceiling-hysteresis
+  latch sequence through the same updated code — unaffected.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

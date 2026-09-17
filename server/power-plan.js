@@ -16,26 +16,20 @@
 //                        (PV is deliberately withheld from the house so it
 //                        charges the battery instead; house demand comes
 //                        from the grid meanwhile — confirmed intentional
-//                        with the user, not a bug). Once full:
-//                        pvOnlyToGridTarget() — route PV straight to the
-//                        house (never above pvW — the battery is NEVER
-//                        asked to discharge under this strategy, full
-//                        stop), capped at demandW - GRID_TARGET_W so the
-//                        grid still keeps its ~100 W margin even when PV
-//                        alone could cover more. (2026-09-17, two
-//                        corrections same day: a first pass used
-//                        passthroughOnly() here uncapped by GRID_TARGET_W;
-//                        a second pass then over-corrected to
-//                        dischargeToTarget(), which drew from the battery
-//                        to fill the gap — explicitly rejected: "don't
-//                        touch the battery anymore, it should only [use]
-//                        the power from the PVs".) The charge/hold switch
-//                        is latched with CHARGE_RESUME_HYSTERESIS_PCT, not
-//                        a bare threshold — see that constant's comment.
+//                        with the user, not a bug). Once full: a cautious
+//                        hill-climb toward demandW - GRID_TARGET_W, gated
+//                        on the REAL cellsW signal (deriveBatteryFlow) so
+//                        the battery is never knowingly asked to
+//                        discharge — see computeBatteryPriority()'s own
+//                        comment for the full reasoning and the three
+//                        earlier same-day attempts this replaced. The
+//                        charge/hold switch is latched with
+//                        CHARGE_RESUME_HYSTERESIS_PCT, not a bare
+//                        threshold — see that constant's comment.
 // Discharge trigger — auto | manual:
 //   auto   -> the strategy above decides (dischargeToTarget() for
-//             house_priority; pvOnlyToGridTarget() for battery_priority
-//             once full, target=0 while still charging).
+//             house_priority; the hold-phase hill-climb for
+//             battery_priority once full, target=0 while still charging).
 //   manual -> a persisted `manualDischarge` boolean toggle OVERRIDES the
 //             selected strategy entirely (confirmed: "will overwrite
 //             whatever the strategy was selected before") — true ->
@@ -79,7 +73,7 @@
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { getBatteryLimits } from "./battery-params.js";
+import { getBatteryLimits, deriveBatteryFlow } from "./battery-params.js";
 
 const GET_EP = "power_service/v1/site/get_site_device_param";
 const SET_EP = "power_service/v1/site/set_site_device_param";
@@ -112,12 +106,33 @@ const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4)
 // house, pull 100% of demand from grid) just to claw that 1 point back,
 // then flipped straight back to passthrough at the ceiling — a visible
 // jojo between chargeCeilingPct and chargeCeilingPct-1 every few minutes.
-// Once the ceiling is reached, hold pvOnlyToGridTarget() (PV-only, battery
-// never discharges) until SOC has actually dropped this many points below
-// it before resuming withhold-and-charge — absorbs the standby-draw wobble
-// (and any small trickle-charge from PV left unrouted by the
-// GRID_TARGET_W cap) without flipping state every tick.
+// Once the ceiling is reached, hold the hill-climb probe below (see
+// PROBE_STEP_W) until SOC has actually dropped this many points below the
+// ceiling before resuming withhold-and-charge — absorbs the standby-draw
+// wobble without flipping state every tick.
 const CHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.CHARGE_RESUME_HYSTERESIS_PCT ?? 3);
+// battery_priority's hold-at-ceiling probe step (2026-09-17, fourth
+// same-day revision — see computeBatteryPriority()'s comment for the full
+// reasoning). The hardware exposes only ONE flat output-power preset; the
+// device itself decides whether to source it from PV or cells. There is no
+// way to simultaneously (a) always ask for the true PV maximum and (b)
+// GUARANTEE the battery is never asked to cover any of it — discovering
+// "how much PV is actually available right now" requires asking the device
+// for more than currently reported, which risks a brief real pull from the
+// battery if the panels can't cover it. This is the best achievable
+// approximation: climb toward the safe ceiling in small, validated steps,
+// gated on deriveBatteryFlow()'s real cellsW (not the raw pvW reading,
+// which is a CONSEQUENCE of the last target written, not an independent
+// measurement — see the incident this same day where PV got stuck reading
+// ~2 W for 4+ minutes after a dip, because the previous version capped
+// target at that same stale reading). Any real discharge is caught and
+// reversed within one tick (write-discipline steps DOWN with no hold);
+// upward steps still need STEP_UP_HOLD_MS to actually reach the device
+// AND get validated by the next tick's real cellsW before climbing
+// further — so recovery from a deep dip to the full safe ceiling is slow
+// (worst case, tens of minutes) by design: this constant trades recovery
+// speed for the "never touch the battery" guarantee actually holding.
+const PROBE_STEP_W = Number(process.env.PROBE_STEP_W ?? 50);
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
 // dual-control note) — only ONE should ever hold the battery schedule.
@@ -142,6 +157,7 @@ export class PowerPlanController {
     this.trigger = "auto";
     this.manualDischarge = false;
     this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
+    this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastWrittenPower = null;
     this.lastWriteAt = 0;
     this.lastError = null;
@@ -288,40 +304,69 @@ export class PowerPlanController {
 
   // Never ask the battery to discharge: PV (if any) passes straight through
   // to the house, the rest comes from the grid. Used by the manual "don't
-  // discharge" toggle only — battery_priority's own hold phase uses
-  // pvOnlyToGridTarget() below (same "never touch the battery" rule, plus
-  // the GRID_TARGET_W margin).
+  // discharge" toggle only.
   passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
     if (soc <= dischargeFloorPct) return 0;
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
-  // battery_priority's hold-at-ceiling phase (2026-09-17, second correction
-  // same day — PR #133's dischargeToTarget() drew from the battery to hit
-  // demand-GRID_TARGET_W, which is exactly the "touching the battery" the
-  // user does NOT want once full; confirmed explicitly: "don't touch the
-  // battery anymore, it should only [use] the power from the PVs"). Route
-  // as much PV as is useful straight to the house — never above pvW (the
-  // battery is never asked to discharge), capped at demandW - GRID_TARGET_W
-  // so the grid still keeps its usual ~100 W margin even when PV alone
-  // could cover more (same rationale as GRID_TARGET_W everywhere else:
-  // avoid a literal 0 W grid crossing). Any PV beyond this cap has nowhere
-  // to go but a small trickle into the already-full battery — bounded by
-  // the resume hysteresis, not something this preset can prevent outright.
-  pvOnlyToGridTarget({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
-    if (soc <= dischargeFloorPct) return 0;
-    return this.roundDown(Math.max(0, Math.min(pvW, demandW - GRID_TARGET_W, max)), step);
-  }
-
-  computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step }) {
+  // battery_priority's hold-at-ceiling phase (2026-09-17, fourth same-day
+  // revision — first tried passthroughOnly() [uncapped by GRID_TARGET_W,
+  // wasted headroom], then dischargeToTarget() [PR #133, drew from the
+  // battery whenever PV fell short — explicitly rejected], then
+  // pvOnlyToGridTarget() [capped at raw current PV — self-defeating: on
+  // this hardware, reported PV is a CONSEQUENCE of the last target
+  // written, not an independent measurement, so a transient dip could
+  // write a near-zero target, the device would throttle the panels to
+  // match it, and the next reading would confirm "PV is low" forever —
+  // confirmed live, PV got stuck reading ~2 W for 4+ minutes after a dip].
+  // The user's hard requirement, stated twice, explicitly: the battery
+  // must NEVER be discharged once full — full stop, no exceptions — while
+  // the app should still do everything possible to maximize real PV use.
+  // Those two goals are in genuine tension: finding out how much PV is
+  // ACTUALLY available beyond what's currently reported REQUIRES asking
+  // the device for more, and the device may cover any shortfall from
+  // cells before we find out. There is no device-level "PV-only, up to
+  // X" primitive — the preset is a single flat power number and the
+  // device decides how to source it. This hill-climbs toward the safe
+  // ceiling in small PROBE_STEP_W steps, gated on deriveBatteryFlow()'s
+  // REAL cellsW (not pvW) — the one signal that isn't self-referential:
+  // it reflects what the CURRENTLY ACTIVE device preset is actually
+  // doing, not what we're about to ask for. Any real discharge is
+  // detected and reversed within one tick (existing step-down-promptly
+  // write discipline, no hold); each upward step must independently hold
+  // for STEP_UP_HOLD_MS AND get validated safe by the following tick
+  // before climbing further — slow (tens of minutes to fully recover from
+  // a deep dip) by design, because that's the cost of the "never touch
+  // the battery" guarantee actually holding rather than being aspirational.
+  computeBatteryPriority({ pvW, demandW, soc, dischargeFloorPct, chargeCeilingPct, max, step, cellsW }) {
     if (soc <= dischargeFloorPct) return 0;
     if (soc >= chargeCeilingPct) {
       this.holdingAtCeiling = true;
     } else if (soc <= chargeCeilingPct - CHARGE_RESUME_HYSTERESIS_PCT) {
       this.holdingAtCeiling = false;
     }
-    if (!this.holdingAtCeiling && pvW > 0) return 0; // withhold PV, charge the battery
-    return this.pvOnlyToGridTarget({ pvW, demandW, soc, dischargeFloorPct, max, step });
+    if (!this.holdingAtCeiling) {
+      this.holdProbeW = 0; // start conservative every time we (re)enter hold
+      if (pvW > 0) return 0; // withhold PV, charge the battery
+    }
+    const ceilingW = this.roundDown(Math.max(0, demandW - GRID_TARGET_W), step);
+    if (cellsW > 0) {
+      // The battery IS being touched right now — drop straight back to
+      // what PV was actually covering (holdProbeW - cellsW), not a fixed
+      // small decrement. cellsW tells us EXACTLY how much of the current
+      // target the battery had to cover, so this corrects in ONE step no
+      // matter how hard PV crashed — a fixed-step retreat would take
+      // minutes to unwind a big drop (e.g. 14 steps / ~7 min for a
+      // 670 W-to-near-0 crash at 30 s between writes), which is far too
+      // slow given "never touch the battery" is a hard requirement, not a
+      // soft preference.
+      this.holdProbeW = Math.max(0, this.holdProbeW - cellsW);
+    } else if (this.holdProbeW < ceilingW) {
+      // Confirmed safe so far — cautiously test a bit more.
+      this.holdProbeW = Math.min(this.holdProbeW + PROBE_STEP_W, ceilingW);
+    }
+    return this.roundDown(this.holdProbeW, step);
   }
 
   computeTarget(ctx) {
@@ -346,6 +391,11 @@ export class PowerPlanController {
     const pvW = info.pvW ?? 0;
     const demandW = info.homeLoadW ?? null;
     const soc = info.soc ?? null;
+    // Real (not target-derived) signal for "is the battery actually
+    // discharging right now" — see computeBatteryPriority()'s hold-phase
+    // comment for why this, and not raw pvW, is what the hold-phase probe
+    // must be gated on.
+    const { cellsW } = deriveBatteryFlow({ pvW, chargeW: info.chargeW ?? 0, outputW: info.outputW ?? 0 });
     if (demandW == null || soc == null) return;
     try {
       if (!this.template) {
@@ -365,6 +415,7 @@ export class PowerPlanController {
         pvW,
         demandW,
         soc,
+        cellsW,
         strategy: this.strategy,
         trigger: this.trigger,
         manualDischarge: this.manualDischarge,
@@ -436,6 +487,7 @@ export class PowerPlanController {
         pvW,
         demandW,
         soc,
+        cellsW,
         strategy: this.strategy,
         trigger: this.trigger,
         manualDischarge: this.manualDischarge,
@@ -449,6 +501,7 @@ export class PowerPlanController {
         chargeCeilingPct,
         atChargeCeiling: soc >= chargeCeilingPct,
         holdingAtCeiling: this.holdingAtCeiling,
+        holdProbeW: this.holdProbeW,
       };
     } catch (err) {
       this.lastError = err.message;
