@@ -64,17 +64,19 @@ export default function Dashboard() {
 }
 
 // Consumption-by-source card: house total on top, then the source rows with
-// the same colors as the chart (grid/battery/PV). Grid € = spent, battery/PV
-// € = saved (avoided grid import at the same tariff). Today additionally has
-// a "To battery" row (PV loaded into the battery — informational, no €: the
+// the same colors as the chart (grid/battery/PV). Today additionally has a
+// "To battery" row (PV loaded into the battery — informational, no €: the
 // savings are booked when the battery discharges, never twice).
 // ‹ › in the title row navigates the card through past periods
 // (/api/stats/period, offset ≥ 1); flip side shows the same period's bars.
-// PV direct/From battery deliberately have NO per-row € — the ONE savings
-// figure (active.savedEur, production-based — see server/savings.js) isn't
-// their sum, so showing per-row €s next to it would look inconsistent.
+// No row shows a per-row €: Grid's spent-€ is already in the bottom summary
+// line (src-money) — repeating it inline next to the row was redundant
+// (2026-09-17, user request). PV direct/From battery never had one — the
+// ONE savings figure (active.savedEur, production-based — see
+// server/savings.js) isn't their sum, so a per-row € next to them would
+// look inconsistent with the summary.
 const SRC_ROWS = [
-  { key: "gridKwh", eur: "gridEur", label: "Grid", color: "#f7a44f" },
+  { key: "gridKwh", label: "Grid", color: "#f7a44f" },
   { key: "pvKwh", label: "PV direct", color: "#5fce80" },
   { key: "battKwh", label: "From battery", color: "#c084fc" },
 ];
@@ -159,9 +161,7 @@ function SourceCard({ type, title, data, formatLabel }) {
               <span className="src-label">{r.label}</span>
               <span className="src-value">
                 <span className="src-kwh">{active[r.key]} kWh</span>
-                {(r.stored || r.eur) && (
-                  <span className="src-eur">{r.stored ? "stored" : `€${active[r.eur]} spent`}</span>
-                )}
+                {r.stored && <span className="src-eur">stored</span>}
               </span>
             </div>
           ))}
