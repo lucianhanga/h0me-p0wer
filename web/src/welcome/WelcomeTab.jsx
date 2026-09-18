@@ -255,7 +255,10 @@ export default function WelcomeTab() {
           </h3>
           <p>{data.today.statusQuo}</p>
           <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">produced today</span></p>
-          <p className="muted">week ≈ {data.production.weekKwh} kWh · month ≈ {data.production.monthKwh} kWh</p>
+          <p className="muted">
+            week{gt.pvLiveToday ? " so far" : ""} ≈ {data.production.weekKwh} kWh · month
+            {gt.pvLiveToday ? " so far" : ""} ≈ {data.production.monthKwh} kWh
+          </p>
           <p className="muted">{gt.pvLiveToday ? "measured" : "estimated — PV still planned"} · {data.production.reasoning}</p>
           {data.today.statusQuoUpdatedAt && (
             <p className="muted wx-status-quo-stamp">

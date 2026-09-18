@@ -94,7 +94,7 @@ function avgImportByWeekday(rows, firstDate) {
   return Object.fromEntries(Object.entries(acc).map(([k, v]) => [k, round1(v.s / v.c)]));
 }
 
-export function buildContext({ config, geo, weather, pvgis, deps }) {
+export function buildContext({ config, geo, weather, pvgis, statsOverview, deps }) {
   const now = new Date();
   const sn = deps.getMeterSn();
   const daily = weather.daily;
@@ -161,6 +161,13 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
     localTime: `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`,
     pvProducedTodayKwh: pvKwhForDay(localDate()).produced,
     pvProjectedTodayKwh: projectedTodayKwh(pvgis, dayRows[0]),
+    // Real, measured production for the CALENDAR week/month so far —
+    // Dashboard's own /api/stats/overview numbers via an internal loopback
+    // fetch (welcome.js), not a second independent computation. Distinct
+    // from week.estimateKwh (the AI's own forward projection through
+    // Sunday) — this is what's ALREADY happened, not a forecast.
+    pvProducedWeekToDateKwh: statsOverview?.data?.byPeriod?.week?.pvProducedKwh ?? null,
+    pvProducedMonthToDateKwh: statsOverview?.data?.byPeriod?.month?.pvProducedKwh ?? null,
     weekday: WEEKDAYS[now.getDay()],
     monthName: MONTHS[now.getMonth()],
     tariffEurPerKwh: config.tariff,
@@ -288,7 +295,7 @@ const SYSTEM_PROMPT = `You write the energy briefing for a home dashboard.
 Hard rules:
 - Use ONLY the numbers in the provided JSON context for weather, sun and consumption facts. Never invent figures.
 - Adapt to the provided localTime: morning (before 12:00) = the day ahead; afternoon (12-18) = the day so far (pvProducedTodayKwh, grid import so far) + what remains of it; evening (after 18:00) = wrap up the day and look at tomorrow (the week's first forecast day after today).
-- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED — production.todayKwh MUST equal pvProducedTodayKwh from the context EXACTLY, even if it is 0 or very small (e.g. before sunrise, or a heavily overcast morning). NEVER substitute a climatology projection for it just because it looks more informative — a real 0 is correct and more honest than an estimate mislabeled as measured. Explain a low/zero value in production.reasoning ("before sunrise", "overcast so far") instead of replacing the number. Otherwise (PV not yet live) production.todayKwh is a genuine estimate — use pvProjectedTodayKwh from the context directly, it's already computed from the PVGIS climatology for this exact setup scaled by today's forecast radiation. production.weekKwh/monthKwh are ALWAYS forward-looking climatology projections, live or not — pvProducedTodayKwh only constrains todayKwh specifically.
+- PV status is data-driven: if battery.pvLiveToday is true, the PV system IS INSTALLED — production.todayKwh/weekKwh/monthKwh MUST equal pvProducedTodayKwh/pvProducedWeekToDateKwh/pvProducedMonthToDateKwh from the context EXACTLY — real, MEASURED totals so far (today, this calendar week, this calendar month), even if any of them is 0 or very small (e.g. before sunrise). NEVER substitute a climatology projection for any of the three just because it looks more informative — a real 0 or a small so-far total is correct and more honest than an estimate mislabeled as measured. Explain a low value in production.reasoning ("before sunrise", "overcast so far", "early in the week/month") instead of replacing the number. Otherwise (PV not yet live) all three are genuine forward estimates — use pvProjectedTodayKwh directly for todayKwh (already PVGIS-computed); scale similarly for weekKwh/monthKwh. This is DIFFERENT from week.estimateKwh/estimateEur, which is always a forward projection through Sunday regardless of live status — don't confuse the two: production.weekKwh (so far, when live) and week.estimateKwh (what's left, always forward) answer different questions and will normally be different numbers.
 - Power flows (Solarbank 2 E1600 Plus, built-in inverter): ALL PV enters the battery unit; the house is fed ONLY through the unit's inverter, and the inverter's output already includes any PV pass-through — never present PV as flowing directly to the house. The bank decides dynamically (at low SOC it often charges from PV while the house runs on grid) — describe the MEASURED flows in the context, don't assume a fixed priority.
 - today.statusQuo: ONE or TWO lively sentences that read like a snapshot of THIS EXACT MOMENT — battery.socNow, battery.pvNowW, battery.outputW/chargeW from the context. Present tense ("the battery is at…", "right now the panels are…"), not a forecast and not a recap of the whole day.
 - week.upcoming: look ONLY at the forecast days in "week" that are still AHEAD (today and earlier are already in the past) — what the weather means for production/consumption over what's left of the calendar week. Reference specific upcoming weekdays when the forecast is notably better or worse than the rest.
@@ -419,7 +426,21 @@ export function buildFallback(config, context) {
       icon,
       statusQuo,
     },
-    production: { todayKwh, weekKwh, monthKwh, reasoning: "Prorated from PVGIS monthly average by forecast radiation (offline estimate)." },
+    production: {
+      todayKwh,
+      weekKwh,
+      monthKwh,
+      // welcome.js overrides todayKwh/weekKwh/monthKwh to the real
+      // measured figures when the PV system is live, regardless of this
+      // reasoning text — so it must acknowledge that case too, not just
+      // describe the PVGIS-prorated numbers this function itself computed
+      // (2026-09-18: caught alongside the weekKwh/monthKwh fix — this text
+      // was already stale for todayKwh from the 2026-09-17 fix, unnoticed
+      // since it's fallback-only, i.e. AI unavailable).
+      reasoning: context.battery?.pvLiveToday
+        ? "Measured totals so far (AI unavailable — offline estimate for the rest of the period)."
+        : "Prorated from PVGIS monthly average by forecast radiation (offline estimate).",
+    },
     endOfDay: {
       batterySocEstimate: context.battery.socNow ?? 0,
       toHouseKwh: context.consumption.monthToDateAvgImportKwh ?? 0,

@@ -1354,6 +1354,15 @@ registerWelcomeRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
   getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
   getPowerPlanState: () => powerPlan.getState(),
+  // Single source of truth for week/month production-so-far (2026-09-18,
+  // user request: the "Right now" card's week/month kWh didn't match what
+  // Dashboard showed — they were independently AI/PVGIS-projected instead
+  // of reusing Dashboard's own real, already-computed byPeriod numbers).
+  // An internal loopback fetch, not a re-derivation — guarantees the
+  // Welcome tab can never drift from Dashboard's numbers, and avoids
+  // duplicating /api/stats/overview's large, gap-handling-heavy
+  // computation a second time.
+  statsOverviewUrl: `http://127.0.0.1:${PORT}/api/stats/overview`,
 });
 
 // ROI tab: payback of the BOM investment from measured savings, DB only.
