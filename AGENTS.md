@@ -1513,6 +1513,75 @@ EPIPE noise on every client disconnect).
   same line) — verified visually, "To battery" now matches the single-line
   height of every other row.
 
+## Welcome AI: production.todayKwh was a fabricated projection labeled "measured" (2026-09-18, user request: "review all the AI prompts, make sure they're accurate")
+
+- **User: "this tile is stating that it was produced already 3.7kwh which
+  is false!"** Traced against production's real `/api/welcome` payload:
+  the briefing was generated at 06:01, an hour before sunrise (06:54).
+  `production.reasoning` literally read *"No PV energy has been recorded
+  yet today, but the live system has started producing. The estimates
+  use the 1 kWp setup, September's 95.4 kWh climatology and the forecast
+  radiation of 3.7 today…"* — the model correctly knew the real figure
+  was ~0, said so in its own reasoning, and THEN substituted a full-day
+  PVGIS projection into `production.todayKwh` anyway, apparently judging
+  "0 kWh" unhelpful to report at 6 AM. The frontend (`gt.pvLiveToday ?
+  "measured" : "estimated"`) then labeled this fabricated number
+  "measured" — a real, user-visible lie, not just an imprecise estimate.
+  This directly violated the system prompt's own instruction ("report
+  actuals... pvProducedTodayKwh") — a plain instruction wasn't strong
+  enough to stop the model from "helpfully" overriding a real zero.
+- **Same root cause explains a second, related oddity**: the "How today
+  will end" card showed "≈€0 saved today" right next to a note describing
+  the battery about to discharge ~3.7 kWh to the house over the rest of
+  the day. `endOfDay.estimatedSavingsEur`'s server override (added
+  2026-09-17) used `context.pvProducedTodayKwh` — the real MEASURED
+  so-far figure, correctly ~0 at 06:01 — but `endOfDay` is semantically a
+  FULL-DAY projection card; it needs a projected TOTAL, not a
+  before-sunrise snapshot of what's happened yet.
+- **Fix, two layers (same "AI narrates, server guarantees the number"
+  pattern already used for savings elsewhere in this file), not prompt
+  wording alone — a plain instruction had already failed once**:
+  1. New `projectedTodayKwh()` helper (`welcome-ai.js`) — the same
+     PVGIS-monthly-climatology-scaled-by-forecast-radiation formula
+     `buildFallback()` already used inline, now extracted and shared, and
+     exposed as `context.pvProjectedTodayKwh` (a genuine full-day
+     PROJECTION, distinct from `pvProducedTodayKwh`, the measured
+     so-far figure).
+  2. `server/welcome.js`'s `refresh()`: `production.todayKwh` is now
+     HARD-OVERRIDDEN to `context.pvProducedTodayKwh` whenever
+     `context.battery.pvLiveToday` — regardless of what the AI (or the
+     offline fallback) proposed; only the accompanying `reasoning` prose
+     is left to the model. `endOfDay.estimatedSavingsEur`'s basis changed
+     from `pvProducedTodayKwh` to `pvProjectedTodayKwh ??
+     pvProducedTodayKwh` — a full-day estimate, not a so-far snapshot.
+  3. `SYSTEM_PROMPT` strengthened regardless (defense in depth, not
+     instead of the override): explicit "MUST equal pvProducedTodayKwh
+     EXACTLY, even if 0 ... NEVER substitute a climatology projection ...
+     a real 0 is correct and more honest than an estimate mislabeled as
+     measured", plus a new bullet telling the model to base `endOfDay` on
+     `pvProjectedTodayKwh`, not `pvProducedTodayKwh` alone.
+  4. `buildFallback()` (the fully-offline, AI-down path) refactored to
+     call the same shared `projectedTodayKwh()` instead of duplicating
+     the formula — one fewer place for the two to drift apart.
+- Verified via a standalone reproduction of the exact real incident
+  numbers (not a live AI call — the override is pure arithmetic, no need
+  to spend real API credits verifying it): simulated the AI having stated
+  `todayKwh: 3.7` exactly as observed, ran it through the new override
+  logic with `pvProducedTodayKwh: 0, pvProjectedTodayKwh: 3.7` — result:
+  `production.todayKwh` corrected to `0` (matching reality, no longer
+  mislabeled "measured"), `endOfDay.estimatedSavingsEur` corrected to
+  `€1.14` (a meaningful full-day-projected figure) instead of the
+  previous, misleading `€0`.
+- **Investigated separately, same conversation: "Yesterday" tile "looks
+  very poor"** — screenshotted the live tile via Playwright against
+  production and checked its numbers by hand (grid 12.99 + battery 1.4 +
+  PV 2.36 = 16.75 ✓ matches "used"; spent €3.99 = 12.99 × tariff ✓; saved
+  €1.23 = produced 4.01 × tariff ✓, the correct production-based
+  formula). Found no visual defect (no wrapping, consistent with sibling
+  cards) and no data inconsistency — flagged back to the user rather than
+  guessing at an invisible problem; this one is UNRESOLVED, pending
+  clarification on what specifically looked wrong.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
