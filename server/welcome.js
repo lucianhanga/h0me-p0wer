@@ -83,20 +83,26 @@ export function registerWelcomeRoute(app, deps) {
       production: context.battery.pvLiveToday
         ? { ...ai.production, todayKwh: context.pvProducedTodayKwh }
         : ai.production,
-      // The AI proposes these while narrating (schema requires them for
-      // internal consistency), but the actual NUMBER is always overridden
-      // with the one canonical, production-based calculation (savings.js,
-      // 2026-09-17 fix — was previously just the AI's own arithmetic,
-      // which could drift from what Dashboard/ROI show for the same day).
-      // Uses pvProjectedTodayKwh (a full-day PROJECTION), not
-      // pvProducedTodayKwh (2026-09-18 fix — using the so-far figure gave
-      // "€0 saved today" right next to a note describing the battery about
-      // to discharge several kWh over the rest of the day, since an
-      // end-of-day estimate needs the day's expected TOTAL, not what's
-      // been measured before the sun was even up).
+      // endOfDay.estimatedSavingsEur: derived from THIS SAME CARD's own
+      // toHouseKwh (2026-09-18, second fix same week — user: "it cannot
+      // be only this if you estimate [2.9 kWh to the house]" — €0.17
+      // sat next to "house ≈ 2.9 kWh" because the two numbers came from
+      // completely disconnected calculations: toHouseKwh is the AI's own
+      // forward estimate, while estimatedSavingsEur was independently
+      // derived from pvProjectedTodayKwh — a full-day PRODUCTION
+      // projection with no guaranteed relationship to toHouseKwh at all.
+      // Unlike Dashboard/ROI/Yesterday (real, HISTORICAL measurements,
+      // where production-based accounting matters so today/yesterday/
+      // week/month don't double-count or drift against each other —
+      // see savings.js), this card is a single forward-looking GUESS with
+      // no other card it needs to reconcile against once the day is over
+      // — the REAL, measured, production-based figure appears elsewhere
+      // once today becomes yesterday. Internal coherence with the number
+      // shown right next to it matters more here than matching a
+      // philosophy built for reconciling separate historical cards.
       endOfDay: {
         ...ai.endOfDay,
-        estimatedSavingsEur: savedEur(context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh, config.tariff),
+        estimatedSavingsEur: savedEur(ai.endOfDay?.toHouseKwh, config.tariff),
       },
       week: { ...ai.week, estimateEur: savedEur(ai.production?.weekKwh, config.tariff) },
       // A full refresh naturally refreshes statusQuo too — timestamp it so
