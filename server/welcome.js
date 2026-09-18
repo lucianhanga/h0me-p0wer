@@ -5,7 +5,7 @@
 // the fallback. The route never throws and never leaks config.
 import { kvGet, kvSet } from "./db.js";
 import {
-  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis,
+  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson,
 } from "./welcome-sources.js";
 import {
   buildContext,
@@ -53,11 +53,19 @@ export function registerWelcomeRoute(app, deps) {
 
   async function refresh(config) {
     const geo = await geocode(config.address);
-    const [weather, pvgis] = await Promise.all([
+    const [weather, pvgis, statsOverview] = await Promise.all([
       fetchWeather(geo.lat, geo.lon),
       fetchPvgis(geo.lat, geo.lon, config.pv),
+      // Best-effort: an internal loopback call, same process — should
+      // basically never fail independently of the whole server being
+      // down, but a transient hiccup shouldn't block the whole briefing.
+      fetchJson(deps.statsOverviewUrl)
+        .catch((err) => {
+          console.warn(`[welcome] stats-overview fetch failed (${err.message})`);
+          return null;
+        }),
     ]);
-    const context = buildContext({ config, geo, weather, pvgis, deps });
+    const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
     let ai;
     let aiPowered = Boolean(config.ai.apiKey);
     if (aiPowered) {
@@ -73,15 +81,32 @@ export function registerWelcomeRoute(app, deps) {
     }
     const payload = {
       ...ai,
-      // production.todayKwh: hard backstop, regardless of prompt compliance
-      // (2026-09-18 fix — real incident: the AI substituted a full-day
-      // PVGIS projection, 3.7 kWh, for the actual measured so-far value at
-      // 06:01, an hour before sunrise, when the true figure was ~0 —
-      // displayed as "measured" on the Right now card, which was wrong).
-      // When the PV system is live, this NUMBER is never left to the
-      // model — only its narration (reasoning) is.
+      // production.todayKwh/weekKwh/monthKwh: hard backstop, regardless of
+      // prompt compliance (2026-09-18 fix — real incident: the AI
+      // substituted a full-day PVGIS projection, 3.7 kWh, for the actual
+      // measured so-far value at 06:01, an hour before sunrise, when the
+      // true figure was ~0 — displayed as "measured" on the Right now
+      // card, which was wrong). weekKwh/monthKwh get the SAME treatment
+      // (2026-09-18, second fix same day — user: "week ≈ 11.1 kWh ·
+      // month ≈ 95.4 kWh... which is not correct... check the values from
+      // dashboard... compute them in one place"): both are now Dashboard's
+      // own real, already-computed week/month-to-date production
+      // (statsOverview, fetched once in welcome.js and threaded through
+      // context — see buildContext's comment) rather than a second,
+      // independent AI/PVGIS estimate that could disagree with what
+      // Dashboard shows for the exact same numbers. Falls back to the
+      // AI's own value only if the internal stats fetch itself failed
+      // (statsOverview null) — better a possibly-stale AI guess than a
+      // blank field. When the PV system is live, none of these three
+      // NUMBERS are ever left to the model — only the narration
+      // (reasoning) is.
       production: context.battery.pvLiveToday
-        ? { ...ai.production, todayKwh: context.pvProducedTodayKwh }
+        ? {
+            ...ai.production,
+            todayKwh: context.pvProducedTodayKwh,
+            weekKwh: context.pvProducedWeekToDateKwh ?? ai.production?.weekKwh,
+            monthKwh: context.pvProducedMonthToDateKwh ?? ai.production?.monthKwh,
+          }
         : ai.production,
       // endOfDay.estimatedSavingsEur: derived from THIS SAME CARD's own
       // toHouseKwh (2026-09-18, second fix same week — user: "it cannot
@@ -104,7 +129,13 @@ export function registerWelcomeRoute(app, deps) {
         ...ai.endOfDay,
         estimatedSavingsEur: savedEur(ai.endOfDay?.toHouseKwh, config.tariff),
       },
-      week: { ...ai.week, estimateEur: savedEur(ai.production?.weekKwh, config.tariff) },
+      // Was previously based on ai.production?.weekKwh — already a latent
+      // mismatch (production.weekKwh answers "how much so far", not "how
+      // much through Sunday"), now definitely wrong since weekKwh is
+      // overridden to the real to-date figure above. week.estimateKwh is
+      // the field the AI actually uses for the forward "through Sunday"
+      // projection (see SYSTEM_PROMPT) — that's the correct basis here.
+      week: { ...ai.week, estimateEur: savedEur(ai.week?.estimateKwh, config.tariff) },
       // A full refresh naturally refreshes statusQuo too — timestamp it so
       // the lazy 30-min mini-refresh below knows it doesn't need to.
       today: { ...ai.today, statusQuoUpdatedAt: new Date().toISOString() },

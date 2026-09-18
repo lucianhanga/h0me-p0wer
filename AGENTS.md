@@ -1689,6 +1689,70 @@ EPIPE noise on every client disconnect).
   ahead of the broader averages for estimating what's left of today's
   demand specifically.
 
+## Welcome AI: week/month production now Dashboard's own numbers, via internal loopback (2026-09-18, third same-week fix)
+
+- User: "in the right now tab, you mention week ≈ 11.1 kWh · month ≈
+  95.4 kWh, which is not correct... check the values from dashboard...
+  make sure you compute them in one place and use them all over from
+  that single source of truth." `production.weekKwh`/`monthKwh` were
+  ALWAYS an independent AI/PVGIS climatology projection (per the
+  2026-09-18 first fix's own prompt text: "ALWAYS forward-looking...
+  live or not") — a second, disconnected computation from Dashboard's
+  real `byPeriod.week/month.pvProducedKwh`, guaranteed to diverge once
+  actual weather deviated from the climatology average (95.4 kWh is
+  September's WHOLE-MONTH PVGIS figure; Dashboard's real month-to-date
+  total was a completely different number by the 18th).
+- **Single source of truth, literally, not just "compute it the same
+  way twice"**: rather than re-implement `/api/stats/overview`'s
+  production summation a second time in `welcome-ai.js` (that route's
+  computation spans ~460 lines with real-vs-cloud merging, bucket
+  interpolation, and outage-gap handling accumulated over many prior
+  fixes in this file — reimplementing it risks silently drifting from
+  Dashboard's actual behavior the next time either one changes),
+  `welcome.js`'s `refresh()` now makes an INTERNAL LOOPBACK HTTP call to
+  the server's own `/api/stats/overview` (`deps.statsOverviewUrl =
+  http://127.0.0.1:${PORT}/api/stats/overview`, set once in
+  `index.js`), alongside the existing weather/PVGIS fetches, and threads
+  the result into `buildContext()` as `pvProducedWeekToDateKwh`/
+  `pvProducedMonthToDateKwh`. Best-effort (`.catch(() => null)`) — a
+  transient failure falls back to the AI's own estimate rather than
+  blocking the whole briefing.
+- `production.weekKwh`/`monthKwh` hard-overridden to these real values
+  whenever the PV system is live — same backstop pattern as `todayKwh`
+  from the first fix this week, extended to all three fields together.
+- **Caught and fixed a related latent bug while here**: `week.estimateEur`
+  (the SEPARATE "How this week should end" card, a genuinely
+  forward-looking "through Sunday" projection) was based on
+  `ai.production?.weekKwh` — already a mismatch even before today
+  (`production.weekKwh` and `week.estimateKwh` answer different
+  questions and were never guaranteed to agree), and definitely wrong
+  now that `production.weekKwh` means "so far" (a much smaller number).
+  Changed its basis to `ai.week?.estimateKwh` — the field the AI
+  actually already produces for this specific forward projection.
+- `SYSTEM_PROMPT` rewritten to explicitly distinguish the two
+  ("production.weekKwh (so far, when live) and week.estimateKwh (what's
+  left, always forward) answer different questions"). Frontend label
+  updated ("week so far ≈ …" / "month so far ≈ …" when live) since the
+  field's MEANING changed from a whole-period forecast to a real to-date
+  total. Also fixed `buildFallback()`'s `production.reasoning` text,
+  caught as a side effect of this investigation — it still said
+  "Prorated from PVGIS…" even on the AI-unavailable fallback path where
+  `todayKwh`/`weekKwh`/`monthKwh` get overridden to real measured values
+  regardless (a small, pre-existing staleness from the FIRST fix this
+  week, unnoticed since it only shows when the AI is down).
+- Verified end-to-end against the actual dev server runtime (not just
+  pure-arithmetic checks, since this is a genuinely new mechanism — an
+  internal HTTP call, not just a formula): temporarily ran the dev
+  server with `AI_API_KEY` unset (forces the fallback path, so no AI
+  spend) and confirmed `POST /api/welcome/refresh`'s
+  `production.weekKwh`/`monthKwh` came back EXACTLY matching
+  `GET /api/stats/overview`'s real numbers fetched moments earlier
+  (15.24 / 15.24) — screenshotted the "Right now" card showing "week so
+  far ≈ 15.24 kWh · month so far ≈ 15.24 kWh"; re-ran after the
+  `reasoning` text fix below and confirmed the numbers still tracked
+  Dashboard exactly (16.64 / 16.64, real production having continued
+  accumulating between checks) alongside the corrected text.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
