@@ -73,12 +73,31 @@ export function registerWelcomeRoute(app, deps) {
     }
     const payload = {
       ...ai,
+      // production.todayKwh: hard backstop, regardless of prompt compliance
+      // (2026-09-18 fix — real incident: the AI substituted a full-day
+      // PVGIS projection, 3.7 kWh, for the actual measured so-far value at
+      // 06:01, an hour before sunrise, when the true figure was ~0 —
+      // displayed as "measured" on the Right now card, which was wrong).
+      // When the PV system is live, this NUMBER is never left to the
+      // model — only its narration (reasoning) is.
+      production: context.battery.pvLiveToday
+        ? { ...ai.production, todayKwh: context.pvProducedTodayKwh }
+        : ai.production,
       // The AI proposes these while narrating (schema requires them for
       // internal consistency), but the actual NUMBER is always overridden
       // with the one canonical, production-based calculation (savings.js,
       // 2026-09-17 fix — was previously just the AI's own arithmetic,
       // which could drift from what Dashboard/ROI show for the same day).
-      endOfDay: { ...ai.endOfDay, estimatedSavingsEur: savedEur(context.pvProducedTodayKwh, config.tariff) },
+      // Uses pvProjectedTodayKwh (a full-day PROJECTION), not
+      // pvProducedTodayKwh (2026-09-18 fix — using the so-far figure gave
+      // "€0 saved today" right next to a note describing the battery about
+      // to discharge several kWh over the rest of the day, since an
+      // end-of-day estimate needs the day's expected TOTAL, not what's
+      // been measured before the sun was even up).
+      endOfDay: {
+        ...ai.endOfDay,
+        estimatedSavingsEur: savedEur(context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh, config.tariff),
+      },
       week: { ...ai.week, estimateEur: savedEur(ai.production?.weekKwh, config.tariff) },
       // A full refresh naturally refreshes statusQuo too — timestamp it so
       // the lazy 30-min mini-refresh below knows it doesn't need to.
