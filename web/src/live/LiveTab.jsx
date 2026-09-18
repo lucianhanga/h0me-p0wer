@@ -3,6 +3,7 @@ import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { batteryEtaHours, formatEta } from "../batteryEta.js";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Polls the backend every 5 s (flow/meter) and
@@ -43,6 +44,29 @@ export default function LiveTab() {
   const phases = snapshot?.primary?.phases;
   const battery = flow?.battery;
   const pv = flow?.pv;
+  // Charge/discharge ETA (2026-09-18, user request) — same shared helper as
+  // BatteryTab.jsx; maxPct/floorPct/capacityKwh come from /api/flow's
+  // battery object (server-resolved account limits, see server/index.js).
+  const battMode = battery
+    ? (battery.cells ?? 0) > 0
+      ? "discharging"
+      : battery.charge > 0
+        ? "charging"
+        : "idle"
+    : null;
+  const battEta = battery
+    ? formatEta(
+        batteryEtaHours({
+          mode: battMode,
+          soc: battery.soc,
+          chargeW: battery.charge,
+          cellsW: battery.cells,
+          maxPct: battery.maxPct,
+          floorPct: battery.floorPct,
+          capacityKwh: battery.capacityKwh,
+        }),
+      )
+    : null;
 
   // Badge logic
   const meterDirect = health?.meterDirect ?? live?.connected ?? false;
@@ -114,6 +138,11 @@ export default function LiveTab() {
                     : `idle · ${battery.soc}%`
                 : "offline"}
             </div>
+            {battEta && (
+              <div className="card-label">
+                {battMode === "discharging" ? `empty in ≈ ${battEta}` : `full in ≈ ${battEta}`}
+              </div>
+            )}
           </div>
         </FlipTile>
         <FlipTile>

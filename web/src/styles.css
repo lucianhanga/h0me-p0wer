@@ -1528,12 +1528,26 @@ pre {
   white-space: nowrap;
 }
 
+/* Charge/discharge ETA (2026-09-18) — sits right after batt-status-main,
+   NOT margin-left: auto like batt-status-sub (usable window), which would
+   otherwise fight it for the same "push to the far right" space. */
+.batt-status-eta {
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: #8b98a5;
+  white-space: nowrap;
+}
+
 @media (max-width: 600px) {
   .batt-status {
     font-size: 0.9rem;
   }
 
   .batt-status-sub {
+    font-size: 0.72rem;
+  }
+
+  .batt-status-eta {
     font-size: 0.72rem;
   }
 }

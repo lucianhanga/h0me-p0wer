@@ -13,7 +13,7 @@ const CONFIG_KV_KEY = "battery_config";
 const CONFIG_TTL_MS = 6 * 3600 * 1000;
 
 // A17C3 Solarbank 2 E1600 Plus hardware constants (datasheet).
-const CONSTANTS = {
+export const CONSTANTS = {
   model: "A17C3",
   product: "Solarbank 2 E1600 Plus",
   capacityKwh: 1.6, // LFP

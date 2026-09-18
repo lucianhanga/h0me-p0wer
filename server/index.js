@@ -11,7 +11,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute, deriveBatteryFlow } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, CONSTANTS } from "./battery-params.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
 import { savedEur } from "./savings.js";
@@ -261,7 +261,7 @@ function getPvStringKwhToday() {
   return pvStringKwhCache.result;
 }
 
-app.get("/api/flow", (req, res) => {
+app.get("/api/flow", async (req, res) => {
   const gl = getGridLive();
   const grid = gl.power;
   const gridTs = gl.ts;
@@ -274,6 +274,21 @@ app.get("/api/flow", (req, res) => {
   // flow diagram and the Strategy/Battery tab's charge/discharge readout
   // can never disagree again (they did: see deriveBatteryFlow's comment).
   const { pvToBattery, pvToHome, cellsW, gridChargeW } = deriveBatteryFlow({ pvW, chargeW, outputW });
+  // Limits for the Live tab's charge/discharge ETA (2026-09-18, user
+  // request: "estimate how much time will be full/empty at the current
+  // rate... take in account the observed limits, at discharged including
+  // the extra amount"). getBatteryLimits() reads the same 6 h-cached
+  // account config the Battery tab and power-plan controller already use
+  // — normally resolves from cache instantly, so awaiting it here doesn't
+  // meaningfully slow this 5 s-polled endpoint. dischargeTolerancePct
+  // comes from the SAME power-plan controller instance (not re-derived) —
+  // the "extra amount" the controller pads the account floor by before it
+  // actually stops discharging (see power-plan.js/BatteryTab.jsx).
+  const { dischargeFloorPct, chargeCeilingPct } = await getBatteryLimits(
+    anker,
+    () => latestBattery ?? getLatestBattery(),
+  );
+  const dischargeTolerancePct = powerPlan.getState().dischargeTolerancePct ?? 0;
   res.json({
     ok: true,
     data: {
@@ -301,6 +316,13 @@ app.get("/api/flow", (req, res) => {
             pv2W: b.pv2W ?? 0,
             ts: b.ts ?? null,
             source: "online", // battery data is always cloud (REST/MQTT)
+            // Charge/discharge ETA inputs — see the note above the route.
+            // floorPct is the EFFECTIVE floor (account discharge floor +
+            // the controller's safety margin), not the bare account value —
+            // "including the extra amount" per the user's request.
+            capacityKwh: CONSTANTS.capacityKwh,
+            maxPct: chargeCeilingPct,
+            floorPct: dischargeFloorPct + dischargeTolerancePct,
           }
         : null,
       pv: {
