@@ -1643,6 +1643,52 @@ EPIPE noise on every client disconnect).
   300 W → `3h 31m`) since the live device happened to be right at its
   floor at verification time.
 
+## Welcome AI: endOfDay's savings figure was disconnected from its own card (2026-09-18, second same-week fix)
+
+- User: "How today will end" showed "house ≈ 2.9 kWh" and "≈ €0.17 saved
+  today" side by side — "it cannot be only this if you estimate a
+  production of 2.9kwh". Root cause: `estimatedSavingsEur` (server
+  override, from the 2026-09-17 fix) was based on `pvProjectedTodayKwh` —
+  a full-day PRODUCTION projection with NO guaranteed relationship to
+  `toHouseKwh` (the AI's own, separately-estimated CONSUMPTION-side
+  figure shown right next to it on the same card). The two numbers came
+  from disconnected calculations and could disagree by 5x, as observed
+  (2.9 kWh × tariff ≈ €0.89, not €0.17).
+- **Deliberately NOT "just use production-based accounting here too"**:
+  Dashboard/ROI/Yesterday/This-week-so-far are real, HISTORICAL
+  MEASUREMENTS where production-based accounting matters — it's what
+  keeps today/yesterday/week/month from double-counting or drifting
+  against each other (see `savings.js`'s original rationale). `endOfDay`
+  is a single, forward-looking GUESS with no sibling historical card it
+  needs to reconcile against — once today actually ends, the REAL
+  production-based figure shows up elsewhere (Dashboard's Today tile,
+  eventually Yesterday). For a card whose only job is to read as
+  internally coherent right now, matching the number beside it
+  (`toHouseKwh`) matters more than importing a philosophy built for a
+  different problem (cross-card historical reconciliation).
+- Fix: `estimatedSavingsEur = savedEur(ai.endOfDay?.toHouseKwh,
+  config.tariff)` — hard override, same pattern as before, just a
+  different (now internally-consistent) basis. Verified against the
+  exact reported numbers: `toHouseKwh: 2.9` → `€0.89`, not `€0.17`.
+- **Also enriched context per the user's explicit request** ("get the
+  information on weekly average, last friday, month daily average, the
+  current calendaristic month... and what was produced until now") so
+  the AI's OWN `toHouseKwh`/`toBatteryKwh`/`gridExportKwh`/
+  `batterySocEstimate` estimates are better grounded, not just internally
+  consistent with a number derived after the fact: new
+  `consumption.lastSameWeekday` (the most recent PAST occurrence of
+  today's weekday — a concrete real data point, e.g. "last Friday pulled
+  15.9 kWh" — distinct from the existing `avgImportKwhByWeekday`'s 56-day
+  rolling average; verified in isolation that it picks the MOST RECENT
+  match and excludes today itself, not just any past same-weekday row)
+  and `consumption.monthToDateImportKwh` (a running TOTAL, distinct from
+  the existing `monthToDateAvgImportKwh` average). `pvProducedTodayKwh`
+  ("produced until now") and `pvProjectedTodayKwh` (today's full-day
+  projection) already existed — `SYSTEM_PROMPT`'s endOfDay bullet
+  rewritten to explicitly name all of these and rank `lastSameWeekday`
+  ahead of the broader averages for estimating what's left of today's
+  demand specifically.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

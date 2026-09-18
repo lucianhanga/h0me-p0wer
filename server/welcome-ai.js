@@ -130,6 +130,15 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
   const firstDate = realImports[0]?.date ?? null; // the linking day — partial
   const fullDays = realImports.filter((r) => r.date !== firstDate);
   const mtd = fullDays.filter((r) => r.date.startsWith(ym) && r.date < localDate());
+  // Most recent PAST occurrence of TODAY's weekday — a concrete real data
+  // point ("last Friday actually pulled 15.9 kWh"), distinct from
+  // avgImportKwhByWeekday's 56-day rolling average (2026-09-18, user
+  // request: endOfDay's numbers weren't grounded enough — give the model
+  // a specific recent comparison, not just an average, to reason from).
+  const todayWeekday = WEEKDAYS[now.getDay()];
+  const lastSameWeekday = [...fullDays]
+    .filter((r) => r.date < localDate() && WEEKDAYS[new Date(`${r.date}T12:00:00`).getDay()] === todayWeekday)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0] ?? null;
   const yearRows = sn
     ? getCloudTrend(sn, "year", String(now.getFullYear())).rows
         .map((r) => ({ label: r.time, importKwh: round1(r.import_energy) }))
@@ -166,6 +175,14 @@ export function buildContext({ config, geo, weather, pvgis, deps }) {
         ? round1(fullDays.reduce((a, r) => a + r.importKwh, 0) / fullDays.length)
         : null,
       monthToDateAvgImportKwh: mtd.length ? round1(mtd.reduce((a, r) => a + r.importKwh, 0) / mtd.length) : null,
+      // Running total for the current calendar month so far (distinct from
+      // the average above) — 2026-09-18, user request.
+      monthToDateImportKwh: mtd.length ? round1(mtd.reduce((a, r) => a + r.importKwh, 0)) : null,
+      // Concrete last occurrence of today's weekday — see lastSameWeekday's
+      // comment above for why this is separate from the rolling average.
+      lastSameWeekday: lastSameWeekday
+        ? { date: lastSameWeekday.date, weekday: todayWeekday, importKwh: round1(lastSameWeekday.importKwh) }
+        : null,
       yearMonthlyAvgImportKwh: yearRows,
       todayImportKwhSoFar: round1(todayImportKwh),
     },
@@ -277,7 +294,7 @@ Hard rules:
 - week.upcoming: look ONLY at the forecast days in "week" that are still AHEAD (today and earlier are already in the past) — what the weather means for production/consumption over what's left of the calendar week. Reference specific upcoming weekdays when the forecast is notably better or worse than the rest.
 - week.estimate/estimateKwh/estimateEur: a projection for how the REST of the CALENDAR week (through Sunday) will likely turn out — production total and rough savings — consistent with production.weekKwh and tariffEurPerKwh. This is a forward-looking estimate, not a summary of days already past (that's a separate, deterministic card the app builds itself).
 - strategy.effectiveBehavior describes what the battery is ACTUALLY doing right now — it can differ from what the strategy name alone implies (e.g. a Manual override). Ground statusQuo, endOfDay, and week.upcoming/estimate in it: if the effective behavior says the battery never discharges, don't predict it topping up the house tonight or over the week — describe the grid covering that demand instead; if it says the battery continuously discharges, reflect that as the ongoing pattern, not a one-off.
-- endOfDay projects the FULL day's outcome, not just what's already happened — base toHouseKwh/toBatteryKwh/batterySocEstimate on pvProjectedTodayKwh (today's expected total production) combined with the consumption averages, not on pvProducedTodayKwh alone (that's just what's measured so far and can be ~0 early in the day even on a day that will produce plenty).
+- endOfDay projects the FULL day's outcome, not just what's already happened. Ground toHouseKwh/toBatteryKwh/gridExportKwh/batterySocEstimate in ALL of: pvProducedTodayKwh (already produced, real), pvProjectedTodayKwh (today's expected FULL-day total — the remainder still to come is the gap between these two), consumption.todayImportKwhSoFar (grid drawn already), and for what demand likely still looks like today specifically use consumption.lastSameWeekday (a concrete recent same-weekday day, e.g. "last Friday pulled 15.9 kWh") ahead of the broader avgImportKwhByWeekday/avgImportKwhPerDay/monthToDateAvgImportKwh/monthToDateImportKwh figures, which are for context/sanity-checking, not the primary estimate. estimatedSavingsEur MUST be consistent with toHouseKwh specifically (roughly toHouseKwh × tariffEurPerKwh) — this is what's displayed right next to it on the same card, so a savings number implying much more or less energy than toHouseKwh shows will look visibly wrong to the user even if each number is independently defensible.
 - Estimates (production, end-of-day battery, savings, week) must be consistent with the context: consumption averages, battery SOC, tariff.
 - Currency: EUR. Language for all prose: see language field. Every statement ≤ 3 sentences, plain and friendly — statusQuo can be shorter/punchier, it's a quick glance, not a report.`;
 
