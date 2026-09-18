@@ -1582,6 +1582,67 @@ EPIPE noise on every client disconnect).
   guessing at an invisible problem; this one is UNRESOLVED, pending
   clarification on what specifically looked wrong.
 
+## Battery charge/discharge ETA, everywhere the battery is shown (2026-09-18, user request)
+
+- User: "all over the place where you have the battery displayed and also
+  that is charging or discharging also estimate in how much time will be
+  full respectively empty at the current rate. take in account the
+  observed limits for charge and discharged (at discharged including the
+  extra amount)." Found exactly two live charge/discharge status
+  readouts in the app (grepped every `.jsx` for "charging"/"discharging"
+  — `GraphTab.jsx`'s hit is just historical chart-series legend labels,
+  not a live status, no change needed there): the Live tab's Battery
+  FlipTile (`LiveTab.jsx`) and the Battery/Strategy tab's status card
+  (`BatteryTab.jsx`, embedded inside `StrategyTab.jsx` — fixing it once
+  covers both tabs).
+- "Full"/"empty" are NOT 0%/100% — per the request, they're the account's
+  configured charge ceiling and the controller's EFFECTIVE discharge
+  floor (account floor + `DISCHARGE_TOLERANCE_PCT` safety margin, i.e.
+  "the extra amount" — the exact same effective-floor concept
+  `BatteryTab.jsx` already visualizes as a second gauge tick, from the
+  2026-09-17 "why does it stop at 14%, not 10%" session).
+- New shared `web/src/batteryEta.js` (`batteryEtaHours()` +
+  `formatEta()`) — used identically by both components so they can never
+  compute this differently. `batteryEtaHours()`: charging →
+  `(maxPct - soc)/100 * capacityKwh / (chargeW/1000)` hours; discharging
+  → `(soc - floorPct)/100 * capacityKwh / (cellsW/1000)` hours; both
+  clamped to ≥ 0 (handles the edge case where SOC has already crossed the
+  threshold, e.g. mid-transition). `formatEta()`: `< 1 min` / `N min` /
+  `Nh` / `NhMm`.
+- **`LiveTab.jsx` needed data it didn't have** (`capacityKwh` — a
+  hardware constant, `maxPct`/`floorPct` — account config resolved via
+  `getBatteryLimits()`, a 6 h-cached call, not something to newly poll on
+  every 5 s tick). Rather than add a second fetch cycle to the Live tab,
+  extended `/api/flow`'s existing `battery` object (server/index.js) with
+  these three fields — the SAME `getBatteryLimits()` the power-plan
+  controller and Battery tab already use (never re-derived), plus
+  `dischargeTolerancePct` read directly off the live `powerPlan` instance
+  (not re-imported as a separate constant). `/api/flow`'s handler is now
+  `async`/`await`s this — normally resolves from the 6 h cache instantly,
+  so no meaningful latency added to a 5 s-polled endpoint. `CONSTANTS`
+  exported from `battery-params.js` (was module-private) so `index.js`
+  can reuse `CONSTANTS.capacityKwh` instead of hardcoding `1.6` a second
+  time.
+- **`BatteryTab.jsx`**: already had every input locally (`constants`,
+  `config`, `dischargeTolerancePct` prop, `effectiveFloorPct`) — just
+  wired `batteryEtaHours()`/`formatEta()` in, displayed as
+  `full in ≈ …`/`empty in ≈ …` right after the existing "charging
+  320 W"/"discharging 320 W" text. New CSS class `.batt-status-eta`
+  DELIBERATELY separate from the existing `.batt-status-sub` (which has
+  `margin-left: auto` for the "usable window" label, already at the far
+  right of the same flex row) — reusing that class for the ETA too would
+  have put two auto-margined items fighting for the same space instead
+  of reading left-to-right as two distinct pieces of info.
+- Verified end-to-end against the dev server's real (if momentarily
+  right-at-the-floor) battery data — `soc:13%, floor:14%` produced
+  `empty in ≈ < 1 min` (correctly clamped, not a negative/broken value)
+  on both the Live tab's Battery tile and the Strategy tab's status card,
+  at both desktop (900px) and phone (375px) widths, no wrapping. Charging
+  and a comfortably-above-floor discharging case verified separately via
+  pure-function checks (`soc:60→95%` at 400 W → `1h 24m`; `soc:80→14%` at
+  300 W → `3h 31m`) since the live device happened to be right at its
+  floor at verification time.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

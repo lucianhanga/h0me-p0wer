@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { batteryEtaHours, formatEta } from "../batteryEta.js";
 
 // Rendered inside StrategyTab.jsx (moved out of its own top-level tab
 // 2026-09-16) — the gauge stays visible, the detailed param cards below
@@ -88,6 +89,17 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
     minPct != null && maxPct != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
       : null;
+  const etaLabel = formatEta(
+    batteryEtaHours({
+      mode,
+      soc,
+      chargeW,
+      cellsW,
+      maxPct,
+      floorPct: effectiveFloorPct ?? minPct,
+      capacityKwh: constants?.capacityKwh,
+    }),
+  );
 
   return (
     <div>
@@ -153,6 +165,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
                     <span>▲</span>
                   </span>
                   <span className="batt-status-main">⚡ charging {fmtW(chargeW)}</span>
+                  {etaLabel && <span className="batt-status-eta">full in ≈ {etaLabel}</span>}
                 </>
               )}
               {mode === "discharging" && (
@@ -163,6 +176,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
                     <span>▼</span>
                   </span>
                   <span className="batt-status-main">⏏ discharging {fmtW(cellsW)}</span>
+                  {etaLabel && <span className="batt-status-eta">empty in ≈ {etaLabel}</span>}
                 </>
               )}
               {mode === "idle" && <span className="batt-status-main">idle</span>}
