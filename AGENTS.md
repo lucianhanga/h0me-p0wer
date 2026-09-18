@@ -1503,6 +1503,15 @@ EPIPE noise on every client disconnect).
   Week/This Month/This Year) — Grid rows now show only the kWh value, the
   bottom summary line is unaffected, "To battery"'s "stored" label
   (Today's tile only) still renders correctly.
+- **Immediate follow-up regression, same day**: removing Grid's second
+  line left "To battery" as the ONLY row with a secondary label, and
+  `.src-value`'s existing `flex-direction: column` (deliberately built so
+  kWh/€ stack on two lines — fine when Grid ALSO had two lines) now made
+  that one row's "stored" text wrap onto its own line below the kWh
+  value, looking inconsistent next to every other now-single-line row.
+  Changed `.src-value` to `flex-direction: row` (kWh and "stored" inline,
+  same line) — verified visually, "To battery" now matches the single-line
+  height of every other row.
 
 ## Dashboard channel audit (2026-09-15)
 

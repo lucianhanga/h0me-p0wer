@@ -758,15 +758,18 @@ pre {
   flex: 1;
 }
 
-/* Uniform right column: kWh on the first line, €/stored below it — every
-   row in every tile aligns the same way, no ragged wrapping. */
+/* Right column: kWh, plus "stored" inline next to it for the one row that
+   has it (To battery) — single line, no stacking (2026-09-17: stacking
+   onto a second line looked fine while Grid also had a second line of its
+   own, but became the odd one out once Grid's redundant €-spent label was
+   removed). */
 .src-value {
   margin-left: auto;
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.35rem;
   text-align: right;
-  line-height: 1.3;
 }
 
 .src-kwh {
