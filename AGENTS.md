@@ -2042,6 +2042,9 @@ EPIPE noise on every client disconnect).
     of history so far, the same day can appear in both tiles (the
     median day is simultaneously in the top-3 and bottom-3 of a small
     pool) — resolves itself as more days accumulate.
+  - Follow-up same day: `formatDayLabel` added `year: "numeric"` (user
+    request) — dates now read e.g. "Tue, Sep 15, 2026", useful once this
+    ranking spans multiple years.
 
 ## Dashboard channel audit (2026-09-15)
 
