@@ -1930,6 +1930,55 @@ EPIPE noise on every client disconnect).
   floor), `soc:14` → `target:530` (above it) — the exact boundary
   shifted down by 1 point as intended.
 
+## Anker API audit against `docs/ANKER_SOLIX_API_v3.23.0.md` (2026-09-19, user request)
+
+- User added a reverse-engineered Anker SOLIX Cloud API reference (extracted
+  from the app's `libapp.so`, app version 3.23.0) and asked to check every
+  API call this codebase makes against it, with "special attention" on the
+  battery-limit reads. Grepped every Anker endpoint path in `server/*.js`
+  and cross-checked each one against the doc. **Conclusion: no code changes
+  — every endpoint in active use is either explicitly confirmed current by
+  the doc, or empirically proven working and intentionally left alone.**
+  - `power_service/v1/site/{get_site_device_param,set_site_device_param,
+    get_site_list,get_scen_info,list_user_devices,energy_analysis}` and
+    `power_service/v1/app/get_relate_and_bind_devices` — all listed
+    *(community-verified)* in the doc, byte-for-byte matching what
+    `anker-cloud.js`/`power-plan.js` already call.
+  - `power_service/v2/device/energy_analysis` (`anker-cloud.js`
+    `getDeviceEnergyAnalysis`, used for the Smart Meter's device-level
+    history) matches the doc's §5 v2 surface exactly (marked *(inferred)*
+    there, but the name/shape already works against this account).
+  - **Battery limits** (`battery-params.js`'s `CUTOFF_EP =
+    "power_service/v1/app/compatible/get_power_cutoff"`): the doc doesn't
+    give this one its own row, but its §4.5 bucket description for
+    `power_service/v1/app/compatible/*` explicitly names "power cutoff" —
+    confirming this is a real, documented endpoint family, not a
+    community guess. `fetchConfig()`'s priority order (get_power_cutoff
+    first, then param_type 18, then 27, then the schedule-6 fallback) is
+    unchanged and still correct — the doc doesn't describe a more direct
+    path for this hardware than what's already implemented (see the
+    2026-09-16 entry's `thomluther/anker-solix-api#304` citation for why
+    18/27 are genuinely empty on this bare-SB2 account).
+  - **Auth** (`anker-cloud.js`): the doc's community-verified §2.1 login
+    describes an MD5-hashed password and an `appName` header; the actual
+    code does an ECDH-P256 + AES-256-CBC crypto handshake
+    (`createLoginCrypto`) and sends `"app-name"` (hyphenated). Left
+    unchanged — this is a newer, more secure login variant that has been
+    logging in and refreshing tokens correctly all session; the doc's
+    extraction reflects string literals found in the binary, not a
+    verified wire capture, and switching a working auth flow on doc text
+    alone is exactly the risk the doc's own intro warns against.
+  - **MQTT** (`mqtt.js`): provisions via
+    `app/devicemanage/get_user_mqtt_info`, which does not appear anywhere
+    in this doc at all — the doc's §19 only documents a separate
+    `akiot.mqtt.*` provisioning family, most likely for the HES/X1/Power
+    Dock product line the doc's own text calls out, not Solarbank 2's
+    real-time push. Left unchanged: it's the channel this whole session's
+    battery-flow work has depended on and verified live; the doc explicitly
+    requires a fresh mitmproxy capture before trusting an unverified
+    endpoint swap, and `akiot.mqtt.*` is marked *(inferred)* with no
+    payload shapes given.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
