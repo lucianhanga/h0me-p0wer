@@ -2150,6 +2150,23 @@ EPIPE noise on every client disconnect).
 - `.todaymini-chart`/`.todaymini-empty` CSS added — floor height 90px
   (vs. `.back-bars`' 120px), matched to the Live tab's much shorter
   `.card` front faces (3 short lines vs. Dashboard's taller stat cards).
+- **Follow-up same day, user: "for the battery show also the loading
+  part"** — the shipped battery series (`profile.batt` =
+  `output_w − charge_w`) conflated PV pass-through with real charging and
+  rarely showed a clear negative (charging) excursion, unlike the front
+  tile's clean cells-vs-charge split. Root fix, not a display tweak:
+  `/api/stats/overview` (`server/index.js`) gained a fourth anchor map,
+  `chargeAnchors` (bucketed `Math.max(0, r.charge_w ?? 0)` from the same
+  `getBatteryHistory()` loop that already builds `battAnchors`/
+  `cellsAnchors`/`pvAnchors`), interpolated the same gap-aware way, and
+  exposed as a new `profile[].chargeW` field. No cloud-day-trend fallback
+  exists for it — that series is discharge-only (see the ROI BOM entry's
+  sibling finding), local samples only, same limitation `pv_daily.to_batt`
+  already has. `LiveTab.jsx`'s `battSeries` changed from `p.batt` to
+  `(p.cells ?? 0) - (p.chargeW ?? 0)` — now matches the front tile's own
+  cells/charge distinction exactly: positive = discharging, negative =
+  charging ("loading"), verified live (screenshot showed clear negative
+  dips against the zero-line where charging occurred).
 
 ## Dashboard channel audit (2026-09-15)
 
