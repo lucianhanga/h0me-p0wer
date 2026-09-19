@@ -1898,6 +1898,19 @@ EPIPE noise on every client disconnect).
 - Verified visually via Playwright — confirmed all three colors render
   correctly across every tile in one full-page screenshot, matching the
   intended Dashboard/Graph palette exactly.
+- **Immediate follow-up, same conversation**: user asked for money too
+  ("also use the same color codes for money"). Dashboard's own `.src-money`
+  line (spent/saved) turned out to be flat grey, no color — so there was
+  no DIRECT precedent to copy for €-figures specifically. Extended the
+  same LOGIC instead: "spent €X" is grid cost → `.wx-c-grid` (orange,
+  matching the Live tab's `.card-value.import` convention — grid
+  import literally costs money); "saved €X" is the app's production-based
+  savings figure (`savedEur()`, `server/savings.js`) → `.wx-c-pv` (green,
+  since savings are computed FROM production throughout this codebase,
+  not from battery discharge). Applied everywhere €spent/€saved appears:
+  Yesterday, This week so far, "How today will end", "How this week
+  should end". Verified visually — all four spent/saved pairs render
+  orange/green consistently.
 
 ## Dashboard channel audit (2026-09-15)
 
