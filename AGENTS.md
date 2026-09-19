@@ -2115,6 +2115,42 @@ EPIPE noise on every client disconnect).
     €1,461.99) and grand total (€2,366.33), and a clean page break
     between "Purchased" and "Planned" with no cut-off content.
 
+## Live tab: today mini-charts on tile flip (2026-09-19, user request)
+
+- User: "on the live tab when I flip the tiles show me graphs of the
+  values for today ... nothing fancy, no zooming, scrolling, just to
+  simply visualize what is on front of the tiles for the day."
+- New `web/src/live/TodayMiniChart.jsx`: a deliberately bare ECharts
+  line (`animation: false`, no legend/toolbox/dataZoom, muted axes) —
+  same minimal spirit as Dashboard's `BackBars`, but a line instead of
+  bars since these are continuous power readings, not per-bucket
+  totals. Optional `zeroLine` prop (dashed reference line at 0) for the
+  two signed metrics.
+- No new backend endpoint: reused `/api/stats/overview`'s existing
+  `profile` array (30-min buckets, already computed for the Dashboard's
+  "Today" tile) — `LiveTab.jsx` now also fetches it, on its own 60 s
+  interval (independent of the 5 s live-flow poll; today's shape doesn't
+  need that freshness), best-effort like every other secondary fetch in
+  this app.
+- Per-tile series, deliberately reusing existing fields rather than
+  inventing new ones (see the code comment for the reasoning):
+  `grid` ← `profile.power` (already signed, matches the Grid tile
+  exactly); `battery` ← `profile.batt` (signed net flow, + discharge /
+  − charge); `Solar PV` ← `profile.pvHome` (PV-to-house — the same
+  field the Dashboard's own PV bars already use, not total production;
+  kept one PV definition instead of introducing a second); `House` ←
+  reconstructed the same way the Dashboard's hourly bars are (grid
+  import + battery discharge + PV-to-house, all clamped ≥ 0).
+  `connectNulls: false` so a real gap (e.g. before sunrise, no pvHome
+  data) reads as a gap, not a guessed line across it.
+  Scoped to just the 4 main `.cards` tiles (House/Grid/Battery/Solar
+  PV) — the collapsed "Details" section's per-phase/per-PV-string
+  FlipTiles are left with an empty back (no per-phase/per-string history
+  exists to graph without new backend work, not requested).
+- `.todaymini-chart`/`.todaymini-empty` CSS added — floor height 90px
+  (vs. `.back-bars`' 120px), matched to the Live tab's much shorter
+  `.card` front faces (3 short lines vs. Dashboard's taller stat cards).
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
