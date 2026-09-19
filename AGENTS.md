@@ -1833,6 +1833,44 @@ EPIPE noise on every client disconnect).
   foggy start, not an inactive system" — exactly the target behavior,
   never once describing the system as planned or not yet live.
 
+## Welcome tab UX polish: formatting + subtle entrance/hover (2026-09-19)
+
+- User: "enhance a bit the UX of the tiles. add a bit of formating and
+  animations, but keep it spartan! like is now." Explicitly conservative
+  by request — reused the existing subtle animation language already on
+  this tab (icon-breathe, sun-marker-pulse, live-dot-pulse: all slow,
+  quiet, `prefers-reduced-motion`-aware) rather than introducing a new
+  visual style.
+- **Formatting**: new `fmt1`/`fmtEur`/`fmtPct` helpers in
+  `WelcomeTab.jsx`, applied to EVERY numeric display in the tab — server
+  numbers already round consistently (`round1`/`r2`), but AI-returned
+  numbers (`toHouseKwh`, `estimateKwh`, etc.) are only schema-typed as
+  `number`, no fixed precision, so raw values could show "2" next to
+  "2.34" on the same tab. `fmtPct` is deliberately SEPARATE from `fmt1`
+  (not just kWh formatting reused for percentages) — a first pass
+  applied `fmt1` everywhere including `batterySocEstimate`, producing
+  "battery ≈ 100.0%", which reads oddly against how SOC is shown
+  everywhere else in the app (BatteryTab, StrategyTab: whole numbers,
+  no decimal) — caught via screenshot review, not assumed correct.
+- **Entrance animation**: new `wx-tile-in` keyframe (fade + 6px rise,
+  0.35s ease-out) applied to the hero, weather tile, and each `.wx-grid`
+  card, staggered ~0.04s apart via `:nth-child`. Cards mount once per
+  session — React updates their content on each 5-min poll without
+  recreating the DOM nodes, so this plays once on arrival, not as a
+  flicker on every refresh (verified this reasoning by checking the
+  component structure, not assumed).
+- **Hover**: small `translateY(-2px)` + brighter border on `.wx-grid
+  .card`, 0.15s — a tactile hint the corner speak button is there, not a
+  scale/shadow effect.
+- Added the new `wx-tile-in` animation and `.wx-hero`/`.wx-today` to the
+  existing `@media (prefers-reduced-motion: reduce)` exclusion block
+  (already covered the icon/pulse animations) rather than starting a
+  second one.
+- Verified visually via Playwright: full-page screenshot after the
+  entrance settles (confirming the percentage fix), and a tight
+  element-level screenshot of a hovered tile confirming the border/lift
+  render without breaking layout.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
