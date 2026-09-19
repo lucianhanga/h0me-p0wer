@@ -2167,6 +2167,21 @@ EPIPE noise on every client disconnect).
   cells/charge distinction exactly: positive = discharging, negative =
   charging ("loading"), verified live (screenshot showed clear negative
   dips against the zero-line where charging occurred).
+- **Second same-day follow-up, user: "show both load and unload in the
+  flipped tile"** (sent in parallel with the architecture review below,
+  explicitly asked to be branched/merged before that finished) — the
+  single signed purple line only distinguished direction by which side
+  of zero a point fell on; color didn't reinforce it. `TodayMiniChart.jsx`
+  generalized from a single `data`/`color` pair to a `lines` array (one
+  entry per series: `{data, color, name}`) — House/Grid/PV pass one
+  line each (unchanged behavior), Battery now passes two:
+  `battDischargeSeries` (`Math.max(cells, 0)`, purple `#c084fc`, matches
+  the front tile's discharging color) and `battChargeSeries`
+  (`-Math.max(chargeW, 0)`, grey `#8b98a5`, matching Dashboard's
+  established "To battery"/`BATT_IN_ROW` charge color) — same zero-line
+  separation as before, now reinforced by color too. Verified live via
+  a zoomed screenshot of the flipped Battery tile: discharging renders
+  as a purple area above zero, charging as a grey area below.
 
 ## Dashboard channel audit (2026-09-15)
 

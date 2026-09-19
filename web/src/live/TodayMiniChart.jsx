@@ -1,16 +1,24 @@
 import { useEffect, useRef } from "react";
 import echarts from "../echarts.js";
 
-// Nothing-fancy today-so-far line for a Live tab tile's flip side: no zoom,
-// no scroll, no legend — just the day's shape for that one metric
+// Nothing-fancy today-so-far line(s) for a Live tab tile's flip side: no
+// zoom, no scroll, no legend — just the day's shape for that tile's metric
 // (2026-09-19, user request: "just to simply visualize what is on front of
 // the tiles for the day"). Same minimal-ECharts spirit as Dashboard's
 // BackBars (animation off, transparent bg, muted axes).
-export default function TodayMiniChart({ data, color, unit = "W", zeroLine = false }) {
+//
+// `lines`: one entry per series, e.g. a single metric (Grid, PV, House) is
+// one line; the Battery tile — which shows two distinct directions,
+// discharging and charging — passes two, each with its own color, rather
+// than one signed line where the direction was only distinguishable by
+// which side of zero it fell on (2026-09-19, same-day follow-up: "show
+// both load and unload").
+export default function TodayMiniChart({ lines, unit = "W", zeroLine = false }) {
   const ref = useRef(null);
+  const hasData = lines?.some((l) => l.data?.length);
 
   useEffect(() => {
-    if (!data?.length) return undefined;
+    if (!hasData) return undefined;
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption({
       animation: false,
@@ -35,15 +43,16 @@ export default function TodayMiniChart({ data, color, unit = "W", zeroLine = fal
         axisLabel: { color: "#8b98a5", fontSize: 9 },
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
-      series: [
-        {
-          type: "line",
-          showSymbol: false,
-          connectNulls: false,
-          lineStyle: { color, width: 2 },
-          areaStyle: { color, opacity: 0.12 },
-          data,
-          markLine: zeroLine
+      series: lines.map(({ data, color, name }, i) => ({
+        name,
+        type: "line",
+        showSymbol: false,
+        connectNulls: false,
+        lineStyle: { color, width: 2 },
+        areaStyle: { color, opacity: 0.12 },
+        data,
+        markLine:
+          zeroLine && i === 0
             ? {
                 silent: true,
                 symbol: "none",
@@ -52,8 +61,7 @@ export default function TodayMiniChart({ data, color, unit = "W", zeroLine = fal
                 data: [{ yAxis: 0 }],
               }
             : undefined,
-        },
-      ],
+      })),
     });
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(ref.current);
@@ -61,8 +69,8 @@ export default function TodayMiniChart({ data, color, unit = "W", zeroLine = fal
       ro.disconnect();
       chart.dispose();
     };
-  }, [data, color, unit, zeroLine]);
+  }, [lines, unit, zeroLine, hasData]);
 
-  if (!data?.length) return <p className="muted todaymini-empty">no data yet today</p>;
+  if (!hasData) return <p className="muted todaymini-empty">no data yet today</p>;
   return <div ref={ref} className="todaymini-chart" />;
 }
