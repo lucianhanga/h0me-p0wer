@@ -2,7 +2,6 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  getCloudTrend,
   getAnyDeviceSn,
   getBatterySn,
   getPvDaily,
@@ -15,6 +14,7 @@ import { buildBomPdf } from "./roi-pdf.js";
 import { getBaseline, computeBaseline } from "./roi-baseline.js";
 import { parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
 import { savedEur } from "./savings.js";
+import { dayBattery } from "./energy-day.js";
 
 // Bill of materials with SNAPSHOTTED purchase prices — user-editable config.
 // ROI math must use the prices paid, never live prices, so rows carry their
@@ -50,20 +50,14 @@ function loadBom() {
   }
 }
 
-// Battery cells discharge kWh for one date: integrate the battery SN's
-// cloud day-trend (signed 20-min power, discharge +), positive part only.
-// The trend is ALREADY cells-only (verified numerically in the dashboard
-// channel audit: cloud 0.41 ≈ local cells 0.34, NOT the inverter output),
-// so it never overlaps the PV channel — do NOT subtract pvToHome here.
+// Battery cells discharge kWh for one date — see energy-day.js's
+// dayBattery(). The trend is ALREADY cells-only (verified numerically in
+// the dashboard channel audit: cloud 0.41 ≈ local cells 0.34, NOT the
+// inverter output), so it never overlaps the PV channel — do NOT subtract
+// pvToHome here.
 function cellsKwhForDay(battSn, dateStr) {
-  if (!battSn) return { cellsKwh: 0, hasRows: false };
-  const rows = getCloudTrend(battSn, "day", dateStr).rows;
-  let disKwh = 0;
-  for (const r of rows) {
-    if (r.power == null || r.power <= 0) continue;
-    disKwh += (r.power * (20 / 60)) / 1000;
-  }
-  return { cellsKwh: disKwh, hasRows: rows.length > 0 };
+  const { dischargedKwh, hasRows } = dayBattery(battSn, dateStr);
+  return { cellsKwh: dischargedKwh, hasRows };
 }
 
 // Measured per-day savings from installDate to YESTERDAY (today is
