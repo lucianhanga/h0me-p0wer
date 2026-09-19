@@ -2046,6 +2046,46 @@ EPIPE noise on every client disconnect).
     request) — dates now read e.g. "Tue, Sep 15, 2026", useful once this
     ranking spans multiple years.
 
+## ROI BOM: "Extended (not yet purchased)" section (2026-09-19, user request)
+
+- User: "add also this to BOM but don't enable it yet. there is already
+  the cover for the battery which is on the list but not enabled. make
+  the extended list where you put that one and also [the BP5000] ... this
+  list display it like you displaye the cover for now" — a new Anker
+  Solix BP5000 (5 kWh expansion battery for the Anker SOLIX **4 Pro**
+  line, €1.049,00, solago.de) plus the existing battery weather cover
+  (previously just `excluded: true` sitting first in the main list)
+  should move into their own "extended"/optional section, both flagged
+  not-yet-purchased.
+- `server/roi-bom.json`: added `"category": "extended"` to the existing
+  cover row (`B0H2HZWTX9`) and to a new `BP5000` row (`excluded: true`,
+  synthetic asin like the existing `PVMOUNT` non-Amazon entry — the field
+  is just a lookup key, not validated as a real ASIN). `desc` flags the
+  compatibility caveat plainly: the BP5000 is built for the SOLIX 4 Pro,
+  not the E1600 Plus actually installed here — tracked as a possible
+  future upgrade path, not a confirmed-compatible add-on.
+- `server/roi.js`/`roi-pdf.js`: untouched — `bom.map((r) => ({...r, ...}))`
+  already spreads every field through, so `category` flows to both the
+  JSON payload and the PDF for free; the PDF keeps listing every row
+  flat with "(not counted)" for excluded ones (no section break there —
+  out of scope for a hand-rolled PDF layout, not requested).
+  `totalInvestedEur`'s existing `excluded`-skips-the-sum logic already
+  covered the new row with no change.
+- `web/src/roi/RoiTab.jsx`: extracted the existing inline BOM row JSX
+  into a shared `BomRow` component (same thumbnail/name/qty×price/line-
+  total/"not counted" markup for both sections — the user's ask was to
+  "display it like you display the cover for now"). `data.bom` split
+  into `mainBom` (`category !== "extended"`) and `extendedBom`
+  (`category === "extended"`) client-side; a second `.card` — "Extended
+  (not yet purchased)" — renders only when `extendedBom.length > 0`.
+  Generalized the row's hover title from the hardcoded "— open on
+  Amazon" to "— view product" since this list now has a non-Amazon item.
+- Product photo: fetched from solago.de's CDN (PNG despite the `.webp`
+  URL extension — Shopify content-negotiates by Accept header), converted
+  to a real JPEG and resized to 400×400 (`sips`, matching the existing
+  thumbnail dimensions) at `server/roi-images/BP5000.jpg`, committed —
+  same "fetched once, committed to git" pattern as every other BOM image.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

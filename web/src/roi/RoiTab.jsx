@@ -75,6 +75,12 @@ export default function RoiTab() {
   const planDiffers = data.paybackDate !== data.outlookPaybackDate;
   const tracking = data.performanceRatioPct != null;
   const ahead = tracking && data.performanceRatioPct >= 100;
+  // "Extended" = optional add-ons not yet bought (currently: the battery
+  // weather cover, and the BP5000 expansion module) — kept visible for
+  // reference/planning but split out of the actual system's BOM so the
+  // main list stays "what's installed," matching category in roi-bom.json.
+  const mainBom = data.bom.filter((r) => r.category !== "extended");
+  const extendedBom = data.bom.filter((r) => r.category === "extended");
 
   return (
     <div>
@@ -153,28 +159,8 @@ export default function RoiTab() {
             Download PDF
           </a>
         </div>
-        {data.bom.map((r) => (
-          <a
-            className={`roi-bom-row${r.excluded ? " excluded" : ""}`}
-            key={r.asin}
-            href={r.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={`${r.name} — open on Amazon`}
-          >
-            <img className="roi-bom-thumb" src={`/api/roi/image/${r.asin}`} alt="" loading="lazy" />
-            <span className="roi-bom-name">
-              {r.estimated ? <span className="roi-est">~</span> : null}
-              {r.name}
-              {r.excluded ? <span className="roi-excl-tag">not counted</span> : null}
-            </span>
-            <span className="roi-bom-nums">
-              <span className="roi-bom-qty">
-                {r.qty} × {fmtEur(r.unitPriceEur)}
-              </span>
-              <span className="roi-bom-price">{fmtEur(r.lineTotalEur)}</span>
-            </span>
-          </a>
+        {mainBom.map((r) => (
+          <BomRow key={r.asin} r={r} />
         ))}
         <div className="roi-total-row">
           <span>Total invested</span>
@@ -187,6 +173,19 @@ export default function RoiTab() {
           <span className="roi-est">~</span> = estimated, please correct.
         </p>
       </div>
+
+      {extendedBom.length > 0 && (
+        <div className="card">
+          <h4>Extended (not yet purchased)</h4>
+          {extendedBom.map((r) => (
+            <BomRow key={r.asin} r={r} />
+          ))}
+          <p className="muted">
+            Optional add-ons under consideration — kept here for reference, excluded from
+            "Total invested" until actually bought.
+          </p>
+        </div>
+      )}
 
       <h4>Projection (baseline estimate)</h4>
       <div className="tiles roi-proj">
@@ -214,6 +213,34 @@ export default function RoiTab() {
         it moves as new days are measured, unlike the fixed baseline plan.
       </p>
     </div>
+  );
+}
+
+// One BOM/extended-list row — shared so both sections render identically
+// (thumbnail, name, qty × unit price, line total, "not counted" tag for
+// excluded rows).
+function BomRow({ r }) {
+  return (
+    <a
+      className={`roi-bom-row${r.excluded ? " excluded" : ""}`}
+      href={r.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`${r.name} — view product`}
+    >
+      <img className="roi-bom-thumb" src={`/api/roi/image/${r.asin}`} alt="" loading="lazy" />
+      <span className="roi-bom-name">
+        {r.estimated ? <span className="roi-est">~</span> : null}
+        {r.name}
+        {r.excluded ? <span className="roi-excl-tag">not counted</span> : null}
+      </span>
+      <span className="roi-bom-nums">
+        <span className="roi-bom-qty">
+          {r.qty} × {fmtEur(r.unitPriceEur)}
+        </span>
+        <span className="roi-bom-price">{fmtEur(r.lineTotalEur)}</span>
+      </span>
+    </a>
   );
 }
 
