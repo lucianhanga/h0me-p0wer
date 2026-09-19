@@ -1912,6 +1912,24 @@ EPIPE noise on every client disconnect).
   should end". Verified visually — all four spent/saved pairs render
   orange/green consistently.
 
+## battery_priority: discharge tolerance lowered 4→3 points (2026-09-19)
+
+- User: "change the floor from 14% to 13% (I mean the defined SOC + 3%)."
+  `DISCHARGE_TOLERANCE_PCT` (`power-plan.js`) default changed from 4 to
+  3 — the effective floor `dischargeToTarget()` won't discharge below
+  (account `dischargeFloorPct` + this margin) is now 13% on a 10%
+  account floor, was 14%. Affects `house_priority` (always) and
+  `battery_priority`'s hold-phase (once full, behaves like
+  `house_priority` — see the 2026-09-17 entries). No frontend change
+  needed: `BatteryTab.jsx`'s `effectiveFloorPct`/gauge marker/tooltip
+  are all computed dynamically from the server's `dischargeTolerancePct`
+  (`/api/power-plan`), never hardcoded — updated two comments that
+  cited "14%" as a worked example to keep them accurate, but the
+  actual rendering was already correct by construction. Verified via
+  `dischargeToTarget()` directly: `soc:13` → `target:0` (at the new
+  floor), `soc:14` → `target:530` (above it) — the exact boundary
+  shifted down by 1 point as intended.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

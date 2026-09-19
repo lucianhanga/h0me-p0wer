@@ -60,7 +60,8 @@
 // device itself enforces its configured SOC reserve / charge limits on top.
 //
 // Grid target (GRID_TARGET_W env var, default 100 W) and discharge
-// tolerance (DISCHARGE_TOLERANCE_PCT env var, default 4 points) are BOTH
+// tolerance (DISCHARGE_TOLERANCE_PCT env var, default 3 points — lowered
+// from 4, 2026-09-19 user request: "the defined SOC + 3%") are BOTH
 // deployment-time constants, not user-adjustable at runtime (like
 // TARIFF_EUR_PER_KWH elsewhere in this codebase) — not exposed in the
 // Strategy tab UI, by request, to keep the UI to just the two dropdowns +
@@ -116,7 +117,7 @@ const STEP_UP_HOLD_MS = 90 * 1000;
 // Deployment-time constants (2026-09-16) — see the file header for why
 // these aren't runtime/UI-adjustable.
 const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
-const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 4);
+const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 3);
 // Charge/hold hysteresis for battery_priority (2026-09-17, real production
 // incident: at a fixed chargeCeilingPct threshold, the unit's OWN standby/
 // BMS draw — a few watts, continuous, not something this app controls or
