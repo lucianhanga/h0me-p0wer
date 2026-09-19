@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { usePolledResource } from "../usePolledResource.js";
 
 const DAY_MS = 86400000;
 const fmtEur = (v) =>
@@ -18,26 +19,17 @@ const fmtDate = (iso) =>
 // recomputed only via the ↻ button) — the measured average is shown only as
 // a comparison.
 export default function RoiTab() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  // daily-grain data; 5 min is plenty. (Real bug fixed by this migration:
+  // the old hand-rolled version never cleared `error` on a successful poll,
+  // so any single failure permanently broke the tab even after the next
+  // poll recovered — see AGENTS.md.)
+  const { data, error, setData } = usePolledResource("/api/roi", { intervalMs: 300000 });
   const [updatedAt, setUpdatedAt] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    const load = () => {
-      fetch("/api/roi")
-        .then((r) => r.json())
-        .then((res) => {
-          if (!res.ok) throw new Error(res.error);
-          setData(res.data);
-          setUpdatedAt(new Date());
-        })
-        .catch((e) => setError(String(e.message ?? e)));
-    };
-    load();
-    const timer = setInterval(load, 300000); // daily-grain data; 5 min is plenty
-    return () => clearInterval(timer);
-  }, []);
+    if (data) setUpdatedAt(new Date());
+  }, [data]);
 
   const recomputeBaseline = () => {
     if (
@@ -53,7 +45,6 @@ export default function RoiTab() {
       .then((res) => {
         if (!res.ok) throw new Error(res.error);
         setData(res.data);
-        setUpdatedAt(new Date());
       })
       .catch((e) => alert(`Baseline recompute failed: ${e.message ?? e}`))
       .finally(() => setRefreshing(false));

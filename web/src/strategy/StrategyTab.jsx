@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import BatteryTab from "../battery/BatteryTab.jsx";
+import { usePolledResource } from "../usePolledResource.js";
 
 // Strategy tab: choose how the power-plan controller prioritizes PV vs
 // battery vs grid. Polls the same GET /api/power-plan PowerPlanCard.jsx uses
@@ -93,28 +94,18 @@ function StrategyHelp({ onClose }) {
 }
 
 export default function StrategyTab() {
-  const [state, setState] = useState(null);
+  // Same endpoint, same 10s cadence as Live tab's PowerPlanCard.jsx — was
+  // two independently hand-rolled poll loops before this migration; still
+  // two separate requests (this hook doesn't dedupe across components,
+  // just the code), but see AGENTS.md for why that's an intentionally
+  // separate concern from what this item scoped in.
+  const { data: state, setData: setState } = usePolledResource("/api/power-plan", {
+    intervalMs: 10000,
+    envelope: false,
+  });
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showHelp, setShowHelp] = useState(false);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    const load = () =>
-      fetch("/api/power-plan")
-        .then((r) => r.json())
-        .then((s) => {
-          if (mounted.current) setState(s);
-        })
-        .catch(() => {});
-    load();
-    const t = setInterval(load, 10000);
-    return () => {
-      mounted.current = false;
-      clearInterval(t);
-    };
-  }, []);
 
   // Ticks once a second so the step-up hold bar below counts down smoothly
   // between the 10s /api/power-plan polls, instead of jumping in 10s steps.

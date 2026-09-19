@@ -1,29 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { usePolledResource } from "../usePolledResource.js";
 
 // Power Plan section: collapsible (collapsed by default). Shows the
 // controller state; the output preset can be taken over from here, but
 // handing it back is intentionally NOT offered in the UI (the
 // /api/power-plan/disable endpoint still exists for that).
 export default function PowerPlanCard() {
-  const [state, setState] = useState(null);
+  // Same endpoint/cadence as the Strategy tab — see the matching comment
+  // there.
+  const { data: state, setData: setState } = usePolledResource("/api/power-plan", {
+    intervalMs: 10000,
+    envelope: false,
+  });
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    const load = () =>
-      fetch("/api/power-plan")
-        .then((r) => r.json())
-        .then((s) => mounted.current && setState(s))
-        .catch(() => {});
-    load();
-    const t = setInterval(load, 10000);
-    return () => {
-      mounted.current = false;
-      clearInterval(t);
-    };
-  }, []);
 
   const enable = async () => {
     setBusy(true);

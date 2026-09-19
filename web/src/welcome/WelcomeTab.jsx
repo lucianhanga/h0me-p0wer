@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import SpeakButton from "../components/SpeakButton.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { usePolledResource } from "../usePolledResource.js";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -138,37 +139,22 @@ function ThisWeekSoFarCard({ w }) {
 }
 
 export default function WelcomeTab() {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  // keepLastGoodOnError: once a real briefing has loaded, a failed 5-min
+  // poll is ignored rather than blanking the tab — this page renders
+  // `error` before `data`, so without it a single transient failure would
+  // hide an otherwise-fine briefing.
+  const { data, error, setData } = usePolledResource("/api/welcome", {
+    intervalMs: 5 * 60 * 1000,
+    keepLastGoodOnError: true,
+  });
   const [refreshing, setRefreshing] = useState(false);
-  const hasData = useRef(false); // survives the []-closure for keep-last-good
   const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
   // Lifted from YesterdayCard/ThisWeekSoFarCard (2026-09-19) so the
   // whole-tab read-aloud summary below can include them too.
   const [yesterday, setYesterday] = useState(null);
   const [weekSoFar, setWeekSoFar] = useState(null);
 
-  useEffect(() => {
-    let alive = true;
-    async function load() {
-      try {
-        const j = await fetch("/api/welcome").then((r) => r.json());
-        if (!alive) return;
-        if (j.ok) { hasData.current = true; setData(j.data); setError(null); }
-        else if (!hasData.current) setError(String(j.error ?? "request failed"));
-        // Keep last good: once data exists, failed polls are ignored.
-      } catch (e) {
-        if (alive && !hasData.current) setError(String(e.message ?? "request failed"));
-      }
-    }
-    load();
-    const t = setInterval(load, 5 * 60 * 1000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-      synth?.cancel(); // don't keep talking after leaving the tab
-    };
-  }, []);
+  useEffect(() => () => synth?.cancel(), [synth]); // don't keep talking after leaving the tab
 
   useEffect(() => {
     let alive = true;
@@ -198,7 +184,7 @@ export default function WelcomeTab() {
     setRefreshing(true);
     try {
       const j = await fetch("/api/welcome/refresh", { method: "POST" }).then((r) => r.json());
-      if (j.ok) { hasData.current = true; setData(j.data); setError(null); }
+      if (j.ok) setData(j.data);
     } catch {
       // keep last good
     } finally {
