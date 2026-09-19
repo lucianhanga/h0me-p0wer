@@ -1871,6 +1871,34 @@ EPIPE noise on every client disconnect).
   element-level screenshot of a hovered tile confirming the border/lift
   render without breaking layout.
 
+## Welcome tab: grid/PV/battery numbers colored to match Dashboard/Graph (2026-09-19)
+
+- User: "all the numbers related to the power generated/used from
+  grid/stored write them in the same colors you use for dashboard and
+  graph." Reused the EXACT existing palette, not new colors: `#f7a44f`
+  (grid — Dashboard's `SRC_ROWS`/`FlowDiagram`), `#5fce80` (PV/production
+  — same source), `#c084fc` (battery discharge — Dashboard's "From
+  battery" row, `BatteryTab.jsx`'s discharging state, `GraphTab.jsx`'s
+  legend). New `.wx-c-grid`/`.wx-c-pv`/`.wx-c-batt` CSS classes, applied
+  to the number+unit span only (not the surrounding label word), across
+  every tile: "How the day started" (grid/battery until sunrise),
+  "Right now" (today/week/month produced), "How today will end" (export
+  — grid-colored, since it's grid-bound), Yesterday, This week so far,
+  "How this week should end" (estimateKwh — a production figure).
+- **Deliberately did NOT color everything that touches energy**: battery
+  CHARGE ("to battery") has no override — Dashboard's own `BATT_IN_ROW`
+  already renders "To battery" in the same grey as regular muted text
+  (`#8b98a5`, `.muted`'s own color), so adding a distinct color there
+  would be introducing a DIFFERENT convention from Dashboard, not
+  matching it. "house ≈ X kWh" and battery SOC% also left uncolored —
+  "house" is a mix of all three sources (no single color is correct) and
+  SOC is a STATE, not one of the three flows the user was asking about.
+  €-figures (spent/saved) left uncolored too — the request was about
+  power/energy numbers specifically.
+- Verified visually via Playwright — confirmed all three colors render
+  correctly across every tile in one full-page screenshot, matching the
+  intended Dashboard/Graph palette exactly.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

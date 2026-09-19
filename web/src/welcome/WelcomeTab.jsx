@@ -92,10 +92,12 @@ function YesterdayCard({ y }) {
         {fmt1(y.homeKwh)} kWh <span className="muted">used</span>
       </p>
       <p className="muted">
-        grid {fmt1(y.gridKwh)} kWh · battery {fmt1(y.battKwh)} kWh · PV {fmt1(y.pvKwh)} kWh direct
+        grid <span className="wx-c-grid">{fmt1(y.gridKwh)} kWh</span> · battery{" "}
+        <span className="wx-c-batt">{fmt1(y.battKwh)} kWh</span> · PV{" "}
+        <span className="wx-c-pv">{fmt1(y.pvKwh)} kWh</span> direct
       </p>
       <p className="muted">
-        ☀ {fmt1(y.pvProducedKwh)} kWh produced · spent €{fmtEur(y.gridEur)} · saved €{fmtEur(y.savedEur)}
+        ☀ <span className="wx-c-pv">{fmt1(y.pvProducedKwh)} kWh</span> produced · spent €{fmtEur(y.gridEur)} · saved €{fmtEur(y.savedEur)}
       </p>
     </section>
   );
@@ -122,10 +124,12 @@ function ThisWeekSoFarCard({ w }) {
         {fmt1(w.homeKwh)} kWh <span className="muted">used</span>
       </p>
       <p className="muted">
-        grid {fmt1(w.gridKwh)} kWh · battery {fmt1(w.battKwh)} kWh · PV {fmt1(w.pvKwh)} kWh direct
+        grid <span className="wx-c-grid">{fmt1(w.gridKwh)} kWh</span> · battery{" "}
+        <span className="wx-c-batt">{fmt1(w.battKwh)} kWh</span> · PV{" "}
+        <span className="wx-c-pv">{fmt1(w.pvKwh)} kWh</span> direct
       </p>
       <p className="muted">
-        ☀ {fmt1(w.pvProducedKwh)} kWh produced · spent €{fmtEur(w.gridEur)} · saved €{fmtEur(w.savedEur)}
+        ☀ <span className="wx-c-pv">{fmt1(w.pvProducedKwh)} kWh</span> produced · spent €{fmtEur(w.gridEur)} · saved €{fmtEur(w.savedEur)}
       </p>
     </section>
   );
@@ -280,7 +284,8 @@ export default function WelcomeTab() {
           <h3>How the day started</h3>
           <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
           <p className="muted">
-            until sunrise: grid {fmt1(data.startOfDay.gridImportKwhUntilSunrise)} kWh · battery {fmt1(data.startOfDay.battDischargeKwhUntilSunrise)} kWh
+            until sunrise: grid <span className="wx-c-grid">{fmt1(data.startOfDay.gridImportKwhUntilSunrise)} kWh</span> · battery{" "}
+            <span className="wx-c-batt">{fmt1(data.startOfDay.battDischargeKwhUntilSunrise)} kWh</span>
           </p>
         </section>
 
@@ -295,8 +300,13 @@ export default function WelcomeTab() {
             Right now
           </h3>
           <p>{data.today.statusQuo}</p>
-          <p className="wx-big">{fmt1(data.production.todayKwh)} kWh <span className="muted">produced today</span></p>
-          <p className="muted">week so far ≈ {fmt1(data.production.weekKwh)} kWh · month so far ≈ {fmt1(data.production.monthKwh)} kWh</p>
+          <p className="wx-big">
+            <span className="wx-c-pv">{fmt1(data.production.todayKwh)} kWh</span> <span className="muted">produced today</span>
+          </p>
+          <p className="muted">
+            week so far ≈ <span className="wx-c-pv">{fmt1(data.production.weekKwh)} kWh</span> · month so far ≈{" "}
+            <span className="wx-c-pv">{fmt1(data.production.monthKwh)} kWh</span>
+          </p>
           <p className="muted">measured · {data.production.reasoning}</p>
           {data.today.statusQuoUpdatedAt && (
             <p className="muted wx-status-quo-stamp">
@@ -317,7 +327,10 @@ export default function WelcomeTab() {
           />
           <h3>How today will end</h3>
           <p>battery ≈ {fmtPct(data.endOfDay.batterySocEstimate)}% · house ≈ {fmt1(data.endOfDay.toHouseKwh)} kWh</p>
-          <p className="muted">to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈ {fmt1(data.endOfDay.gridExportKwh)} kWh</p>
+          <p className="muted">
+            to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈{" "}
+            <span className="wx-c-grid">{fmt1(data.endOfDay.gridExportKwh)} kWh</span>
+          </p>
           <p className="wx-big small">≈ €{fmtEur(data.endOfDay.estimatedSavingsEur)} <span className="muted">saved today</span></p>
           <p className="muted">{data.endOfDay.note}</p>
         </section>
@@ -340,7 +353,7 @@ export default function WelcomeTab() {
           />
           <h3>How this week should end</h3>
           <p>{data.week.estimate}</p>
-          <p className="muted">≈ {fmt1(data.week.estimateKwh)} kWh · €{fmtEur(data.week.estimateEur)} saved</p>
+          <p className="muted">≈ <span className="wx-c-pv">{fmt1(data.week.estimateKwh)} kWh</span> · €{fmtEur(data.week.estimateEur)} saved</p>
         </section>
 
         <section className="card">
