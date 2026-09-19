@@ -1753,6 +1753,86 @@ EPIPE noise on every client disconnect).
   Dashboard exactly (16.64 / 16.64, real production having continued
   accumulating between checks) alongside the corrected text.
 
+## Welcome tab redesign: hero, "How the day started" window, "planned" removed for good (2026-09-19)
+
+- **Root cause finally found for the whole week of Welcome AI bugs**:
+  `battery.pvLiveToday` (`pvMaxToday > 0` — "has TODAY produced anything
+  yet") was being used as a proxy for "is the PV system installed." The
+  PV system has been permanently installed since 2026-09-13, but that
+  check evaluates false every single morning before the first ray of
+  sun — confirmed live against production: a 06:01 generation (an hour
+  before 06:55 sunrise) had the AI write *"the PV system is not yet
+  live... these are forward estimates"* and substitute a PVGIS
+  projection for `production.todayKwh` — the EXACT bug the first fix
+  this week (2026-09-18) tried to close, just recurring through a
+  different door (that fix's override was itself gated on this same
+  false-negative flag). User: "the system was built! make sure that in
+  all your prompts remove the fact that the system in is planning."
+- **Fix: removed the day-relative flag entirely, not patched again.**
+  `pvMaxToday`/`pvLiveToday` deleted from `buildContext()`.
+  `production.todayKwh`/`weekKwh`/`monthKwh` are now UNCONDITIONALLY
+  overridden to the real measured values in `welcome.js` (previously
+  gated on the now-deleted flag) — the system is always installed, so
+  there's no longer a legitimate "not live" branch for these three
+  fields to fall into. Swept "PLANNED"/"not yet live" language out of
+  `SYSTEM_PROMPT`, `ASK_SYSTEM_PROMPT` (which also still had a STALE,
+  WRONG power-flow description — "PV covers the house first, surplus to
+  the battery" — contradicting the corrected Solarbank model established
+  much earlier this session; fixed alongside), `buildFallback()`'s
+  `production.reasoning` and `endOfDay.note`. `groundTruth.pvLiveToday`
+  and its frontend conditionals (`WelcomeTab.jsx`) removed — "so far" /
+  "measured" is now unconditional, since it's always true.
+- **"How the day started" was showing the wrong window** — user: "write
+  how much power was consumed from the grid and from the battery until
+  sunrise." The existing `gridImportKwhSoFar` field was bounded to
+  NOW, not sunrise, despite the card's own name — it kept growing all
+  day, and there was no battery figure at all. New shared trapezoid
+  helpers in `welcome-ai.js` (`integrateGridImportKwh`,
+  `integrateBatteryCellsKwh` — the latter reuses `deriveBatteryFlow`,
+  the same canonical PV/cells split `/api/flow` and
+  `/api/battery/params` use, not a third reimplementation) power both
+  the existing "so far" (until now) and the new "until sunrise" figures
+  from one formula each. `startOfDay.gridImportKwhUntilSunrise` /
+  `battDischargeKwhUntilSunrise` replace the old single field.
+- **Weather tile**: added today's radiation (`groundTruth.radiationSumKwhM2Today`,
+  a single existing number surfaced directly — not left to the AI's
+  prose, since accuracy here doesn't depend on model compliance).
+- **Month tile enriched**: new `SYSTEM_PROMPT` bullet — `month.statement`
+  must place the system's own PVGIS figure in the context of the
+  region's seasonal solar radiation trend and the upcoming week's actual
+  forecast, not just restate the raw climatology number. Verified live:
+  *"September's typical 95.4 kWh sits below August's 121.4 kWh but above
+  October's 70.1 kWh as Munich's solar season declines. The coming days
+  are mixed—Wednesday is strongest at 4.7 kWh/m²..."*
+- **Hero redesigned**: user: "should not be a tile, just text and have
+  the two buttons: the refresh... [and] the read loud button which will
+  read a summary of the whole welcome tab." Dropped the `card` class
+  (kept `wx-hero` for spacing only) — the existing `.wx-refresh` button
+  style already worked correctly as a plain inline button once removed
+  from a `.card`'s corner-anchored `position: absolute` context, so no
+  new CSS was needed beyond removing the class. New `SpeakButton`
+  (`id="wholeTab"`) replaces the old greeting-only one, reading a
+  concatenation of every card's own text (greeting, weather + radiation,
+  start-of-day, right-now, end-of-day, yesterday, this-week-so-far,
+  upcoming, week-estimate, month) in one pass. `YesterdayCard`/
+  `ThisWeekSoFarCard` refactored from self-fetching to receiving data as
+  props — their fetches lifted to the parent — so the whole-tab summary
+  can include them; each card's own individual behavior/rendering is
+  otherwise unchanged.
+- Verified end-to-end: fallback path first (AI_API_KEY unset, no spend)
+  confirmed the deterministic wiring — `radiationSumKwhM2Today`,
+  `startOfDay`'s new fields, unconditional `production` override, no
+  `pvLiveToday` in the response. Screenshotted the redesigned hero
+  (plain text, two buttons, no tile box) and the enriched weather tile.
+  Clicked the new whole-tab speak button via Playwright — no console
+  errors. Then ONE real AI-powered refresh (the only paid call across
+  this whole fix) to confirm the enriched prompts produce genuinely
+  correct output — see the month.statement example above; also confirmed
+  `production.todayKwh: 0.04` (tiny, real, shortly after sunrise) with
+  reasoning correctly explaining the low number as "the early hour and
+  foggy start, not an inactive system" — exactly the target behavior,
+  never once describing the system as planned or not yet live.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

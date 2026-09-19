@@ -58,27 +58,13 @@ function SunArc({ sunrise, sunset }) {
   );
 }
 
-// Yesterday summary — deterministic (measured, not AI), its own fetch
-// against the same /api/stats/period route the Dashboard's ‹ › navigation
-// uses, so it never depends on the AI briefing schema or its refresh cycle.
-function YesterdayCard() {
-  const [y, setY] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/stats/period?type=day&offset=1")
-      .then((r) => r.json())
-      .then((j) => {
-        if (alive && j.ok && j.data.hasData) setY(j.data);
-      })
-      .catch(() => {
-        // no data yet (e.g. first day of use) — card just doesn't render
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
+// Yesterday summary — deterministic (measured, not AI), same
+// /api/stats/period route the Dashboard's ‹ › navigation uses, so it never
+// depends on the AI briefing schema or its refresh cycle. Data is fetched
+// once in the parent (WelcomeTab) and passed down — not fetched here —
+// so the whole-tab read-aloud summary can include it too (2026-09-19,
+// user request).
+function YesterdayCard({ y }) {
   if (!y) return null;
   return (
     <section className="card">
@@ -106,25 +92,9 @@ function YesterdayCard() {
 // "what's already happened this week" is measured here instead, from the
 // Dashboard's own /api/stats/overview week totals (calendar Mon-Sun,
 // 2026-09-16 fix — see AGENTS.md). Future days in the week contribute 0,
-// so the totals are already correctly "so far," not inflated.
-function ThisWeekSoFarCard() {
-  const [w, setW] = useState(null);
-
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/stats/overview")
-      .then((r) => r.json())
-      .then((j) => {
-        if (alive && j.ok) setW(j.data.byPeriod.week);
-      })
-      .catch(() => {
-        // no data yet — card just doesn't render
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
+// so the totals are already correctly "so far," not inflated. Data comes
+// from the parent (WelcomeTab), same reasoning as YesterdayCard.
+function ThisWeekSoFarCard({ w }) {
   if (!w) return null;
   return (
     <section className="card">
@@ -153,6 +123,10 @@ export default function WelcomeTab() {
   const [refreshing, setRefreshing] = useState(false);
   const hasData = useRef(false); // survives the []-closure for keep-last-good
   const synth = typeof window !== "undefined" ? window.speechSynthesis : null;
+  // Lifted from YesterdayCard/ThisWeekSoFarCard (2026-09-19) so the
+  // whole-tab read-aloud summary below can include them too.
+  const [yesterday, setYesterday] = useState(null);
+  const [weekSoFar, setWeekSoFar] = useState(null);
 
   useEffect(() => {
     let alive = true;
@@ -176,6 +150,29 @@ export default function WelcomeTab() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/stats/period?type=day&offset=1")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j.ok && j.data.hasData) setYesterday(j.data);
+      })
+      .catch(() => {
+        // no data yet (e.g. first day of use) — card just doesn't render
+      });
+    fetch("/api/stats/overview")
+      .then((r) => r.json())
+      .then((j) => {
+        if (alive && j.ok) setWeekSoFar(j.data.byPeriod.week);
+      })
+      .catch(() => {
+        // no data yet — card just doesn't render
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   // Forced regeneration (server makes a real AI call — can take ~20-30 s).
   async function refresh() {
     setRefreshing(true);
@@ -192,13 +189,37 @@ export default function WelcomeTab() {
   if (error) return <p className="muted">Welcome — {error}</p>;
   if (!data) return <p className="muted">Preparing your briefing…</p>;
   const gt = data.groundTruth ?? {};
+
+  // Whole-tab read-aloud summary (2026-09-19, user request: the hero's
+  // speak button should read the WHOLE tab, not just the greeting) —
+  // reuses the same phrasing as each card's own per-card SpeakButton text
+  // below, just assembled in one place. yesterday/weekSoFar are lifted
+  // state (see the effect above) so they can be included here too.
+  const wholeTabText = [
+    data.greeting,
+    `Weather: ${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun${gt.radiationSumKwhM2Today != null ? `, ${gt.radiationSumKwhM2Today} kilowatt-hours per square meter of radiation` : ""}.`,
+    `How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, ${data.startOfDay.gridImportKwhUntilSunrise} kilowatt-hours from the grid and ${data.startOfDay.battDischargeKwhUntilSunrise} from the battery until sunrise.`,
+    `Right now: ${data.today.statusQuo} ${data.production.todayKwh} kilowatt-hours produced today, ${data.production.weekKwh} this week so far, ${data.production.monthKwh} this month so far.`,
+    `How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved.`,
+    yesterday
+      ? `Yesterday: ${yesterday.homeKwh} kilowatt-hours used, ${yesterday.pvProducedKwh} produced by the panels, spent ${yesterday.gridEur} euros, saved ${yesterday.savedEur}.`
+      : null,
+    weekSoFar
+      ? `This week so far: ${weekSoFar.homeKwh} kilowatt-hours used, ${weekSoFar.pvProducedKwh} produced by the panels, spent ${weekSoFar.gridEur} euros, saved ${weekSoFar.savedEur}.`
+      : null,
+    `What's coming this week: ${data.week.upcoming}`,
+    `How this week should end: ${data.week.estimate}`,
+    `${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <div className="welcome">
       <UpdatedStamp at={data.generatedAt}>
         {`${data.aiPowered ? "AI briefing" : "offline estimate"}${data.stale ? " · cached" : ""}`}
       </UpdatedStamp>
-      <section className="card wx-hero">
-        <SpeakButton id="hero" className="speak-corner" text={data.greeting} />
+      <div className="wx-hero">
         <p className="wx-greeting">{data.greeting}</p>
         <p className="muted wx-meta">
           {data.aiPowered ? "AI briefing" : "offline estimate"}
@@ -212,8 +233,9 @@ export default function WelcomeTab() {
           >
             ↻
           </button>
+          <SpeakButton id="wholeTab" text={wholeTabText} />
         </p>
-      </section>
+      </div>
 
       <section className="card wx-today">
         <SpeakButton
@@ -227,6 +249,9 @@ export default function WelcomeTab() {
           <p className="muted">
             {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
           </p>
+          {gt.radiationSumKwhM2Today != null && (
+            <p className="muted">☀ {gt.radiationSumKwhM2Today} kWh/m² radiation today</p>
+          )}
         </div>
         <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
       </section>
@@ -236,11 +261,13 @@ export default function WelcomeTab() {
           <SpeakButton
             id="startOfDay"
             className="speak-corner"
-            text={`How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, grid import so far ${data.startOfDay.gridImportKwhSoFar} kilowatt-hours.`}
+            text={`How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, ${data.startOfDay.gridImportKwhUntilSunrise} kilowatt-hours from the grid and ${data.startOfDay.battDischargeKwhUntilSunrise} from the battery until sunrise.`}
           />
           <h3>How the day started</h3>
           <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
-          <p className="muted">grid import so far {data.startOfDay.gridImportKwhSoFar} kWh</p>
+          <p className="muted">
+            until sunrise: grid {data.startOfDay.gridImportKwhUntilSunrise} kWh · battery {data.startOfDay.battDischargeKwhUntilSunrise} kWh
+          </p>
         </section>
 
         <section className="card wx-now">
@@ -255,11 +282,8 @@ export default function WelcomeTab() {
           </h3>
           <p>{data.today.statusQuo}</p>
           <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">produced today</span></p>
-          <p className="muted">
-            week{gt.pvLiveToday ? " so far" : ""} ≈ {data.production.weekKwh} kWh · month
-            {gt.pvLiveToday ? " so far" : ""} ≈ {data.production.monthKwh} kWh
-          </p>
-          <p className="muted">{gt.pvLiveToday ? "measured" : "estimated — PV still planned"} · {data.production.reasoning}</p>
+          <p className="muted">week so far ≈ {data.production.weekKwh} kWh · month so far ≈ {data.production.monthKwh} kWh</p>
+          <p className="muted">measured · {data.production.reasoning}</p>
           {data.today.statusQuoUpdatedAt && (
             <p className="muted wx-status-quo-stamp">
               refreshed{" "}
@@ -284,9 +308,9 @@ export default function WelcomeTab() {
           <p className="muted">{data.endOfDay.note}</p>
         </section>
 
-        <YesterdayCard />
+        <YesterdayCard y={yesterday} />
 
-        <ThisWeekSoFarCard />
+        <ThisWeekSoFarCard w={weekSoFar} />
 
         <section className="card">
           <SpeakButton id="weekUpcoming" className="speak-corner" text={`What's coming this week: ${data.week.upcoming}`} />
