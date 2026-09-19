@@ -87,20 +87,21 @@ export default function LiveTab() {
   // kept consistent rather than introducing a second PV definition); house
   // is reconstructed the same way the Dashboard's hourly bars are (grid
   // import + battery discharge + PV-to-house).
-  // Battery: cells − chargeW, NOT the raw `batt` field (output_w − charge_w,
-  // which conflates PV pass-through with real charge/discharge and doesn't
-  // match what the front tile shows). cells is discharge-only (≥0, excl. PV
-  // pass-through, same quantity the front tile's "discharging" reading
-  // uses); chargeW is a separate per-bucket series added specifically so
-  // "loading" shows up as its own negative excursion (2026-09-19, user
-  // follow-up: "show also the loading part") instead of being invisible or
-  // netted away against pass-through.
+  // Battery: two DISTINCT series, not one signed line — discharging (cells,
+  // ≥0, excl. PV pass-through, same quantity the front tile's "discharging"
+  // reading uses) and charging (chargeW, plotted negative so it falls below
+  // the zero line same as before), each its own color so direction reads
+  // from color as well as sign (2026-09-19, user follow-up: "show both load
+  // and unload" — a single purple line only distinguished by which side of
+  // zero it fell on). NOT the raw `batt` field (output_w − charge_w), which
+  // conflates PV pass-through with real charge/discharge.
   const toSeries = (pick) => todayProfile?.map((p) => [p.t, pick(p)]) ?? [];
   const gridSeries = toSeries((p) => p.power);
   const houseSeries = toSeries(
     (p) => Math.max(p.power, 0) + Math.max(p.cells ?? 0, 0) + Math.max(p.pvHome ?? 0, 0),
   );
-  const battSeries = toSeries((p) => (p.cells ?? 0) - (p.chargeW ?? 0));
+  const battDischargeSeries = toSeries((p) => Math.max(p.cells ?? 0, 0));
+  const battChargeSeries = toSeries((p) => -Math.max(p.chargeW ?? 0, 0));
   const pvSeries = toSeries((p) => p.pvHome);
 
   // Badge logic
@@ -130,7 +131,7 @@ export default function LiveTab() {
       <FlowDiagram flow={flow} />
 
       <div className="cards">
-        <FlipTile back={<TodayMiniChart data={houseSeries} color="#e8ecef" />}>
+        <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
           <div className="card">
             <div className="card-label">House</div>
             <div className="card-value">
@@ -139,7 +140,9 @@ export default function LiveTab() {
             <div className="card-label">total consumption</div>
           </div>
         </FlipTile>
-        <FlipTile back={<TodayMiniChart data={gridSeries} color="#f7a44f" zeroLine />}>
+        <FlipTile
+          back={<TodayMiniChart lines={[{ data: gridSeries, color: "#f7a44f" }]} zeroLine />}
+        >
           <div className="card">
             <div className="card-label">
               Grid {grid != null && (grid >= 0 ? "import" : "export")}
@@ -152,7 +155,17 @@ export default function LiveTab() {
             </div>
           </div>
         </FlipTile>
-        <FlipTile back={<TodayMiniChart data={battSeries} color="#c084fc" zeroLine />}>
+        <FlipTile
+          back={
+            <TodayMiniChart
+              lines={[
+                { data: battDischargeSeries, color: "#c084fc", name: "Discharging" },
+                { data: battChargeSeries, color: "#8b98a5", name: "Charging" },
+              ]}
+              zeroLine
+            />
+          }
+        >
           <div className="card">
             <div className="card-label">Battery</div>
             <div className="card-value" style={{ color: "#c084fc" }}>
@@ -180,7 +193,7 @@ export default function LiveTab() {
             )}
           </div>
         </FlipTile>
-        <FlipTile back={<TodayMiniChart data={pvSeries} color="#5fce80" />}>
+        <FlipTile back={<TodayMiniChart lines={[{ data: pvSeries, color: "#5fce80" }]} />}>
           <div className="card">
             <div className="card-label">Solar PV</div>
             <div className="card-value" style={{ color: "#5fce80" }}>
