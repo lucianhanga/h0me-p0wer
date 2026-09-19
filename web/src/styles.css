@@ -1106,6 +1106,15 @@ pre {
 .wx-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr)); gap: 1rem; }
 .wx-grid h3 { margin: 0 0 0.5rem; font-size: 0.95rem; display: flex; align-items: center; gap: 0.4rem; }
 .wx-grid p { margin: 0.25rem 0; }
+/* Grid/PV/battery number coloring — same palette as Dashboard's
+   SRC_ROWS/BATT_IN_ROW and the Live tab's flow diagram (2026-09-19, user
+   request: "write them in the same colors you use for dashboard and
+   graph"). Battery CHARGE ("to battery") deliberately has no override
+   here — Dashboard's own BATT_IN_ROW already renders it in the same grey
+   as regular muted text (#8b98a5), so no distinct color is needed. */
+.wx-c-grid { color: #f7a44f; }
+.wx-c-pv { color: #5fce80; }
+.wx-c-batt { color: #c084fc; }
 /* Equal card heights per row: cards no longer flip (no back content ever
    existed for them), so each .card just stretches to match its row's
    tallest sibling — native CSS Grid align-items:stretch, no JS needed. */
