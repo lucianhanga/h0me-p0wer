@@ -78,15 +78,21 @@ const fmtEur = (v) =>
   `€${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export function buildBomPdf({ bom, totalInvestedEur, snapshotDate, generatedAt = new Date() }) {
-  const images = bom.map((item) => {
+  // Keyed by asin (not row index) — rows now render from two separate
+  // filtered sub-arrays (purchased / planned), not one flat pass over `bom`.
+  const imagesByAsin = new Map();
+  for (const item of bom) {
+    if (imagesByAsin.has(item.asin)) continue;
     try {
       const data = fs.readFileSync(path.join(IMG_DIR, `${item.asin}.jpg`));
       const size = jpegSize(data);
-      return size ? { data, ...size } : null;
+      if (size) imagesByAsin.set(item.asin, { data, ...size });
     } catch {
-      return null;
+      /* no cached image — rendered as a placeholder box */
     }
-  });
+  }
+  const imageAsins = [...imagesByAsin.keys()];
+  const imgOpId = (asin) => imageAsins.indexOf(asin);
 
   const pages = [];
   let ops = [];
@@ -111,72 +117,100 @@ export function buildBomPdf({ bom, totalInvestedEur, snapshotDate, generatedAt =
     `Prices are purchase-price snapshots from ${snapshotDate} — what was paid, not today's price.`,
     { size: 9, gray: 0.35 },
   );
-  y -= 17;
-  text(MARGIN, y, `Total invested: ${fmtEur(totalInvestedEur)}`, { font: "F2", size: 12 });
-  y -= 11;
-  ops.push(`0.82 G 0.75 w ${MARGIN} ${y.toFixed(2)} m ${(A4_W - MARGIN).toFixed(2)} ${y.toFixed(2)} l S`);
-  y -= 16;
+  y -= 22;
 
   const TX = MARGIN + IMG_BOX + 16; // text column x
-  for (let i = 0; i < bom.length; i++) {
+
+  // A right-aligned "label: value" line under a horizontal rule — used for
+  // both section subtotals and the closing grand total.
+  const sumLine = (label, value, { size = 11 } = {}) => {
+    if (y - 30 < MARGIN + 24) closePage();
+    y -= 4;
+    ops.push(`0.82 G 0.75 w ${MARGIN} ${y.toFixed(2)} m ${(A4_W - MARGIN).toFixed(2)} ${y.toFixed(2)} l S`);
+    y -= 16;
+    const line = `${label}  ${fmtEur(value)}`;
+    text(A4_W - MARGIN - line.length * (size * 0.555), y, line, { font: "F2", size });
+    y -= 20;
+  };
+
+  const sectionHeader = (title) => {
     if (y - BLOCK < MARGIN + 24) closePage();
-    const item = bom[i];
-    const img = images[i];
-    const top = y;
-    if (img) {
-      const scale = Math.min(IMG_BOX / img.w, IMG_BOX / img.h);
-      const w = img.w * scale;
-      const h = img.h * scale;
-      ops.push(
-        `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${MARGIN} ${(top - h).toFixed(2)} cm /Im${i} Do Q`,
-      );
-    } else {
-      ops.push(`0.92 g ${MARGIN} ${(top - IMG_BOX).toFixed(2)} ${IMG_BOX} ${IMG_BOX} re f 0 g`);
-    }
-    let ty = top - 10;
-    for (const line of wrap(item.name, 68, 2)) {
-      text(TX, ty, line, { font: "F2", size: 10 });
-      ty -= 12;
-    }
-    ty -= 2;
-    if (item.desc) {
-      for (const line of wrap(item.desc, 88, 2)) {
-        text(TX, ty, line, { size: 9, gray: 0.25 });
-        ty -= 11;
+    text(MARGIN, y, title, { font: "F2", size: 12.5 });
+    y -= 16;
+  };
+
+  const renderRows = (rows) => {
+    for (let i = 0; i < rows.length; i++) {
+      if (y - BLOCK < MARGIN + 24) closePage();
+      const item = rows[i];
+      const img = imagesByAsin.get(item.asin);
+      const top = y;
+      if (img) {
+        const scale = Math.min(IMG_BOX / img.w, IMG_BOX / img.h);
+        const w = img.w * scale;
+        const h = img.h * scale;
+        ops.push(
+          `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${MARGIN} ${(top - h).toFixed(2)} cm /Im${imgOpId(item.asin)} Do Q`,
+        );
+      } else {
+        ops.push(`0.92 g ${MARGIN} ${(top - IMG_BOX).toFixed(2)} ${IMG_BOX} ${IMG_BOX} re f 0 g`);
       }
+      let ty = top - 10;
+      for (const line of wrap(item.name, 68, 2)) {
+        text(TX, ty, line, { font: "F2", size: 10 });
+        ty -= 12;
+      }
+      ty -= 2;
+      if (item.desc) {
+        for (const line of wrap(item.desc, 88, 2)) {
+          text(TX, ty, line, { size: 9, gray: 0.25 });
+          ty -= 11;
+        }
+      }
+      ty -= 2;
+      text(
+        TX,
+        ty,
+        `${item.qty} × ${fmtEur(item.unitPriceEur)}  =  ${fmtEur(item.lineTotalEur)}${item.estimated ? "    (~ estimated price)" : ""}`,
+        { size: 9 },
+      );
+      ty -= 12;
+      text(TX, ty, item.url, { size: 7.5, gray: 0.45 });
+      y = top - BLOCK;
     }
-    ty -= 2;
-    text(
-      TX,
-      ty,
-      `${item.qty} × ${fmtEur(item.unitPriceEur)}  =  ${fmtEur(item.lineTotalEur)}${item.estimated ? "    (~ estimated price)" : ""}`,
-      { size: 9 },
-    );
-    ty -= 12;
-    text(TX, ty, item.url, { size: 7.5, gray: 0.45 });
-    y = top - BLOCK;
+  };
+
+  // Three sections: what's actually been bought (subtotal = totalInvestedEur,
+  // matching the ROI tab's "Total invested"), what's planned but not bought
+  // yet (its own subtotal), and a grand total across both (2026-09-19, user
+  // request — mirrors the ROI tab's "Investment" / "Extended" card split).
+  const mainRows = bom.filter((r) => r.category !== "extended");
+  const extendedRows = bom.filter((r) => r.category === "extended");
+  const extendedSubtotalEur = extendedRows.reduce((a, r) => a + r.lineTotalEur, 0);
+
+  sectionHeader("Purchased (bill of materials)");
+  renderRows(mainRows);
+  sumLine("Subtotal:", totalInvestedEur);
+
+  if (extendedRows.length) {
+    y -= 6;
+    sectionHeader("Planned (not yet purchased)");
+    renderRows(extendedRows);
+    sumLine("Subtotal:", extendedSubtotalEur);
   }
 
-  // Total row, right-aligned (width estimated at 0.55 pt per char per pt).
-  if (y - 30 < MARGIN + 24) closePage();
-  y -= 4;
-  ops.push(`0.82 G 0.75 w ${MARGIN} ${y.toFixed(2)} m ${(A4_W - MARGIN).toFixed(2)} ${y.toFixed(2)} l S`);
-  y -= 16;
-  const totalLine = `Total invested:  ${fmtEur(totalInvestedEur)}`;
-  text(A4_W - MARGIN - totalLine.length * 6.1, y, totalLine, { font: "F2", size: 11 });
+  y -= 6;
+  sumLine("Grand total:", totalInvestedEur + extendedSubtotalEur, { size: 13 });
   closePage();
 
   // Object ids: 1 catalog, 2 pages, 3/4 fonts, then per page (page, content),
-  // then one image XObject per BOM item.
+  // then one image XObject per distinct asin with a cached picture.
   const P = pages.length;
   const pageId = (p) => 5 + p;
   const contentId = (p) => 5 + P + p;
   const imageId = (i) => 5 + 2 * P + i;
 
-  const xobjDict = bom
-    .map((_, i) => (images[i] ? `/Im${i} ${imageId(i)} 0 R` : null))
-    .filter(Boolean)
-    .join(" ");
+  const xobjDict = imageAsins.map((_, i) => `/Im${i} ${imageId(i)} 0 R`).join(" ");
   const resources = `<< /Font << /F1 3 0 R /F2 4 0 R >>${xobjDict ? ` /XObject << ${xobjDict} >>` : ""} >>`;
 
   const objects = [];
@@ -214,9 +248,8 @@ export function buildBomPdf({ bom, totalInvestedEur, snapshotDate, generatedAt =
       ]),
     );
   }
-  bom.forEach((_, i) => {
-    const img = images[i];
-    if (!img) return;
+  imageAsins.forEach((asin, i) => {
+    const img = imagesByAsin.get(asin);
     objects[imageId(i) - 1] = Buffer.concat([
       Buffer.from(
         `<< /Type /XObject /Subtype /Image /Width ${img.w} /Height ${img.h} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${img.data.length} >>\nstream\n`,

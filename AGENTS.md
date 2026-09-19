@@ -2085,6 +2085,35 @@ EPIPE noise on every client disconnect).
   to a real JPEG and resized to 400×400 (`sips`, matching the existing
   thumbnail dimensions) at `server/roi-images/BP5000.jpg`, committed —
   same "fetched once, committed to git" pattern as every other BOM image.
+- Follow-up same day: user asked for the printable PDF (`bom.pdf`) to get
+  the same 3-way split as the ROI tab — "first section with what was
+  bought and a total sum, the second section with what is planned to be
+  bought, their partial sum, a third section with the grand total."
+  `server/roi-pdf.js`'s `buildBomPdf()` restructured: `bom` split
+  client-side-of-the-function into `mainRows`/`extendedRows` by
+  `category`, rendered under "Purchased (bill of materials)" and
+  "Planned (not yet purchased)" headers, each closed by a `sumLine()`
+  (subtotal), then a final bold "Grand total" = both subtotals summed.
+  The per-item `(not counted)` name suffix (added upstream in
+  `roi.js`'s route) stays — harmless once redundant with the section
+  header, not worth a special-case to strip it back off.
+  - Real refactor forced by the split: image XObjects were previously
+    keyed by flat `bom` array index (`images[i]`/`imageId(i)`), which
+    silently breaks the moment rows render from two separate filtered
+    sub-arrays instead of one pass over `bom` — switched to a
+    `Map<asin, image>` (`imagesByAsin`) plus a stable per-asin index
+    (`imageAsins`/`imgOpId`), so both the content-stream image
+    references and the PDF object numbering stay correct regardless of
+    which section a row renders in.
+  - Verified visually, not just by page/byte count: Chrome's built-in
+    PDF viewer wouldn't take synthetic scroll/keyboard input from the
+    browser tool on this file (`Content-Disposition: attachment` also
+    blocks direct in-tab viewing), so rendered both pages to PNG via a
+    throwaway PyMuPDF venv (`pip` refused a global install — PEP 668)
+    and read them directly — confirmed real thumbnails on every row
+    (including the two extended items), correct subtotals (€904.34 /
+    €1,461.99) and grand total (€2,366.33), and a clean page break
+    between "Purchased" and "Planned" with no cut-off content.
 
 ## Dashboard channel audit (2026-09-15)
 
