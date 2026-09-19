@@ -97,7 +97,8 @@ function YesterdayCard({ y }) {
         <span className="wx-c-pv">{fmt1(y.pvKwh)} kWh</span> direct
       </p>
       <p className="muted">
-        ☀ <span className="wx-c-pv">{fmt1(y.pvProducedKwh)} kWh</span> produced · spent €{fmtEur(y.gridEur)} · saved €{fmtEur(y.savedEur)}
+        ☀ <span className="wx-c-pv">{fmt1(y.pvProducedKwh)} kWh</span> produced · spent{" "}
+        <span className="wx-c-grid">€{fmtEur(y.gridEur)}</span> · saved <span className="wx-c-pv">€{fmtEur(y.savedEur)}</span>
       </p>
     </section>
   );
@@ -129,7 +130,8 @@ function ThisWeekSoFarCard({ w }) {
         <span className="wx-c-pv">{fmt1(w.pvKwh)} kWh</span> direct
       </p>
       <p className="muted">
-        ☀ <span className="wx-c-pv">{fmt1(w.pvProducedKwh)} kWh</span> produced · spent €{fmtEur(w.gridEur)} · saved €{fmtEur(w.savedEur)}
+        ☀ <span className="wx-c-pv">{fmt1(w.pvProducedKwh)} kWh</span> produced · spent{" "}
+        <span className="wx-c-grid">€{fmtEur(w.gridEur)}</span> · saved <span className="wx-c-pv">€{fmtEur(w.savedEur)}</span>
       </p>
     </section>
   );
@@ -331,7 +333,9 @@ export default function WelcomeTab() {
             to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈{" "}
             <span className="wx-c-grid">{fmt1(data.endOfDay.gridExportKwh)} kWh</span>
           </p>
-          <p className="wx-big small">≈ €{fmtEur(data.endOfDay.estimatedSavingsEur)} <span className="muted">saved today</span></p>
+          <p className="wx-big small">
+            ≈ <span className="wx-c-pv">€{fmtEur(data.endOfDay.estimatedSavingsEur)}</span> <span className="muted">saved today</span>
+          </p>
           <p className="muted">{data.endOfDay.note}</p>
         </section>
 
@@ -353,7 +357,9 @@ export default function WelcomeTab() {
           />
           <h3>How this week should end</h3>
           <p>{data.week.estimate}</p>
-          <p className="muted">≈ <span className="wx-c-pv">{fmt1(data.week.estimateKwh)} kWh</span> · €{fmtEur(data.week.estimateEur)} saved</p>
+          <p className="muted">
+            ≈ <span className="wx-c-pv">{fmt1(data.week.estimateKwh)} kWh</span> · <span className="wx-c-pv">€{fmtEur(data.week.estimateEur)}</span> saved
+          </p>
         </section>
 
         <section className="card">
