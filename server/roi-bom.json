@@ -1,15 +1,5 @@
 [
   {
-    "asin": "B0H2HZWTX9",
-    "name": "Mendler HWC-O43 metal cover w/ planter, 118×124×65 cm (battery housing)",
-    "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
-    "qty": 1,
-    "unitPriceEur": 412.99,
-    "excluded": true,
-    "url": "https://www.amazon.de/dp/B0H2HZWTX9",
-    "priceSnapshotDate": "2026-09-15"
-  },
-  {
     "asin": "B0DYF56BTN",
     "name": "NAKA Solarmodul 500 W JAM60D41-500/LB Vollschwarz (2er-Pack, 0% MwSt.)",
     "desc": "Pair of 500 W full-black glass-glass solar panels (1000 Wp total) — the generation side of the balcony power plant.",
@@ -53,5 +43,27 @@
     "unitPriceEur": 93.09,
     "url": "https://www.amazon.de/dp/B0GXZ6LR5C",
     "priceSnapshotDate": "2026-09-15"
+  },
+  {
+    "asin": "B0H2HZWTX9",
+    "name": "Mendler HWC-O43 metal cover w/ planter, 118×124×65 cm (battery housing)",
+    "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
+    "qty": 1,
+    "unitPriceEur": 412.99,
+    "excluded": true,
+    "category": "extended",
+    "url": "https://www.amazon.de/dp/B0H2HZWTX9",
+    "priceSnapshotDate": "2026-09-15"
+  },
+  {
+    "asin": "BP5000",
+    "name": "Anker Solix BP5000 – 5 kWh Erweiterungsakku für Anker SOLIX 4 Pro",
+    "desc": "5 kWh plug-and-play expansion battery module for the Anker SOLIX 4 Pro line (LiFePO4, up to 30 kWh total). Note: built for the 4 Pro system, not the E1600 Plus installed here — tracked as a possible future upgrade path, not a confirmed-compatible add-on.",
+    "qty": 1,
+    "unitPriceEur": 1049.00,
+    "excluded": true,
+    "category": "extended",
+    "url": "https://solago.de/products/anker-solix-bp5000-5kwh-erweiterungsakku-fur-anker-solix-4-pro",
+    "priceSnapshotDate": "2026-09-19"
   }
 ]
