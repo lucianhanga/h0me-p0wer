@@ -8,16 +8,24 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 // /api/stats/overview call.
 export default function Dashboard() {
   const [stats, setStats] = useState(null);
+  const [topDays, setTopDays] = useState(null);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
 
   useEffect(() => {
     const load = () => {
-      fetch("/api/stats/overview")
-        .then((r) => r.json())
-        .then((res) => {
-          if (!res.ok) throw new Error(res.error);
-          setStats(res.data);
+      Promise.all([
+        fetch("/api/stats/overview").then((r) => r.json()),
+        // Best-effort: a handful of finished-day rankings, not core to the
+        // page — a failure here shouldn't block the rest of the dashboard.
+        fetch("/api/stats/top-days")
+          .then((r) => r.json())
+          .catch(() => null),
+      ])
+        .then(([overviewRes, topRes]) => {
+          if (!overviewRes.ok) throw new Error(overviewRes.error);
+          setStats(overviewRes.data);
+          if (topRes?.ok) setTopDays(topRes.data);
           setUpdatedAt(new Date());
         })
         .catch((e) => setError(String(e.message ?? e)));
@@ -59,6 +67,61 @@ export default function Dashboard() {
           formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
         />
       </div>
+      {topDays && (topDays.top.length > 0 || topDays.bottom.length > 0) && (
+        <div className="topdays-grid">
+          <TopDaysCard title="Highest production days" rows={topDays.top} />
+          <TopDaysCard title="Lowest production days" rows={topDays.bottom} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Ranked list of finished days by solar production (the sort key — see
+// /api/stats/top-days: only complete days count, today is always excluded).
+// Same "single source of truth" numbers as the period cards above, just
+// reshaped into a leaderboard: production first (the ranking criterion),
+// then house/grid/battery for that day. Battery utilization shows both
+// directions — discharged (reduced grid need that day) and charged
+// (stored for later) — since a day can matter for either reason.
+const formatDayLabel = (dateStr) =>
+  new Date(`${dateStr}T12:00:00`).toLocaleDateString([], {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+
+function TopDaysCard({ title, rows }) {
+  return (
+    <div className="src-card topdays-card">
+      <div className="tile-title src-title">
+        <span>{title}</span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="muted topdays-empty">not enough finished days yet</p>
+      ) : (
+        <div className="topdays-rows">
+          {rows.map((d, i) => (
+            <div className="topdays-row" key={d.date}>
+              <span className="topdays-rank">#{i + 1}</span>
+              <div className="topdays-info">
+                <div className="topdays-headline">
+                  <span className="topdays-date">{formatDayLabel(d.date)}</span>
+                  <span className="topdays-produced wx-c-pv">{d.pvProducedKwh} kWh produced</span>
+                </div>
+                <div className="topdays-stats">
+                  <span>house {d.homeKwh} kWh</span>
+                  <span className="wx-c-grid">grid {d.gridKwh} kWh</span>
+                  <span className="wx-c-batt">
+                    battery {d.battKwh} kWh out
+                    {d.battInKwh > 0 ? ` · ${d.battInKwh} kWh in` : ""}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

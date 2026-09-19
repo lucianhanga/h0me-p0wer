@@ -1999,6 +1999,50 @@ EPIPE noise on every client disconnect).
   flipped card — it advanced to "Yesterday" and redrew the chart without
   flipping back.
 
+## Dashboard: highest/lowest production day tiles (2026-09-19, user request)
+
+- User: "add tiles with top high 3 production days and the top low 3
+  production days" — total house usage, grid utilization, solar
+  production (the ranking criterion), and "battery utilisation — you
+  decide what makes sense."
+- New `GET /api/stats/top-days`: ranks FINISHED days (pv_daily rows,
+  `rollupPvDaily` populates one per day for yesterday — today is always
+  excluded so a partial day can't out-rank a full one) by
+  `produced` (total PV, to-home + to-battery — same field "Right now"/"How
+  today will end" already use), and drops zero-production days (pre-
+  install, before "the system was built") so they don't dominate
+  "lowest". Returns `{top: [...3], bottom: [...3]}`, each row
+  `{date, pvProducedKwh, gridKwh, battKwh, battInKwh, homeKwh}`.
+  Decided "battery utilization" = both directions: `battKwh` (discharged
+  — reduced that day's grid need) and `battInKwh` (charged — stored for
+  later), since either can be why a day stands out.
+- **Bug caught before shipping**: `battInKwh` was first wired to the
+  battery's cloud day-trend (same source `/api/stats/period`'s `battKwh`
+  and `/api/stats/overview`'s `battKwhForDay` use for discharge) split by
+  sign — but a raw `cloud_history` query for a known day
+  (`SELECT MIN(power)...` for `2026-09-15`) showed the trend is
+  discharge-only: minimum power was `0.0` all day, never negative, on
+  this account. `battKwhForDay`'s existing `chgKwh` field has always been
+  computed-but-unused for exactly this reason (grepped — nothing reads
+  it). Fixed by sourcing `battInKwh` from `pv_daily.to_batt` instead —
+  the nightly rollup's own local trapezoid integration (`pvKwhForDay`,
+  welcome-ai.js), which does carry real per-day charge amounts (e.g.
+  2026-09-16: `1.55` kWh) — confirmed via a direct `sqlite3` query on the
+  local dev DB before wiring it in.
+  - `web/src/dashboard/Dashboard.jsx`: new `TopDaysCard` (two tiles,
+    `.topdays-grid`), reuses the `.src-card` chrome from the flip-nav fix
+    above and the `wx-c-grid`/`wx-c-pv`/`wx-c-batt` color classes from the
+    Welcome tab color-coding request — same colors, one meaning, across
+    every tab. Rank badge + date + production headline, then a muted
+    house/grid/battery detail line. `top-days` fetch is best-effort
+    (`.catch(() => null)`, non-fatal) alongside the existing
+    `/api/stats/overview` call — a failure there doesn't block the rest
+    of the dashboard, matching this app's established pattern.
+  - Known small-dataset quirk (not a bug): with only ~5-6 finished days
+    of history so far, the same day can appear in both tiles (the
+    median day is simultaneously in the top-3 and bottom-3 of a small
+    pool) — resolves itself as more days accumulate.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

@@ -1317,6 +1317,61 @@ app.get("/api/stats/period", (req, res) => {
   });
 });
 
+// Top/bottom 3 production days (Dashboard tiles) — ranked by pv_daily's
+// `produced` (total PV production, to-home + to-battery), the same field
+// "Right now"/"How today will end" use as the day's PV total. Only
+// FINISHED days qualify: pv_daily is populated once/day for yesterday
+// (rollupPvDaily) — today is always excluded so a partial day can't win
+// or lose against full ones, and zero-production days (before the system
+// was built) are excluded so they don't dominate "lowest production."
+// Battery cloud day-trend is discharge-only (verified against raw rows —
+// power never goes negative on this account), so "charged" can't come from
+// it; that's exactly why pv_daily.to_batt (local trapezoid integration,
+// see welcome-ai.js's pvKwhForDay) is used for battInKwh below instead.
+function batteryDayDischargeKwh(battSn, dateStr) {
+  if (!battSn) return 0;
+  let dis = 0;
+  for (const r of getCloudTrend(battSn, "day", dateStr).rows) {
+    if (r.power == null) continue;
+    dis += (r.power * (20 / 60)) / 1000;
+  }
+  return Math.round(dis * 100) / 100;
+}
+function gridDayKwh(sn, dateStr) {
+  if (!sn) return 0;
+  const ym = dateStr.slice(0, 7);
+  return getCloudTrend(sn, "month", ym).rows.find((r) => r.time === dateStr)?.import_energy ?? 0;
+}
+app.get("/api/stats/top-days", (req, res) => {
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  const battSn = latestBattery?.sn ?? getBatterySn(sn);
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const todayDs = localDate();
+  const days = getPvDaily("2000-01-01", todayDs)
+    .filter((r) => r.date < todayDs && r.produced > 0)
+    .map((r) => {
+      const gridKwh = r2(gridDayKwh(sn, r.date));
+      const battKwh = r2(batteryDayDischargeKwh(battSn, r.date));
+      const pvKwh = r2(r.to_home);
+      return {
+        date: r.date,
+        pvProducedKwh: r2(r.produced),
+        gridKwh,
+        battKwh,
+        battInKwh: r2(r.to_batt),
+        homeKwh: r2(gridKwh + battKwh + pvKwh),
+      };
+    });
+  const sorted = [...days].sort((a, b) => b.pvProducedKwh - a.pvProducedKwh);
+  res.json({
+    ok: true,
+    data: {
+      top: sorted.slice(0, 3),
+      bottom: sorted.slice(-3).reverse(),
+    },
+  });
+});
+
 // Wrap cloud calls: 503 when credentials are missing, 502 for Anker errors.
 function cloudRoute(handler) {
   return async (req, res) => {
