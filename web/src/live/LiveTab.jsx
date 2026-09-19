@@ -3,6 +3,7 @@ import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
@@ -13,6 +14,7 @@ export default function LiveTab() {
   const [flow, setFlow] = useState(null); // /api/flow
   const [health, setHealth] = useState(null); // /api/health
   const [detailsOpen, setDetailsOpen] = useState(false); // Details section: collapsed by default
+  const [todayProfile, setTodayProfile] = useState(null); // /api/stats/overview's profile, for the flip-side mini charts
   const mounted = useRef(true);
 
   useEffect(() => {
@@ -26,14 +28,24 @@ export default function LiveTab() {
       });
     const slow = () =>
       get("/api/health").then((h) => h?.ok && mounted.current && setHealth(h.data));
+    // Today's profile only changes gently through the day — a slower,
+    // best-effort poll (not tied to the 5 s live loop) is plenty; a failure
+    // here just means the flip side stays empty, nothing else breaks.
+    const today = () =>
+      get("/api/stats/overview").then(
+        (r) => r?.ok && mounted.current && setTodayProfile(r.data.profile),
+      );
     fast();
     slow();
+    today();
     const t1 = setInterval(fast, 5000);
     const t2 = setInterval(slow, 10000);
+    const t3 = setInterval(today, 60000);
     return () => {
       mounted.current = false;
       clearInterval(t1);
       clearInterval(t2);
+      clearInterval(t3);
     };
   }, []);
 
@@ -68,6 +80,22 @@ export default function LiveTab() {
       )
     : null;
 
+  // Today-so-far series for each tile's flip side, from the same `profile`
+  // buckets the Dashboard's "Today" bars use — grid.power is already signed
+  // (+ import / − export, matching the Grid tile); batt is signed net
+  // battery flow (+ discharge / − charge, matching the Battery tile); pvHome
+  // is PV-to-house (same field the Dashboard's own PV bar uses — not total
+  // production, kept consistent rather than introducing a second PV
+  // definition); house is reconstructed the same way the Dashboard's hourly
+  // bars are (grid import + battery discharge + PV-to-house).
+  const toSeries = (pick) => todayProfile?.map((p) => [p.t, pick(p)]) ?? [];
+  const gridSeries = toSeries((p) => p.power);
+  const houseSeries = toSeries(
+    (p) => Math.max(p.power, 0) + Math.max(p.cells ?? 0, 0) + Math.max(p.pvHome ?? 0, 0),
+  );
+  const battSeries = toSeries((p) => p.batt);
+  const pvSeries = toSeries((p) => p.pvHome);
+
   // Badge logic
   const meterDirect = health?.meterDirect ?? live?.connected ?? false;
   const cloudFresh =
@@ -95,7 +123,7 @@ export default function LiveTab() {
       <FlowDiagram flow={flow} />
 
       <div className="cards">
-        <FlipTile>
+        <FlipTile back={<TodayMiniChart data={houseSeries} color="#e8ecef" />}>
           <div className="card">
             <div className="card-label">House</div>
             <div className="card-value">
@@ -104,7 +132,7 @@ export default function LiveTab() {
             <div className="card-label">total consumption</div>
           </div>
         </FlipTile>
-        <FlipTile>
+        <FlipTile back={<TodayMiniChart data={gridSeries} color="#f7a44f" zeroLine />}>
           <div className="card">
             <div className="card-label">
               Grid {grid != null && (grid >= 0 ? "import" : "export")}
@@ -117,7 +145,7 @@ export default function LiveTab() {
             </div>
           </div>
         </FlipTile>
-        <FlipTile>
+        <FlipTile back={<TodayMiniChart data={battSeries} color="#c084fc" zeroLine />}>
           <div className="card">
             <div className="card-label">Battery</div>
             <div className="card-value" style={{ color: "#c084fc" }}>
@@ -145,7 +173,7 @@ export default function LiveTab() {
             )}
           </div>
         </FlipTile>
-        <FlipTile>
+        <FlipTile back={<TodayMiniChart data={pvSeries} color="#5fce80" />}>
           <div className="card">
             <div className="card-label">Solar PV</div>
             <div className="card-value" style={{ color: "#5fce80" }}>
