@@ -2183,6 +2183,49 @@ EPIPE noise on every client disconnect).
   a zoomed screenshot of the flipped Battery tile: discharging renders
   as a purple area above zero, charging as a grey area below.
 
+## Architecture review + first fix: one shared day-energy module (2026-09-19, user request)
+
+- User: "review the code, look with an architect eyes to it, make sure
+  that there is a design with generic controls which are reused and
+  particularized for specific cases... go deep and take your time."
+  Full write-up published as an artifact (see chat for the link);
+  verdict: three backend modules (`welcome.js`/`roi.js`/`battery-params.js`)
+  use a real `registerXRoute(app, deps)` DI pattern and `power-plan.js`
+  has a genuine strategy dispatcher, but that discipline stopped there —
+  most duplication in the codebase is the SAME operation reimplemented
+  per call site rather than a missing abstraction never attempted.
+  Concretely: "battery kWh for one finished day" existed as four
+  separate functions (`battKwhForDay`/`battKwh`/`batteryDayDischargeKwh`
+  in index.js, `cellsKwhForDay` in roi.js) — the direct mechanism behind
+  the `battInKwh` bug from the ROI BOM/top-days work earlier this
+  session (wrong one of four was in scope when a new call site needed
+  it). User said "go for it" — first fix implemented same day.
+- New `server/energy-day.js`: `dayBattery(battSn, dateStr)` →
+  `{dischargedKwh, chargedKwh, hasRows}` (merges all four battery-day
+  variants — also fixes a latent bug: `batteryDayDischargeKwh` alone was
+  missing the discharge-only filter the other three had, silently
+  correct only because this account's cloud series never reports a
+  negative value); `dayGridImportKwh(sn, dateStr)`; `dayPv(dateStr)` →
+  `{toHome, produced, toBattery}` from the `pv_daily` rollup (merges
+  `pvKwhDay`/`pvProducedDay` in index.js's `/api/stats/period` and the
+  non-today branches of `/api/stats/overview`'s inline closures — the
+  "today" live-trapezoid special case stays where it was, since that's
+  genuinely route-specific data, not duplicated logic).
+  `index.js` net −43 lines despite gaining an import; `roi.js` −6.
+  Deliberately did NOT force `monthKwh`/`monthRows` (bulk month-fetch,
+  used by week/month/year rollups) through the new single-day functions
+  — different access pattern for a different problem, not the same
+  duplication.
+- **Verified behavior-preserving, not just "builds"**: captured
+  `/api/stats/overview`, `/api/stats/period` (day/week/month/year),
+  `/api/stats/top-days`, and `/api/roi` against the local dev DB both
+  before (`git stash`) and after the refactor. Every FINISHED-day
+  endpoint (period day/week/month/year, top-days, ROI's measured-savings
+  series which stops at yesterday) came back **byte-for-byte identical**.
+  The only diffs were in `/api/stats/overview`'s "today" figures, fully
+  explained by real time passing (~a few minutes) between the two
+  captures — not by the refactor.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

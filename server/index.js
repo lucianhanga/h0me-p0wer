@@ -15,6 +15,7 @@ import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, CONSTA
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
 import { savedEur } from "./savings.js";
+import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -810,22 +811,6 @@ app.get("/api/stats/overview", (req, res) => {
     p.chargeW = chargeByT.get(p.t) ?? null;
   }
 
-  // --- Battery kWh per day (for week/month tiles): integrate the cloud
-  // battery day trend (20-min signed power; discharge +, charge −).
-  function battKwhForDay(dateStr) {
-    if (!battSn) return { disKwh: 0, chgKwh: 0 };
-    const rows = getCloudTrend(battSn, "day", dateStr).rows;
-    let disKwh = 0;
-    let chgKwh = 0;
-    for (const r of rows) {
-      if (r.power == null) continue;
-      const kwh = (r.power * (20 / 60)) / 1000;
-      if (kwh >= 0) disKwh += kwh;
-      else chgKwh += -kwh;
-    }
-    return { disKwh: Math.round(disKwh * 100) / 100, chgKwh: Math.round(chgKwh * 100) / 100 };
-  }
-
   // --- Week (last 7 days) & month: daily kWh from cloud_history month rows.
   function monthKwh(yearMonth) {
     if (!sn) return [];
@@ -839,7 +824,11 @@ app.get("/api/stats/overview", (req, res) => {
   const prevYm = localDate(new Date(dayStartMs - 7 * 86400000)).slice(0, 7);
   const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
   // Attach per-day battery kWh (from the battery's cloud day trends).
-  for (const r of monthRows) Object.assign(r, battKwhForDay(r.label));
+  for (const r of monthRows) {
+    const b = dayBattery(battSn, r.label);
+    r.disKwh = b.dischargedKwh;
+    r.chgKwh = b.chargedKwh;
+  }
   // Calendar week (Monday..Sunday) containing today — NOT a rolling 7-day
   // window (2026-09-16 fix: "This week" used to mean "the last 7 days,"
   // which doesn't match the label or how This month/This year behave).
@@ -971,12 +960,11 @@ app.get("/api/stats/overview", (req, res) => {
   // block's comment above.
   const todayCellsKwh = Math.max(0, r2(battEnergy.dischargedKwh - pvToHomeKwh));
   const todayPvBattKwh = r2(pvToBattKwh);
-  const pvDayKwh = (dateStr) =>
-    dateStr === todayDs ? r2(pvToHomeKwh) : (getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0);
+  const pvDayKwh = (dateStr) => (dateStr === todayDs ? r2(pvToHomeKwh) : dayPv(dateStr).toHome);
   // Total PV production (to-home + to-battery, i.e. everything the panels
   // made) — distinct from pvDayKwh, which is PV-direct-to-home only.
   const pvProducedDayKwh = (dateStr) =>
-    dateStr === todayDs ? r2(pvKwh) : (getPvDaily(dateStr, dateStr)[0]?.produced ?? 0);
+    dateStr === todayDs ? r2(pvKwh) : dayPv(dateStr).produced;
   // Today's cells override in the per-day rows the sums/bars are built from.
   for (const r of monthRows) if (r.label === todayDs) r.disKwh = todayCellsKwh;
   const battYear = (() => {
@@ -984,7 +972,7 @@ app.get("/api/stats/overview", (req, res) => {
     const d = new Date(dayStartMs);
     for (let date = new Date(d.getFullYear(), 0, 1); date <= d; date.setDate(date.getDate() + 1)) {
       const ds = localDate(date);
-      sum += ds === todayDs ? todayCellsKwh : battKwhForDay(ds).disKwh;
+      sum += ds === todayDs ? todayCellsKwh : dayBattery(battSn, ds).dischargedKwh;
     }
     return r2(sum);
   })();
@@ -1115,7 +1103,7 @@ app.get("/api/stats/overview", (req, res) => {
     const lastDay = m === d.getMonth() + 1 ? d.getDate() : new Date(y, m, 0).getDate();
     for (let day = 1; day <= lastDay; day++) {
       const ds = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      batt += ds === todayDs ? todayCellsKwh : battKwhForDay(ds).disKwh;
+      batt += ds === todayDs ? todayCellsKwh : dayBattery(battSn, ds).dischargedKwh;
       pv += pvDayKwh(ds);
     }
     return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
@@ -1159,28 +1147,11 @@ app.get("/api/stats/period", (req, res) => {
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
 
-  // Battery discharge/charge kWh for one date (battery cloud day-trend).
-  // The cloud battery series is CELLS-only (verified 2026-09-15) — no PV
-  // pass-through inside, so it never double-books the PV channel.
-  function battKwh(dateStr) {
-    if (!battSn) return 0;
-    let dis = 0;
-    for (const r of getCloudTrend(battSn, "day", dateStr).rows) {
-      if (r.power == null) continue;
-      const kwh = (r.power * (20 / 60)) / 1000;
-      if (kwh >= 0) dis += kwh;
-    }
-    return r2(dis);
-  }
-  // PV direct-to-home kWh for one finished date (local pv_daily rollup —
-  // the cloud has no PV channel; 0 before the panels existed).
-  function pvKwhDay(dateStr) {
-    return getPvDaily(dateStr, dateStr)[0]?.to_home ?? 0;
-  }
-  // Total PV production (to-home + to-battery) for one finished date.
-  function pvProducedDay(dateStr) {
-    return getPvDaily(dateStr, dateStr)[0]?.produced ?? 0;
-  }
+  // battKwh/pvKwhDay/pvProducedDay: see server/energy-day.js's dayBattery/
+  // dayPv — this route used to keep its own copies of both lookups.
+  const battKwh = (dateStr) => dayBattery(battSn, dateStr).dischargedKwh;
+  const pvKwhDay = (dateStr) => dayPv(dateStr).toHome;
+  const pvProducedDay = (dateStr) => dayPv(dateStr).produced;
   // Grid import kWh + 24 hourly bars for one finished date (meter/battery/PV
   // cloud day-trends). 2026-09-16 fixes: (1) bars used to be raw 20-min
   // cloud buckets (~72/day) instead of the hourly granularity the "Today"
@@ -1335,20 +1306,6 @@ app.get("/api/stats/period", (req, res) => {
 // power never goes negative on this account), so "charged" can't come from
 // it; that's exactly why pv_daily.to_batt (local trapezoid integration,
 // see welcome-ai.js's pvKwhForDay) is used for battInKwh below instead.
-function batteryDayDischargeKwh(battSn, dateStr) {
-  if (!battSn) return 0;
-  let dis = 0;
-  for (const r of getCloudTrend(battSn, "day", dateStr).rows) {
-    if (r.power == null) continue;
-    dis += (r.power * (20 / 60)) / 1000;
-  }
-  return Math.round(dis * 100) / 100;
-}
-function gridDayKwh(sn, dateStr) {
-  if (!sn) return 0;
-  const ym = dateStr.slice(0, 7);
-  return getCloudTrend(sn, "month", ym).rows.find((r) => r.time === dateStr)?.import_energy ?? 0;
-}
 app.get("/api/stats/top-days", (req, res) => {
   const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
   const battSn = latestBattery?.sn ?? getBatterySn(sn);
@@ -1357,8 +1314,8 @@ app.get("/api/stats/top-days", (req, res) => {
   const days = getPvDaily("2000-01-01", todayDs)
     .filter((r) => r.date < todayDs && r.produced > 0)
     .map((r) => {
-      const gridKwh = r2(gridDayKwh(sn, r.date));
-      const battKwh = r2(batteryDayDischargeKwh(battSn, r.date));
+      const gridKwh = r2(dayGridImportKwh(sn, r.date));
+      const battKwh = r2(dayBattery(battSn, r.date).dischargedKwh);
       const pvKwh = r2(r.to_home);
       return {
         date: r.date,
