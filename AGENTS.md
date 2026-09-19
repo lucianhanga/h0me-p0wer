@@ -2302,6 +2302,70 @@ EPIPE noise on every client disconnect).
   smoke test locally against a genuine cold start (`PORT=3200 node
   server/index.js`, not `--watch`) — all three checks passed.
 
+## Architecture roadmap item #3: shared usePolledResource hook (2026-09-19, user: "continue until you are done with all")
+
+- Third item from the architecture review's roadmap: retire the
+  independently hand-rolled fetch+useEffect+setInterval+error-state
+  block that had been copy-pasted (with drifting small differences)
+  across most tab components.
+- New `web/src/usePolledResource.js`: `{data, error, loading, refresh,
+  setData}` from one call. Two options earned their way in by actually
+  being needed at a real call site, not spec'd in the abstract:
+  - `envelope: false` — this API has two response shapes (a second,
+    not-yet-fixed architecture-review finding): most routes return
+    `{ok, data, error}`, but `/api/power-plan` and friends return the
+    bare payload. Needed by Strategy/PowerPlanCard.
+  - `keepLastGoodOnError` — once real data has loaded, a transient poll
+    failure is swallowed instead of surfacing, for tabs whose render
+    checks `error` BEFORE `!data` (so an unguarded failure would blank
+    an otherwise-fine page over one missed poll). Needed by Welcome,
+    which already had this exact behavior hand-written via a
+    `hasData` ref — the hook just gives it a name and a second user.
+  - `setData` is exposed deliberately: every mutation call site (ROI's
+    baseline recompute, Strategy/PowerPlanCard's strategy/enable
+    actions, Battery's refresh button) already pushes its own POST
+    response straight into state instead of waiting for the next poll
+    tick — the hook has to support that or every mutation regresses to
+    an extra round-trip.
+- **Migrated where it cleanly fit**: `BatteryTab.jsx`, `RoiTab.jsx`,
+  `StrategyTab.jsx`, `PowerPlanCard.jsx`, `WelcomeTab.jsx`'s main poll.
+  Strategy/PowerPlanCard was the literal duplicate the review called
+  out — same endpoint, same 10s interval, two independent hand-rolled
+  copies; now one hook, called from both (still two separate network
+  requests, same as before — see below).
+- **Real latent bug fixed as a side effect, not the point of the
+  change**: `RoiTab.jsx`'s old code never called `setError(null)` on a
+  successful poll — one failure would permanently wedge the tab behind
+  its error screen even after the endpoint recovered. The hook clears
+  `error` on every success by construction, so this self-heals now.
+- **Deliberately left custom, not forced into the hook**:
+  `Dashboard.jsx` (`Promise.all` of a required + a best-effort
+  secondary fetch — asymmetric semantics per URL, doesn't map onto a
+  single-resource hook without either a multi-URL variant nobody else
+  needs or an awkward two-hook composition), `LiveTab.jsx` (three
+  independently-cadenced concerns — 5s live+flow, 10s health, 60s
+  today-profile — genuinely not "one resource, one interval"),
+  `GraphTab.jsx` (parametrized windowed time-series fetching plus a
+  live-tail append loop, a fundamentally different shape), and
+  `WelcomeTab.jsx`'s secondary yesterday/week-so-far effect (a one-shot
+  dual-fetch on mount, not polling at all). Forcing these into the hook
+  would have made the code worse, not better — matching "generic
+  control, reused and particularized," not "one hook for everything."
+- **Not done, noted rather than silently skipped**: the hook dedupes
+  *code*, not *network requests* — Strategy and PowerPlanCard still
+  each poll `/api/power-plan` independently every 10s (2 requests, not
+  1). A shared subscription cache (one timer/fetch per URL, fanned out
+  to every subscribed component) would fix that too, but is a
+  meaningfully bigger, riskier piece of infrastructure than what the
+  roadmap item asked for ("a hook to retire duplicated boilerplate");
+  left as a follow-up, not attempted here.
+- Verified in a browser (dev server, power-plan controller disabled)
+  across all 5 migrated call sites with real live data: Strategy tab
+  (+ its embedded BatteryTab gauge), Live tab's Power Plan card
+  (expanded, showing live decision state), ROI tab (tiles + chart +
+  BOM), Welcome tab (briefing + the untouched secondary cards). Also
+  spot-checked Dashboard (untouched) to confirm nothing else regressed.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

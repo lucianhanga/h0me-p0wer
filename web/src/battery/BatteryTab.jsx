@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
+import { usePolledResource } from "../usePolledResource.js";
 
 // Rendered inside StrategyTab.jsx (moved out of its own top-level tab
 // 2026-09-16) — the gauge stays visible, the detailed param cards below
@@ -35,27 +36,21 @@ function ParamRow({ k, v }) {
 // 2026-09-19 user request, so this is 13% today, computed dynamically
 // below, not hardcoded).
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState(null);
+  const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
 
-  const load = (refresh = false) =>
-    fetch(`/api/battery/params${refresh ? "?refresh=1" : ""}`)
+  // Force a live refetch of the (server-side, 6h-cached) device config —
+  // a different URL from the poll above, so it stays a one-off fetch
+  // outside the hook rather than forcing the hook to support query params
+  // it otherwise never needs.
+  const forceRefresh = () => {
+    setRefreshing(true);
+    fetch("/api/battery/params?refresh=1")
       .then((r) => r.json())
-      .then((res) => {
-        if (!res.ok) throw new Error(res.error);
-        setData(res.data);
-        setError(null);
-      })
-      .catch((e) => setError(String(e.message ?? e)))
+      .then((res) => res.ok && setData(res.data))
       .finally(() => setRefreshing(false));
-
-  useEffect(() => {
-    load();
-    const timer = setInterval(() => load(), 10000);
-    return () => clearInterval(timer);
-  }, []);
+  };
 
   if (error && !data) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
@@ -205,10 +200,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
                 className={`wx-refresh${refreshing ? " spinning" : ""}`}
                 disabled={refreshing}
                 title="refetch device configuration from the cloud"
-                onClick={() => {
-                  setRefreshing(true);
-                  load(true);
-                }}
+                onClick={forceRefresh}
               >
                 ↻
               </button>
