@@ -12,6 +12,7 @@ import {
   localDate,
 } from "./welcome-sources.js";
 import { savedEur } from "./savings.js";
+import { getTariff } from "./env.js";
 
 const KV_KEY = "roi_baseline";
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -160,7 +161,7 @@ function fallbackEstimate(config, pvgis) {
 
 export async function computeBaseline(deps = {}, measured = null) {
   const config = parseWelcomeConfig(); // null when HOME_ADDRESS is unset
-  const tariff = config?.tariff ?? Number(process.env.TARIFF_EUR_PER_KWH ?? 0.3);
+  const tariff = config?.tariff ?? getTariff();
   let pvgis = null;
   if (config) {
     try {

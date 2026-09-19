@@ -14,6 +14,7 @@ import {
 } from "./db.js";
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
+import { getTariff } from "./env.js";
 
 // /api/stats/* — Dashboard + top-days: today's live profile, week/month/
 // year rollups, single-period time navigation, and production leaderboards.
@@ -334,7 +335,7 @@ export function registerStatsRoute(app, deps) {
     // Costs from kWh × tariff (what was actually SPENT on grid import — a
     // different quantity from "saved," which is production-based; see
     // savings.js).
-    const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
+    const tariff = getTariff();
     const eur = (kwh) => Math.round(kwh * tariff * 100) / 100;
     const weekImport = weekRows.reduce((a, r) => a + r.importKwh, 0);
     const monthRowsCur = monthRows.filter((r) => r.label.startsWith(ym));
@@ -549,7 +550,7 @@ export function registerStatsRoute(app, deps) {
     const offset = Math.max(1, Math.min(Number(req.query.offset ?? 1) || 1, 400));
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
     const battSn = deps.getBatterySn?.() ?? getBatterySn(sn);
-    const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0);
+    const tariff = getTariff();
     const r2 = (v) => Math.round(v * 100) / 100;
     const eur = (kwh) => r2(kwh * tariff);
     const earliest = getEarliestCloudDay(sn);
