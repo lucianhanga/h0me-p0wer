@@ -2260,6 +2260,48 @@ EPIPE noise on every client disconnect).
     unchanged (both new rows excluded as intended), both thumbnails
     serve 200, both render correctly in the "Extended" card.
 
+## Architecture roadmap item #2: extracted /api/stats/* into stats.js (2026-09-19, user: "continue now with the plan")
+
+- Second item from the architecture review's roadmap: "extract
+  `/api/stats/*` the same way ROI was extracted." Moved `/api/stats/
+  overview` (~466 lines), `/api/stats/period` (~171 lines), and
+  `/api/stats/top-days` (~31 lines) out of `index.js` into a new
+  `server/stats.js`, using the exact `registerXRoute(app, deps)` shape
+  `roi.js` already proved — `registerStatsRoute(app, {getMeterSn,
+  getBatterySn, getLiveBattery})`, all three deps reusing the identical
+  closures already passed to `registerRoiRoute`/`registerBatteryParamsRoute`
+  at the index.js call site (same `poller`/`latestBattery` module state,
+  just read through a getter instead of closed over directly).
+  `index.js`: 1876 → 1171 lines (−705). `mondayOf`/`hourlyKwhFromRows`/
+  `pvStoredTotals` moved with their only callers; `localDate` got its own
+  local copy in stats.js rather than importing it back from index.js —
+  same reason `roi.js` already keeps its own copy: index.js has top-level
+  side effects (starts the server, background jobs) that would fire on
+  import, so nothing extracted out of it may import back into it.
+  Also dropped `getPvDailyDates` from index.js's db.js import list — it
+  turned out to already be unused before this refactor even started
+  (confirmed via `git show HEAD:server/index.js`), not something this
+  change orphaned; fixed since it was directly in the block being edited.
+- Mechanical transformation, not a rewrite: extracted the exact route
+  bodies via `sed` from the file itself (not retyped), applied exactly
+  three substitution patterns (`poller.snapshot?.meter?.sn ??
+  getAnyDeviceSn()` → `deps.getMeterSn?.() ?? getAnyDeviceSn()`, the
+  equivalent for `getBatterySn`, and `latestBattery ?? getLatestBattery()`
+  → `deps.getLiveBattery?.() ?? getLatestBattery()`), then diffed the
+  transformed block against the original to confirm those were the ONLY
+  changes before ever writing the new file.
+- **Verified behavior-preserving** the same way as roadmap item #1: full
+  `git stash -u` before/after capture of `/api/stats/overview`,
+  `/api/stats/period` (day/week/month/year), `/api/stats/top-days`, and
+  `/api/roi` against the local dev DB. Every finished-day figure, ROI's
+  full BOM, and ROI's measured-savings series (stops at yesterday) came
+  back **byte-for-byte identical**; the only diff anywhere was one new
+  hourly bucket in `overview`'s `today.bars` (a real hour boundary
+  crossed between the two captures — expected) and an unrelated
+  `/api/health` Modbus-connection timing blip. Also reproduced the CI
+  smoke test locally against a genuine cold start (`PORT=3200 node
+  server/index.js`, not `--watch`) — all three checks passed.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
