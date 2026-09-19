@@ -81,7 +81,7 @@ app.get("/api/live", (req, res) => {
     const gl = getGridLive();
     if (gl.power != null) state.cloud = gl;
   }
-  res.json(state);
+  res.json({ ok: true, data: state });
 });
 
 // Connectivity health for the Live tab badges.
@@ -1107,24 +1107,28 @@ setInterval(async () => {
 // whether a rewrite is warranted.
 const powerPlan = new PowerPlanController(anker, () => latestBattery ?? getLatestBattery());
 
+// Envelope matches the rest of the API ({ok, data}/{ok, error}, same as
+// cloudRoute() below) — these four used to return the bare state object on
+// success and {error} with no `ok` field on failure, the last holdout of
+// that inconsistency (architecture-review roadmap item #4).
 app.get("/api/power-plan", (req, res) => {
-  res.json(powerPlan.getState());
+  res.json({ ok: true, data: powerPlan.getState() });
 });
 app.post("/api/power-plan/enable", async (req, res) => {
   try {
     if (!anker.configured) throw new Error("cloud not configured");
     await powerPlan.enable();
-    res.json(powerPlan.getState());
+    res.json({ ok: true, data: powerPlan.getState() });
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ ok: false, error: err.message });
   }
 });
 app.post("/api/power-plan/disable", async (req, res) => {
   try {
     await powerPlan.disable();
-    res.json(powerPlan.getState());
+    res.json({ ok: true, data: powerPlan.getState() });
   } catch (err) {
-    res.status(502).json({ error: err.message });
+    res.status(502).json({ ok: false, error: err.message });
   }
 });
 app.post("/api/power-plan/strategy", (req, res) => {
@@ -1132,16 +1136,16 @@ app.post("/api/power-plan/strategy", (req, res) => {
   const strategies = ["house_priority", "battery_priority", "anker_app"];
   const triggers = ["auto", "manual"];
   if (strategy !== undefined && !strategies.includes(strategy)) {
-    return res.status(400).json({ error: `invalid strategy: ${strategy}` });
+    return res.status(400).json({ ok: false, error: `invalid strategy: ${strategy}` });
   }
   if (trigger !== undefined && !triggers.includes(trigger)) {
-    return res.status(400).json({ error: `invalid trigger: ${trigger}` });
+    return res.status(400).json({ ok: false, error: `invalid trigger: ${trigger}` });
   }
   if (manualDischarge !== undefined && typeof manualDischarge !== "boolean") {
-    return res.status(400).json({ error: `invalid manualDischarge: ${manualDischarge}` });
+    return res.status(400).json({ ok: false, error: `invalid manualDischarge: ${manualDischarge}` });
   }
   powerPlan.setStrategy({ strategy, trigger, manualDischarge });
-  res.json(powerPlan.getState());
+  res.json({ ok: true, data: powerPlan.getState() });
 });
 
 setInterval(() => {

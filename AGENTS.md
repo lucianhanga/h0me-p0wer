@@ -2366,6 +2366,44 @@ EPIPE noise on every client disconnect).
   BOM), Welcome tab (briefing + the untouched secondary cards). Also
   spot-checked Dashboard (untouched) to confirm nothing else regressed.
 
+## Architecture roadmap item #4: standardized the API response envelope (2026-09-19, user: "continue until you are done with all")
+
+- Fourth item: `/api/live` and all four `/api/power-plan*` routes were
+  the last holdouts of a three-shape inconsistency across this API
+  (most routes: `{ok, data}`/`{ok, error}`; these five: the bare state
+  object on success, `{error}` with no `ok` field on failure) —
+  frontend code had to already know, per endpoint, which shape to
+  expect before it could safely read a response.
+- `server/index.js`: `/api/live` now `{ok: true, data: state}`; all
+  four power-plan routes now `{ok: true, data: powerPlan.getState()}`
+  on success, `{ok: false, error: msg}` on failure — matching
+  `cloudRoute()`'s existing wrapper, the pattern this fix generalizes.
+  `powerPlan.getState()`'s OTHER (non-HTTP) callers — `welcome.js`'s
+  `getPowerPlanState` dep, `index.js`'s own `dischargeTolerancePct`
+  read — call the controller method directly, not through the wrapped
+  route, so they're unaffected by design.
+- Frontend updates, one per real consumer (found by grepping every
+  `/api/live`/`/api/power-plan` reference first, not by guessing):
+  `LiveTab.jsx` (`if (l) setLive(l)` → `if (l?.ok) setLive(l.data)`),
+  `PowerPlanCard.jsx`/`StrategyTab.jsx` (dropped the `envelope: false`
+  the previous item's hook needed for exactly this inconsistency —
+  no longer needed now that it's fixed — and their `enable`/
+  `setStrategy` POST handlers unwrap `.data` before `setState`).
+  `/api/power-plan/disable` was fixed too although unused by the
+  frontend today (intentionally — see the Live tab comment) — it's
+  still a real, documented endpoint, and leaving it on the old shape
+  while its three siblings moved would just be a new inconsistency.
+- Verified: raw `curl` confirmed both new envelope shapes; browser
+  check (dev server, power-plan controller disabled) across Live tab
+  (badges, flow diagram, Power Plan card) and Strategy tab; **exercised
+  the POST mutation path directly** — clicked "House priority" then
+  back to "Anker app" (safe: `enabled:false` means `tick()` never
+  writes to the device regardless of strategy) — confirming the
+  `setState(s.data)` unwrap works end-to-end, not just the GET path.
+  Reproduced the CI smoke test against a genuine cold start; the
+  `grep -q '"connected"'` check still passes unchanged since it matches
+  on the literal field name regardless of nesting depth.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
