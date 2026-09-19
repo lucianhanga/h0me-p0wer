@@ -10,7 +10,6 @@ export default function PowerPlanCard() {
   // there.
   const { data: state, setData: setState } = usePolledResource("/api/power-plan", {
     intervalMs: 10000,
-    envelope: false,
   });
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
@@ -21,7 +20,7 @@ export default function PowerPlanCard() {
       const r = await fetch("/api/power-plan/enable", { method: "POST" });
       const s = await r.json();
       if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
-      setState(s);
+      setState(s.data);
     } catch (err) {
       alert(`Power plan enable failed: ${err.message}`);
     } finally {

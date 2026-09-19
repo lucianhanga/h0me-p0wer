@@ -101,7 +101,6 @@ export default function StrategyTab() {
   // separate concern from what this item scoped in.
   const { data: state, setData: setState } = usePolledResource("/api/power-plan", {
     intervalMs: 10000,
-    envelope: false,
   });
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -124,7 +123,7 @@ export default function StrategyTab() {
       });
       const s = await r.json();
       if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
-      setState(s);
+      setState(s.data);
     } catch (err) {
       alert(`Strategy update failed: ${err.message}`);
     } finally {

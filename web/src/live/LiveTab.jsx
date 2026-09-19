@@ -23,7 +23,7 @@ export default function LiveTab() {
     const fast = () =>
       Promise.all([get("/api/live"), get("/api/flow")]).then(([l, f]) => {
         if (!mounted.current) return;
-        if (l) setLive(l);
+        if (l?.ok) setLive(l.data);
         if (f?.ok) setFlow(f.data);
       });
     const slow = () =>
