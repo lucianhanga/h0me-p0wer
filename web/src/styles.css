@@ -673,19 +673,47 @@ pre {
   }
 }
 
+/* Card chrome now lives on the outer wrapper, not the FlipTile's front
+   face — the ‹ › period-nav title sits above the FlipTile (always visible,
+   flipped or not) with just the flippable body (stats / bar chart) inside
+   (2026-09-19, user request: nav buttons used to be part of the front
+   face and disappeared once a card was flipped). */
+.src-card {
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 /* Equal tile heights: stretch the whole FlipTile chain with the grid row,
-   make the tile a flex column and pin the money footer to the bottom. */
-.src-grid .flip-tile,
-.src-grid .flip-inner,
-.src-grid .flip-front {
+   make the body a flex column and pin the money footer to the bottom. */
+.src-card .flip-tile {
+  flex: 1;
+  min-height: 0;
+}
+
+.src-card .flip-inner,
+.src-card .flip-front {
   height: 100%;
 }
 
-.src-grid .tile {
+.src-card-body {
   height: 100%;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
+}
+
+/* The outer .src-card already draws the border/background — the back face
+   would otherwise double it up. */
+.src-card .flip-back {
+  background: transparent;
+  border: none;
+  border-radius: 0;
 }
 
 .src-home {

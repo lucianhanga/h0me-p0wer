@@ -114,62 +114,51 @@ function SourceCard({ type, title, data, formatLabel }) {
   // Today (offset 0) also reports PV→battery; past periods don't have it.
   const rows = active.battInKwh != null ? [...SRC_ROWS, BATT_IN_ROW] : SRC_ROWS;
   return (
-    <FlipTile back={<BackBars rows={active.bars} formatLabel={formatLabel} />}>
-      <div className="tile">
-        <div className="tile-title src-title">
-          <button
-            className="src-nav"
-            onClick={(e) => {
-              e.stopPropagation();
-              go(1);
-            }}
-            disabled={blocked}
-            aria-label="Older period"
-          >
-            ‹
-          </button>
-          <span>{offset === 0 ? title : (past?.label ?? title)}</span>
-          <button
-            className="src-nav"
-            onClick={(e) => {
-              e.stopPropagation();
-              go(-1);
-            }}
-            disabled={offset === 0}
-            aria-label="Newer period"
-          >
-            ›
-          </button>
-        </div>
-        <div className="src-home">{active.homeKwh} kWh</div>
-        {active.pvProducedKwh != null && (
-          <div className="src-produced">
-            <span className="src-produced-icon">☀</span>
-            <span>{active.pvProducedKwh} kWh produced</span>
-          </div>
-        )}
-        {active.dataCoveragePct != null && active.dataCoveragePct < 90 && (
-          <div className="src-gap-note">
-            ⚠ {active.dataCoveragePct}% of today covered, even after recovering what we could
-            from Anker's cloud — actual totals may still be higher than shown
-          </div>
-        )}
-        <div className="src-rows">
-          {rows.map((r) => (
-            <div className="src-row" key={r.key}>
-              <span className="src-dot" style={{ background: r.color }} />
-              <span className="src-label">{r.label}</span>
-              <span className="src-value">
-                <span className="src-kwh">{active[r.key]} kWh</span>
-                {r.stored && <span className="src-eur">stored</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-        <div className="src-money">
-          spent €{active.gridEur} · saved €{active.savedEur}
-        </div>
+    <div className="src-card">
+      {/* Outside the FlipTile so ‹ › period nav stays usable on the flipped
+          (bar-chart) side too — it used to live inside the front face and
+          vanish once the card was flipped (2026-09-19, user request). */}
+      <div className="tile-title src-title">
+        <button className="src-nav" onClick={() => go(1)} disabled={blocked} aria-label="Older period">
+          ‹
+        </button>
+        <span>{offset === 0 ? title : (past?.label ?? title)}</span>
+        <button className="src-nav" onClick={() => go(-1)} disabled={offset === 0} aria-label="Newer period">
+          ›
+        </button>
       </div>
-    </FlipTile>
+      <FlipTile back={<BackBars rows={active.bars} formatLabel={formatLabel} />}>
+        <div className="src-card-body">
+          <div className="src-home">{active.homeKwh} kWh</div>
+          {active.pvProducedKwh != null && (
+            <div className="src-produced">
+              <span className="src-produced-icon">☀</span>
+              <span>{active.pvProducedKwh} kWh produced</span>
+            </div>
+          )}
+          {active.dataCoveragePct != null && active.dataCoveragePct < 90 && (
+            <div className="src-gap-note">
+              ⚠ {active.dataCoveragePct}% of today covered, even after recovering what we could
+              from Anker's cloud — actual totals may still be higher than shown
+            </div>
+          )}
+          <div className="src-rows">
+            {rows.map((r) => (
+              <div className="src-row" key={r.key}>
+                <span className="src-dot" style={{ background: r.color }} />
+                <span className="src-label">{r.label}</span>
+                <span className="src-value">
+                  <span className="src-kwh">{active[r.key]} kWh</span>
+                  {r.stored && <span className="src-eur">stored</span>}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="src-money">
+            spent €{active.gridEur} · saved €{active.savedEur}
+          </div>
+        </div>
+      </FlipTile>
+    </div>
   );
 }

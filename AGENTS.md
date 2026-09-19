@@ -1979,6 +1979,26 @@ EPIPE noise on every client disconnect).
     endpoint swap, and `akiot.mqtt.*` is marked *(inferred)* with no
     payload shapes given.
 
+## Dashboard: ‹ › period nav stays visible on the flipped (bar-chart) side (2026-09-19, user request)
+
+- User: "in the Dashboard tab the navigation buttons should be shown also
+  when the tiles are flipped." Previously `SourceCard`'s `‹ title ›` row
+  lived inside `FlipTile`'s front face alongside the stats — flipping the
+  card to the bar-chart back (`BackBars`) hid the nav row entirely, so
+  browsing past periods required flipping back to the front first.
+  Restructured so the card chrome (background/border/radius/padding, was
+  on `.tile`/inside the flip front) moved to a new outer `.src-card`
+  wrapper; the `‹ title ›` row now renders once, outside `FlipTile`,
+  always visible; `FlipTile` wraps only the flippable body (`.src-card-body`
+  stats vs. `BackBars`). Dropped the nav buttons' `stopPropagation()` —
+  no longer needed since they're outside the click-to-flip area.
+  `.flip-back`'s own background/border is suppressed under `.src-card`
+  (the outer wrapper already draws it) to avoid a doubled border; `.cards`
+  (Live tab's unrelated FlipTile usage) is untouched. Verified in a
+  browser: flipped "Today" to its bar chart, clicked `‹` on the still-
+  flipped card — it advanced to "Yesterday" and redrew the chart without
+  flipping back.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
