@@ -87,27 +87,31 @@ export function registerWelcomeRoute(app, deps) {
       // measured so-far value at 06:01, an hour before sunrise, when the
       // true figure was ~0 — displayed as "measured" on the Right now
       // card, which was wrong). weekKwh/monthKwh get the SAME treatment
-      // (2026-09-18, second fix same day — user: "week ≈ 11.1 kWh ·
-      // month ≈ 95.4 kWh... which is not correct... check the values from
-      // dashboard... compute them in one place"): both are now Dashboard's
-      // own real, already-computed week/month-to-date production
-      // (statsOverview, fetched once in welcome.js and threaded through
-      // context — see buildContext's comment) rather than a second,
-      // independent AI/PVGIS estimate that could disagree with what
-      // Dashboard shows for the exact same numbers. Falls back to the
-      // AI's own value only if the internal stats fetch itself failed
-      // (statsOverview null) — better a possibly-stale AI guess than a
-      // blank field. When the PV system is live, none of these three
-      // NUMBERS are ever left to the model — only the narration
-      // (reasoning) is.
-      production: context.battery.pvLiveToday
-        ? {
-            ...ai.production,
-            todayKwh: context.pvProducedTodayKwh,
-            weekKwh: context.pvProducedWeekToDateKwh ?? ai.production?.weekKwh,
-            monthKwh: context.pvProducedMonthToDateKwh ?? ai.production?.monthKwh,
-          }
-        : ai.production,
+      // (2026-09-18, second fix same day): both are Dashboard's own real,
+      // already-computed week/month-to-date production (statsOverview,
+      // fetched once in welcome.js and threaded through context — see
+      // buildContext's comment) rather than a second, independent AI/PVGIS
+      // estimate that could disagree with what Dashboard shows for the
+      // exact same numbers. Falls back to the AI's own value only if the
+      // internal stats fetch itself failed (statsOverview null) — better a
+      // possibly-stale AI guess than a blank field.
+      // UNCONDITIONAL as of 2026-09-19 — previously gated on
+      // battery.pvLiveToday (`pvMaxToday > 0`, i.e. "has today itself
+      // produced anything yet"), which is TRUE INSTALLATION STATUS'S WRONG
+      // PROXY: the system has been permanently installed since 2026-09-13,
+      // but that check went false every single day before the first sun of
+      // the morning — real incident: a 06:01 generation, before sunrise,
+      // had the AI describe the system as "not yet live" and substitute a
+      // PVGIS projection for todayKwh, exactly the bug the FIRST fix this
+      // week was meant to close, just via a different door. The system is
+      // always installed — these three NUMBERS are never left to the
+      // model, period; only the narration (reasoning) is.
+      production: {
+        ...ai.production,
+        todayKwh: context.pvProducedTodayKwh,
+        weekKwh: context.pvProducedWeekToDateKwh ?? ai.production?.weekKwh,
+        monthKwh: context.pvProducedMonthToDateKwh ?? ai.production?.monthKwh,
+      },
       // endOfDay.estimatedSavingsEur: derived from THIS SAME CARD's own
       // toHouseKwh (2026-09-18, second fix same week — user: "it cannot
       // be only this if you estimate [2.9 kWh to the house]" — €0.17
@@ -149,13 +153,22 @@ export function registerWelcomeRoute(app, deps) {
         sunHoursToday: context.sun.sunHoursToday,
         tempMin: context.today?.tempMin ?? null,
         tempMax: context.today?.tempMax ?? null,
+        // For the Weather tile's radiation line (2026-09-19, user
+        // request) — shown directly, not left to the AI's prose, since
+        // it's a single clean number already in context.today.
+        radiationSumKwhM2Today: context.today?.radiationSumKwhM2 ?? null,
         week: context.week,
-        pvLiveToday: context.battery.pvLiveToday ?? false,
       },
+      // Sunrise-bounded, NOT "so far"/until now — see buildContext's
+      // comment on gridImportKwhUntilSunrise/battDischargeKwhUntilSunrise
+      // (2026-09-19 fix: "How the day started" was showing the wrong
+      // window, todayImportKwhSoFar, which keeps growing all day instead
+      // of describing the period the card's own name refers to).
       startOfDay: {
         sunrise: context.sun.sunrise,
         batterySoc: context.battery.sunriseSoc,
-        gridImportKwhSoFar: context.consumption.todayImportKwhSoFar,
+        gridImportKwhUntilSunrise: context.consumption.gridImportKwhUntilSunrise,
+        battDischargeKwhUntilSunrise: context.consumption.battDischargeKwhUntilSunrise,
       },
     };
     kvSet(CACHE_KEY, payload);
