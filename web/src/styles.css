@@ -1008,7 +1008,7 @@ pre {
 }
 
 /* Welcome tab */
-.welcome .wx-hero { margin-bottom: 1rem; }
+.welcome .wx-hero { margin-bottom: 1rem; animation: wx-tile-in 0.35s ease-out both; }
 .wx-greeting { font-size: 1.15rem; margin: 0 0 0.25rem; padding-right: 2rem; }
 .wx-meta { font-size: 0.75rem; margin: 0; }
 
@@ -1047,6 +1047,7 @@ pre {
   flex-wrap: wrap;
   margin-bottom: 1rem;
   background: linear-gradient(135deg, #1a2128 0%, #1e252f 55%, #241e19 100%);
+  animation: wx-tile-in 0.35s ease-out 0.04s both;
 }
 .wx-icon {
   width: 56px;
@@ -1109,6 +1110,31 @@ pre {
    existed for them), so each .card just stretches to match its row's
    tallest sibling — native CSS Grid align-items:stretch, no JS needed. */
 .wx-grid .card { height: 100%; box-sizing: border-box; display: flex; flex-direction: column; }
+/* Tile entrance + hover (2026-09-19, "a bit of formatting and
+   animations, keep it spartan") — a quick, quiet fade+rise on first
+   paint, staggered per tile so the tab feels alive without being flashy
+   (same restrained pace as the icon-breathe/live-dot animations already
+   on this tab); a small lift + brighter border on hover, not a
+   scale/shadow spectacle. Cards mount once per session (React doesn't
+   recreate them on every 5-min poll, just updates their content), so
+   this plays once on arrival, not on every refresh. */
+.wx-grid .card {
+  animation: wx-tile-in 0.35s ease-out both;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.wx-grid .card:hover { transform: translateY(-2px); border-color: #3a444c; }
+.wx-grid .card:nth-child(1) { animation-delay: 0s; }
+.wx-grid .card:nth-child(2) { animation-delay: 0.04s; }
+.wx-grid .card:nth-child(3) { animation-delay: 0.08s; }
+.wx-grid .card:nth-child(4) { animation-delay: 0.12s; }
+.wx-grid .card:nth-child(5) { animation-delay: 0.16s; }
+.wx-grid .card:nth-child(6) { animation-delay: 0.2s; }
+.wx-grid .card:nth-child(7) { animation-delay: 0.24s; }
+.wx-grid .card:nth-child(8) { animation-delay: 0.28s; }
+@keyframes wx-tile-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 .wx-big { font-size: 1.3rem; font-weight: 600; }
 .wx-big.small { font-size: 1rem; font-weight: 600; }
 /* "Right now" card: a small accent border + pulsing live dot next to the
@@ -1149,7 +1175,10 @@ pre {
   .wx-icon,
   .sun-marker-glow,
   .sun-marker-dot,
-  .wx-live-dot {
+  .wx-live-dot,
+  .wx-grid .card,
+  .wx-hero,
+  .wx-today {
     animation: none;
   }
 }

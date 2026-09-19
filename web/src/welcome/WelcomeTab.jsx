@@ -10,6 +10,20 @@ const ICONS = {
   snow: "M12 3v18m-7-13 14 10M5 16l14-10",
 };
 
+// Consistent decimal formatting (2026-09-19, user request: "a bit of
+// formatting"). Server-deterministic numbers already round consistently
+// (round1/r2 — see welcome-ai.js/savings.js), but AI-returned numbers
+// (toHouseKwh, estimateKwh, etc.) are only schema-typed as "number", no
+// fixed precision — applying this uniformly to EVERY displayed value, AI
+// or deterministic, keeps the whole tab's columns visually consistent
+// instead of some numbers showing "2" and others "2.34".
+const fmt1 = (v) => (v == null ? "—" : (Math.round(v * 10) / 10).toFixed(1));
+const fmtEur = (v) => (v == null ? "—" : (Math.round(v * 100) / 100).toFixed(2));
+// Percentages stay whole numbers — matching how SOC is shown everywhere
+// else in the app (BatteryTab, StrategyTab); forcing a decimal on a
+// percentage ("100.0%") reads oddly against that established convention.
+const fmtPct = (v) => (v == null ? "—" : Math.round(v));
+
 function WeatherIcon({ name }) {
   return (
     <svg viewBox="0 0 24 24" className="wx-icon" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -75,13 +89,13 @@ function YesterdayCard({ y }) {
       />
       <h3>Yesterday</h3>
       <p className="wx-big">
-        {y.homeKwh} kWh <span className="muted">used</span>
+        {fmt1(y.homeKwh)} kWh <span className="muted">used</span>
       </p>
       <p className="muted">
-        grid {y.gridKwh} kWh · battery {y.battKwh} kWh · PV {y.pvKwh} kWh direct
+        grid {fmt1(y.gridKwh)} kWh · battery {fmt1(y.battKwh)} kWh · PV {fmt1(y.pvKwh)} kWh direct
       </p>
       <p className="muted">
-        ☀ {y.pvProducedKwh} kWh produced · spent €{y.gridEur} · saved €{y.savedEur}
+        ☀ {fmt1(y.pvProducedKwh)} kWh produced · spent €{fmtEur(y.gridEur)} · saved €{fmtEur(y.savedEur)}
       </p>
     </section>
   );
@@ -105,13 +119,13 @@ function ThisWeekSoFarCard({ w }) {
       />
       <h3>This week so far</h3>
       <p className="wx-big">
-        {w.homeKwh} kWh <span className="muted">used</span>
+        {fmt1(w.homeKwh)} kWh <span className="muted">used</span>
       </p>
       <p className="muted">
-        grid {w.gridKwh} kWh · battery {w.battKwh} kWh · PV {w.pvKwh} kWh direct
+        grid {fmt1(w.gridKwh)} kWh · battery {fmt1(w.battKwh)} kWh · PV {fmt1(w.pvKwh)} kWh direct
       </p>
       <p className="muted">
-        ☀ {w.pvProducedKwh} kWh produced · spent €{w.gridEur} · saved €{w.savedEur}
+        ☀ {fmt1(w.pvProducedKwh)} kWh produced · spent €{fmtEur(w.gridEur)} · saved €{fmtEur(w.savedEur)}
       </p>
     </section>
   );
@@ -247,10 +261,10 @@ export default function WelcomeTab() {
         <div>
           <p>{data.today.summary}</p>
           <p className="muted">
-            {gt.tempMin}°–{gt.tempMax}°C · {gt.sunHoursToday} h sun
+            {fmt1(gt.tempMin)}°–{fmt1(gt.tempMax)}°C · {fmt1(gt.sunHoursToday)} h sun
           </p>
           {gt.radiationSumKwhM2Today != null && (
-            <p className="muted">☀ {gt.radiationSumKwhM2Today} kWh/m² radiation today</p>
+            <p className="muted">☀ {fmt1(gt.radiationSumKwhM2Today)} kWh/m² radiation today</p>
           )}
         </div>
         <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
@@ -266,7 +280,7 @@ export default function WelcomeTab() {
           <h3>How the day started</h3>
           <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
           <p className="muted">
-            until sunrise: grid {data.startOfDay.gridImportKwhUntilSunrise} kWh · battery {data.startOfDay.battDischargeKwhUntilSunrise} kWh
+            until sunrise: grid {fmt1(data.startOfDay.gridImportKwhUntilSunrise)} kWh · battery {fmt1(data.startOfDay.battDischargeKwhUntilSunrise)} kWh
           </p>
         </section>
 
@@ -281,8 +295,8 @@ export default function WelcomeTab() {
             Right now
           </h3>
           <p>{data.today.statusQuo}</p>
-          <p className="wx-big">{data.production.todayKwh} kWh <span className="muted">produced today</span></p>
-          <p className="muted">week so far ≈ {data.production.weekKwh} kWh · month so far ≈ {data.production.monthKwh} kWh</p>
+          <p className="wx-big">{fmt1(data.production.todayKwh)} kWh <span className="muted">produced today</span></p>
+          <p className="muted">week so far ≈ {fmt1(data.production.weekKwh)} kWh · month so far ≈ {fmt1(data.production.monthKwh)} kWh</p>
           <p className="muted">measured · {data.production.reasoning}</p>
           {data.today.statusQuoUpdatedAt && (
             <p className="muted wx-status-quo-stamp">
@@ -302,9 +316,9 @@ export default function WelcomeTab() {
             text={`How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved. ${data.endOfDay.note}`}
           />
           <h3>How today will end</h3>
-          <p>battery ≈ {data.endOfDay.batterySocEstimate}% · house ≈ {data.endOfDay.toHouseKwh} kWh</p>
-          <p className="muted">to battery ≈ {data.endOfDay.toBatteryKwh} kWh · export ≈ {data.endOfDay.gridExportKwh} kWh</p>
-          <p className="wx-big small">≈ €{data.endOfDay.estimatedSavingsEur} <span className="muted">saved today</span></p>
+          <p>battery ≈ {fmtPct(data.endOfDay.batterySocEstimate)}% · house ≈ {fmt1(data.endOfDay.toHouseKwh)} kWh</p>
+          <p className="muted">to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈ {fmt1(data.endOfDay.gridExportKwh)} kWh</p>
+          <p className="wx-big small">≈ €{fmtEur(data.endOfDay.estimatedSavingsEur)} <span className="muted">saved today</span></p>
           <p className="muted">{data.endOfDay.note}</p>
         </section>
 
@@ -326,7 +340,7 @@ export default function WelcomeTab() {
           />
           <h3>How this week should end</h3>
           <p>{data.week.estimate}</p>
-          <p className="muted">≈ {data.week.estimateKwh} kWh · €{data.week.estimateEur} saved</p>
+          <p className="muted">≈ {fmt1(data.week.estimateKwh)} kWh · €{fmtEur(data.week.estimateEur)} saved</p>
         </section>
 
         <section className="card">
