@@ -2404,6 +2404,55 @@ EPIPE noise on every client disconnect).
   `grep -q '"connected"'` check still passes unchanged since it matches
   on the literal field name regardless of nesting depth.
 
+## Architecture roadmap item #5 (final): centralized the tariff fallback (2026-09-19, user: "continue until you are done with all")
+
+- Fifth and last item: `TARIFF_EUR_PER_KWH` was read independently in
+  five places across four files, with two different fallback values —
+  `?? 0` in `stats.js`'s two cost-calculation sites, `?? 0.3` in
+  `roi.js`, `roi-baseline.js`, and `welcome-sources.js`. If the env var
+  were ever unset, Dashboard/period-stats would have silently shown €0
+  costs while ROI/Welcome assumed 0.3 €/kWh — a real behavioral
+  divergence between tabs that would only surface as "why do these two
+  tabs disagree about money," hard to trace back to its cause.
+- New `getTariff()` in `server/env.js` (the module that already centralizes
+  *loading* the .env file — this extends it to centralize one specific
+  *value* too). Fallback is `0.3`, not `0` — checked `.env.example`
+  first, which documents `TARIFF_EUR_PER_KWH=0.30`: `0.3` is the
+  project's own established convention, already the majority (3 of 5)
+  of existing call sites, not a new choice invented for this fix.
+  `stats.js`'s `?? 0` was the outlier being corrected, not the other
+  way around.
+- Updated `stats.js` (both sites), `roi.js`, `roi-baseline.js`
+  (simplified `config?.tariff ?? Number(process.env.TARIFF_EUR_PER_KWH
+  ?? 0.3)` to `config?.tariff ?? getTariff()` — same value, one less
+  duplicated expression).
+- **Deliberately left one site alone**: `welcome-sources.js`'s
+  `parseWelcomeConfig(env = process.env)` reads `env.TARIFF_EUR_PER_KWH
+  ?? 0.3` — already the correct value, so not actually part of the
+  inconsistency. Every call site in the codebase calls it with no
+  arguments (confirmed via grep), always defaulting to `process.env`,
+  but the function is explicitly designed to accept a substitute `env`
+  object — swapping that line for a `getTariff()` call (which always
+  reads `process.env` directly) would silently break that override
+  capability for a site that wasn't actually broken. Consolidating
+  everything that reads the SAME way is the goal; collapsing a
+  differently-shaped, already-correct pattern into the new helper
+  isn't the same fix.
+- **Verified via the same stash-based before/after method as the
+  earlier items**: `/api/stats/overview`, `/api/stats/period`
+  (yesterday), and `/api/roi` captured before and after against the
+  local dev DB. Every tariff-dependent figure — `costs`, `byPeriod.week`,
+  ROI's `savingsSoFarEur` and full `baseline` object — came back
+  identical, because this account's real `.env` already sets
+  `TARIFF_EUR_PER_KWH=0.3068`, so the fallback path (the only thing
+  this change touches) was never actually exercised by the comparison
+  — expected, and the right outcome: a fallback-only fix should be
+  invisible until the env var is genuinely unset. Reproduced the CI
+  smoke test against a cold start.
+- This closes out the architecture review's 5-item roadmap (PRs #160,
+  #162, #163, #164, and this one) — see the "Architecture review" entry
+  above for the original audit and the artifact it was published as.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically

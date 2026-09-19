@@ -17,3 +17,17 @@ import { fileURLToPath } from "node:url";
 dotenv.config({
   path: path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env"),
 });
+
+// Single source of truth for the electricity tariff (architecture-review
+// roadmap item #5) — this was five independent `process.env.
+// TARIFF_EUR_PER_KWH` reads across four files, with two different
+// fallback values in the wild (`?? 0` in stats.js's cost figures, `?? 0.3`
+// in roi.js/roi-baseline.js/welcome-sources.js). If the env var were ever
+// unset, Dashboard/period-stats would have silently shown €0 costs while
+// ROI/Welcome assumed 0.3 €/kWh — a real behavioral divergence between
+// tabs. `0.3` is the value `.env.example` itself documents
+// (`TARIFF_EUR_PER_KWH=0.30`), so it's the established convention, not a
+// new choice.
+export function getTariff() {
+  return Number(process.env.TARIFF_EUR_PER_KWH ?? 0.3);
+}

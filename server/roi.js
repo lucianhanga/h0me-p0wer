@@ -15,6 +15,7 @@ import { getBaseline, computeBaseline } from "./roi-baseline.js";
 import { parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
 import { savedEur } from "./savings.js";
 import { dayBattery } from "./energy-day.js";
+import { getTariff } from "./env.js";
 
 // Bill of materials with SNAPSHOTTED purchase prices — user-editable config.
 // ROI math must use the prices paid, never live prices, so rows carry their
@@ -278,7 +279,7 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const bom = loadBom().map((r) => ({ ...r, lineTotalEur: r2(r.qty * r.unitPriceEur) }));
   // Rows flagged `excluded` stay listed but don't count toward the total.
   const totalInvestedEur = r2(bom.reduce((a, r) => a + (r.excluded ? 0 : r.lineTotalEur), 0));
-  const tariff = Number(process.env.TARIFF_EUR_PER_KWH ?? 0.3);
+  const tariff = getTariff();
 
   const meterSn = deps.getMeterSn?.() ?? getAnyDeviceSn();
   const battSn = deps.getBatterySn?.() ?? getBatterySn(meterSn);
