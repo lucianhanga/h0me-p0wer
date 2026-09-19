@@ -738,6 +738,7 @@ app.get("/api/stats/overview", (req, res) => {
   const battAnchors = new Map(); // bt -> {s, c} signed battery flow (out − charge)
   const cellsAnchors = new Map(); // bt -> {s, c} cells-only output (excl. PV pass-through)
   const pvAnchors = new Map(); // bt -> {s, c} PV direct-to-home
+  const chargeAnchors = new Map(); // bt -> {s, c} charge power (PV/grid into the battery)
   const putInto = (map, bt, v) => {
     const cell = (map.get(bt) ?? map.set(bt, { s: 0, c: 0 }).get(bt));
     cell.s += v;
@@ -754,6 +755,7 @@ app.get("/api/stats/overview", (req, res) => {
     putInto(battAnchors, bt, (r.output_w ?? 0) - (r.charge_w ?? 0));
     putInto(cellsAnchors, bt, Math.max(0, (r.output_w ?? 0) - pvHome));
     putInto(pvAnchors, bt, pvHome);
+    putInto(chargeAnchors, bt, Math.max(0, r.charge_w ?? 0));
   }
   if (battSn) {
     const todayStr = localDate(new Date(dayStartMs));
@@ -763,7 +765,10 @@ app.get("/api/stats/overview", (req, res) => {
       const bt = Math.floor(r.ts / BUCKET) * BUCKET;
       if (!battAnchors.has(bt)) putInto(battAnchors, bt, r.power);
       // The cloud battery series is CELLS-only (verified 2026-09-15) — use
-      // it as the cells fallback too (no local samples that bucket).
+      // it as the cells fallback too (no local samples that bucket). It
+      // carries no charge information at all (see the ROI BOM entry's
+      // sibling finding on cloud_history being discharge-only), so there's
+      // no equivalent fallback for chargeAnchors — local samples only.
       if (!cellsAnchors.has(bt)) putInto(cellsAnchors, bt, Math.max(0, r.power));
     }
   }
@@ -797,10 +802,12 @@ app.get("/api/stats/overview", (req, res) => {
   const battByT = interp(battAnchors);
   const cellsByT = interp(cellsAnchors);
   const pvByT = interp(pvAnchors);
+  const chargeByT = interp(chargeAnchors);
   for (const p of profile) {
     p.batt = battByT.get(p.t) ?? null;
     p.cells = cellsByT.get(p.t) ?? null;
     p.pvHome = pvByT.get(p.t) ?? null;
+    p.chargeW = chargeByT.get(p.t) ?? null;
   }
 
   // --- Battery kWh per day (for week/month tiles): integrate the cloud

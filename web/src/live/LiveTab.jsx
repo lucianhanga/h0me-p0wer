@@ -82,18 +82,25 @@ export default function LiveTab() {
 
   // Today-so-far series for each tile's flip side, from the same `profile`
   // buckets the Dashboard's "Today" bars use — grid.power is already signed
-  // (+ import / − export, matching the Grid tile); batt is signed net
-  // battery flow (+ discharge / − charge, matching the Battery tile); pvHome
-  // is PV-to-house (same field the Dashboard's own PV bar uses — not total
-  // production, kept consistent rather than introducing a second PV
-  // definition); house is reconstructed the same way the Dashboard's hourly
-  // bars are (grid import + battery discharge + PV-to-house).
+  // (+ import / − export, matching the Grid tile); pvHome is PV-to-house
+  // (same field the Dashboard's own PV bar uses — not total production,
+  // kept consistent rather than introducing a second PV definition); house
+  // is reconstructed the same way the Dashboard's hourly bars are (grid
+  // import + battery discharge + PV-to-house).
+  // Battery: cells − chargeW, NOT the raw `batt` field (output_w − charge_w,
+  // which conflates PV pass-through with real charge/discharge and doesn't
+  // match what the front tile shows). cells is discharge-only (≥0, excl. PV
+  // pass-through, same quantity the front tile's "discharging" reading
+  // uses); chargeW is a separate per-bucket series added specifically so
+  // "loading" shows up as its own negative excursion (2026-09-19, user
+  // follow-up: "show also the loading part") instead of being invisible or
+  // netted away against pass-through.
   const toSeries = (pick) => todayProfile?.map((p) => [p.t, pick(p)]) ?? [];
   const gridSeries = toSeries((p) => p.power);
   const houseSeries = toSeries(
     (p) => Math.max(p.power, 0) + Math.max(p.cells ?? 0, 0) + Math.max(p.pvHome ?? 0, 0),
   );
-  const battSeries = toSeries((p) => p.batt);
+  const battSeries = toSeries((p) => (p.cells ?? 0) - (p.chargeW ?? 0));
   const pvSeries = toSeries((p) => p.pvHome);
 
   // Badge logic
