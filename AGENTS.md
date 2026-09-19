@@ -2226,6 +2226,40 @@ EPIPE noise on every client disconnect).
   explained by real time passing (~a few minutes) between the two
   captures — not by the refactor.
 
+## ROI BOM: two more "Extended" entries (2026-09-19, user request)
+
+- User pasted a German eBay listing (title, price, Artikelnr./
+  Bestellnummer, seller address) for a full Solarbank 4 Pro bundle, then
+  — mid-turn, in a separate message — an Amazon-style listing (title,
+  brand, price, no link) for mineral wool insulation, both "to the BOM
+  second list which was not bought yet."
+  - **eBay item**: gave only a bare `Artikelnr.` (127918005920), no URL.
+    Per the standing "never guess URLs" rule, did not silently construct
+    `ebay.de/itm/<item>` from it — asked the user first; they confirmed
+    the exact URL themselves before it was used. `WebFetch` 403'd on it
+    (eBay blocks non-browser fetches) — used the already-connected
+    Chrome tab instead, which loaded it fine (logged into the user's own
+    eBay session; read-only, no action taken), confirming title/price/
+    seller match what was pasted and yielding a real product photo via
+    `document.querySelector('img[src*="ebayimg"]')`.
+  - **Insulation item**: no link at all, and no reliable identifier to
+    construct one from (unlike eBay's numeric item-in-URL pattern, an
+    Amazon product URL needs an ASIN, not given) — used an Amazon
+    search-results URL instead, same precedent as the existing `PVMOUNT`
+    entry. The product photo itself arrived as a direct paste in the
+    conversation, not a link — found it via its file path over
+    `~/.claude/image-cache/<session-id>/`, keyed on the same "[Image #N]"
+    number the chat transcript referenced.
+  - New entries `SOLIX4E5000` (€2,349.00) and `ROCKWOOL50MM` (€75.00),
+    both `category: "extended"`/`excluded: true`, both with real
+    downloaded/pasted thumbnails resized to the established 400px
+    convention. `SOLIX4E5000`'s description flags that it's a whole-
+    system bundle that would supersede, not stack with, the standalone
+    `BP5000` entry already in the list.
+  - Verified via the running dev server: `/api/roi`'s `totalInvestedEur`
+    unchanged (both new rows excluded as intended), both thumbnails
+    serve 200, both render correctly in the "Extended" card.
+
 ## Dashboard channel audit (2026-09-15)
 
 - **Uniform per-day channel split, NO double booking** (verified numerically
