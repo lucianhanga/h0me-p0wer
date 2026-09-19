@@ -89,6 +89,7 @@ const formatDayLabel = (dateStr) =>
     weekday: "short",
     month: "short",
     day: "numeric",
+    year: "numeric",
   });
 
 function TopDaysCard({ title, rows }) {
