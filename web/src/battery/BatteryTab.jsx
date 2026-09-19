@@ -31,7 +31,9 @@ function ParamRow({ k, v }) {
 // /api/power-plan poll) — the account's discharge floor isn't actually where
 // the controller stops discharging; it pads that floor by this many points
 // as a safety margin (2026-09-17, user question: "why does it not go under
-// 14%" when the account floor shows 10%).
+// 14%" when the account floor shows 10% — margin lowered to 3 points,
+// 2026-09-19 user request, so this is 13% today, computed dynamically
+// below, not hardcoded).
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -80,9 +82,10 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const maxPct = config?.chargeUpperLimitPct;
   // The account's configured floor is not where the controller actually
   // stops discharging — dischargeToTarget() pads it by DISCHARGE_TOLERANCE_PCT
-  // as a safety margin (see power-plan.js). Shown as a second, distinct
-  // marker so "why does it stop at 14%, not 10%?" is answered on the gauge
-  // itself instead of only in server-side comments.
+  // as a safety margin (see power-plan.js; 3 points as of 2026-09-19, so
+  // 13% on a 10% account floor). Shown as a second, distinct marker so
+  // "why does it stop there, not at the account floor?" is answered on
+  // the gauge itself instead of only in server-side comments.
   const effectiveFloorPct =
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
   const usableKwh =
