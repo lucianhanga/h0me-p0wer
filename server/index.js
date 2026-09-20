@@ -37,6 +37,7 @@ import {
   saveCloudGridSnapshot,
   getCloudGridRows,
   pruneCloudGrid,
+  getPvDaily,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -582,6 +583,32 @@ app.get("/api/timeseries", (req, res) => {
       battChg: b ? round(b.battChg) : null,
       pv: b ? round(b.pv) : null,
     });
+  }
+
+  // Post-pass: beyond the 48h raw-sample retention (RETENTION_MS in db.js),
+  // no per-bucket PV signal exists anywhere (unlike Grid, PV has no cloud
+  // history fallback) — but pv_daily (populated once/day, kept forever; the
+  // same rollup the Dashboard/ROI/top-days already trust) still knows each
+  // day's total. Fill still-null buckets with that day's average watts so
+  // 7d/30d views show the real historical trend instead of a blank gap
+  // (2026-09-20 user report: Power Production showed nothing before the
+  // last ~2 days at 30d zoom, even though the Dashboard has that data).
+  const missingPvDates = new Set();
+  for (const r of data) if (r.pv == null) missingPvDates.add(localDate(new Date(r.t)));
+  if (missingPvDates.size) {
+    const dates = [...missingPvDates].sort();
+    const pvAvgByDate = new Map(
+      getPvDaily(dates[0], dates[dates.length - 1]).map((row) => [
+        row.date,
+        (row.produced * 1000) / 24,
+      ]),
+    );
+    for (const r of data) {
+      if (r.pv == null) {
+        const avg = pvAvgByDate.get(localDate(new Date(r.t)));
+        if (avg != null) r.pv = Math.round(avg * 100) / 100;
+      }
+    }
   }
 
   // Post-pass: cloud anchor buckets have grid but no phase split. Fill them
