@@ -68,6 +68,13 @@ const GRAPHS = [
   },
 ];
 
+// Remembers each graph's selected span across tab switches — GraphTab
+// unmounts when the user leaves the tab (see App.jsx's conditional render),
+// so component state alone would reset to the 24h default every time they
+// come back (user request 2026-09-20). Module-scoped: survives remounts,
+// resets only on a full page reload.
+const savedSpanMs = GRAPHS.map(() => null);
+
 // "Home" is the only series that SUMS two independently-polled feeds: the
 // fast local grid meter (~5 s) and the battery's own reported output, which
 // can lag the real power flow by up to ~1 min (device + cloud relay — see
@@ -113,7 +120,9 @@ export default function GraphTab() {
   const apiRefs = useRef(GRAPHS.map(() => null)); // per-graph { setSpan(ms) }
   // Per-graph UI state: stats line + which span preset is highlighted.
   const [statsArr, setStatsArr] = useState(GRAPHS.map(() => null));
-  const [activeArr, setActiveArr] = useState(GRAPHS.map(() => 24 * 3600 * 1000));
+  const [activeArr, setActiveArr] = useState(() =>
+    GRAPHS.map((_, i) => savedSpanMs[i] ?? 24 * 3600 * 1000),
+  );
   const [lastLiveAt, setLastLiveAt] = useState(null); // last successful live tick
 
   useEffect(() => {
@@ -318,12 +327,14 @@ export default function GraphTab() {
         if (win) {
           const span = win[1] - win[0];
           const match = SHORTCUTS.find((s) => Math.abs(span - s.ms) / s.ms < 0.02);
+          if (match) savedSpanMs[gi] = match.ms;
           setActiveArr((arr) => arr.map((a, i) => (i === gi ? (match?.ms ?? null) : a)));
         }
       });
 
       const unit = {
         async setSpan(ms) {
+          savedSpanMs[gi] = ms;
           const to = Date.now();
           const from = to - ms;
           await loadRange(from, to);
@@ -333,8 +344,8 @@ export default function GraphTab() {
       };
       apiRefs.current[gi] = unit;
 
-      // Initial view: last 24 h.
-      unit.setSpan(24 * 3600 * 1000);
+      // Initial view: the span this graph was last showing, else 24h.
+      unit.setSpan(savedSpanMs[gi] ?? 24 * 3600 * 1000);
 
       // Keep the view fresh while watching the live edge.
       const liveTimer = setInterval(async () => {
