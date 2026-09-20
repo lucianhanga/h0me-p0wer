@@ -2680,3 +2680,107 @@ EPIPE noise on every client disconnect).
 - **Anker week queries must start on Monday** (calendar week Mon→Sun);
   arbitrary 7-day spans fail with `-1 Failed to request`.
 - GitHub Project #18 + epic #8 track this; stories #1–#7 each got one commit.
+
+## Graph tab: y-axis zero floor, round labels, span persistence (2026-09-20, user reports)
+
+- **Disproportionate stacked areas at 1h/6h zoom** — user screenshot showed
+  Grid dominating and PV/Battery looking tiny at 1h, but proportionate at
+  12h+. Root cause: `yAxis.scale: true` let ECharts pick a tight non-zero
+  floor (e.g. ~300 W) at high zoom, clipping the bottom of the first
+  stacked layer (Grid) and visually inflating the layers stacked above it.
+  Verified the underlying data/derivation math was correct the whole time
+  (traced `pvHomeOf`/`homeOf` against real `/api/timeseries` rows — summed
+  to the exact Home line, to the decimal) before touching any code, since
+  the first hypothesis (a battery-priority ceiling issue) turned out wrong.
+  Fix (`web/src/graph/GraphTab.jsx`): dropped `scale: true` entirely —
+  ECharts' plain default axis already always includes zero, which is both
+  the fix AND gives round "nice number" tick labels for free (the
+  scale-mode axis exposed raw data extrema like "2453.41 W" as a label).
+  `axisLabel.formatter` also rounds explicitly, and `splitNumber: 3` cuts
+  the tick count so the axis reads at a glance instead of 6+ crowded
+  labels. The signed Battery chart (discharge +, charge −) still extends
+  below zero correctly since nothing forces a fixed range.
+- **Span resets to 24h on every tab switch** — `GraphTab` unmounts whenever
+  the user leaves the tab (`App.jsx`'s conditional render, not
+  `display:none`), so component state alone can't survive a return visit.
+  Moved the per-graph selected span (`savedSpanMs`, one slot per graph)
+  to module scope — survives remounts for the session, resets only on a
+  full page reload. `activeArr`'s initial `useState` and the initial
+  `unit.setSpan()` call both read it; `setSpan()` and the `datazoom`
+  handler's shortcut-match both write it.
+- **`from=NaN` timeseries requests looping every 5s** (console-error report,
+  same session) — `visibleWindow()` read the chart's dataZoom
+  `startValue`/`endValue` with only an `!= null` check, which let a stray
+  zoom/pan gesture on an axis with no data extent yet (right after mount,
+  before the first load resolves) hand back `NaN` — and since the live
+  tick's `setWindow(Date.now() - width, Date.now())` reuses the previous
+  window's width, one `NaN` self-perpetuates forever. Fixed by requiring
+  `Number.isFinite` in `visibleWindow()`/`setWindow()`, treating a
+  corrupted zoom state as "no window yet" instead of a real `[NaN, x]`
+  range.
+
+## PV history beyond 48h: cloud day-trend, not just a daily average (2026-09-20, user reports)
+
+- User: 30d zoom on Power Production only showed data from the last ~2
+  days. Confirmed via `/api/timeseries`: PV goes null before the exact
+  48h `RETENTION_MS` cutoff (`server/db.js`) for `battery_snapshots` —
+  unlike Grid, PV had no fallback at all once local samples age out,
+  because the cloud has no PV channel *for the week/month/year rollup*
+  endpoints (existing note, still true for those).
+- First fix: a `pv_daily`-based flat daily-average post-pass in
+  `/api/timeseries` (`produced_kWh × 1000 / 24` for any bucket still null
+  after the normal passes) — `pv_daily` is already kept forever (unlike
+  `battery_snapshots`) and backs the Dashboard/ROI/top-days.
+- **User pushed back with real evidence**: "in the Anker app I can see the
+  whole production back to 13.09 and it looks accurate enough" — a fair
+  challenge, since a flat line is a coarser answer than what the user
+  could already see elsewhere. Went looking for a better source rather
+  than defending the flat average, and found one already half-built:
+  `cloud_pv_history` (site-level `solar_production` energy_analysis, see
+  the 2026-09-16 entry above) is backfilled 30 days by
+  `catchUpBatteryPvHistory()` on every startup, and — checked directly
+  against the local db — already holds a REAL 20-min production curve
+  (2026-09-13 shows a proper day/night shape peaking ~504 W at 14:00, not
+  a placeholder). It just wasn't wired into `/api/timeseries`.
+  Added it as **Source 2b**, mirroring the exact pattern already proven
+  for Grid's/Battery's cloud day-trend anchors in the same route (only
+  fills buckets local samples haven't reached, skips still-open 20-min
+  intervals, lets the existing anchor-interpolation pass connect the
+  points). The `pv_daily` flat-average post-pass stays as a last-resort
+  fallback for anything even the cloud history doesn't cover (older than
+  `BACKFILL_DAYS` (30), or a day the backfill loop broke off on after a
+  rate limit).
+- **Retention clarification (user question)**: `BACKFILL_DAYS` is only how
+  far the *startup catch-up* looks back to fill gaps — `cloud_history`/
+  `cloud_pv_history`/`pv_daily` themselves have NO prune/delete logic at
+  all (only `snapshots`/`battery_snapshots`/`cloud_grid_snapshots` get
+  pruned, all on the 48h `RETENTION_MS`). Confirmed the live account's
+  `cloud_pv_history` already holds 34 days (back to 2026-08-17), more
+  than `BACKFILL_DAYS` — it just accumulates one more day at a time via
+  `syncCloudHistory`'s ongoing today+yesterday refresh, forever.
+- User also proposed a one-time full wipe-and-repopulate of the db from
+  the cloud; talked through it instead of doing it — the gap-only catch-up
+  already self-heals on every restart without needing one, and a full
+  repopulate would both discard higher-fidelity local raw samples in
+  favor of the cloud's coarser 20-min average AND risk repeating the
+  2026-09-16 rate-limit trip (bursting requests instead of the existing
+  6s-spaced, gap-only backfill).
+
+## ROI BOM: real product photos + planned electrical protection (2026-09-20, user requests)
+
+- Replaced the eBay Solarbank 4 E5000 bundle's placeholder photo (a broken
+  scrape — an unrelated red logo, not the product) with the real photo,
+  added one for the Power Dock entry added the same session, and fixed
+  the true root cause of why the swap wasn't visible: `/api/roi/image/
+  :asin` served every photo with `Cache-Control: public,
+  max-age=31536000, immutable` — correct for a URL that never changes
+  content, wrong here since these files DO get replaced in place with no
+  content hash to bust the cache. A browser that had already fetched the
+  broken image would never even revalidate for a year. Dropped
+  `immutable`, cut `max-age` to 1h; `res.sendFile`'s default ETag/
+  Last-Modified still makes a routine revalidation a cheap 304.
+- Added two more `extended`/planned-list entries (excluded from ROI cost,
+  per user confirmation these aren't part of the installed single-phase
+  system): ABB S203-C32 3-pole breaker (400V/32A/6kA, €39.90) and ABB
+  F204 A-40/0.03-L 4-pole Type A RCD (400V/40A/30mA, €30.39) — three-phase
+  protection ahead of a possible future Power Dock/Multisystem upgrade.

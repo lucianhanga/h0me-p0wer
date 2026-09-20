@@ -44,10 +44,11 @@ and its own PV-aware power plan that drives the battery's output preset.
   per source; ‹ › period navigation into the past; flip a tile for per-day
   stacked bars.
 - **ROI** — bill of materials with snapshotted purchase prices (clickable to
-  Amazon, thumbnails, PDF download), amortization chart with measured savings
-  vs. a seasonally-shaped forecast, and payback/projections (1–15 y) computed
-  from a **fixed AI-estimated baseline** (PVGIS climatology × your tariff —
-  set once, recomputed only on demand) instead of noisy short-term averages.
+  the source listing, thumbnails, PDF download), amortization chart with
+  measured savings vs. a seasonally-shaped forecast, and payback/projections
+  (1–15 y) computed from a **fixed AI-estimated baseline** (PVGIS climatology
+  × your tariff — set once, recomputed only on demand) instead of noisy
+  short-term averages.
 
 ## Power Plan (the controller)
 
