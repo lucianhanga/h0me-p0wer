@@ -149,8 +149,9 @@ export default function GraphTab() {
             formatter: (ts) => {
               const d = new Date(ts);
               const win = chart.getOption().dataZoom?.[0];
-              const spanMs =
-                win?.startValue != null ? Number(win.endValue) - Number(win.startValue) : 0;
+              const start = Number(win?.startValue);
+              const end = Number(win?.endValue);
+              const spanMs = Number.isFinite(start) && Number.isFinite(end) ? end - start : 0;
               return spanMs > 24 * 3600 * 1000
                 ? d.toLocaleDateString([], { day: "numeric", month: "short" }) +
                     " " +
@@ -163,7 +164,17 @@ export default function GraphTab() {
         yAxis: {
           type: "value",
           position: "right",
-          scale: true,
+          // Always include zero as a boundary (never `scale: true`'s tight
+          // non-zero floor) — these are stacked-area charts (Home Power
+          // Usage, Power Production), where a floor above zero clips the
+          // bottom of the first stacked layer and visually inflates the
+          // layers above it relative to it (reported 2026-09-20: 1h/6h
+          // zoom floored at ~300 W made PV/Battery look far bigger than
+          // Grid even though Grid was the larger share). The Battery graph
+          // is signed (discharge +, charge −), so `min`/`max` still adapt
+          // to whichever side has data instead of forcing a fixed range.
+          min: (v) => Math.min(0, v.min),
+          max: (v) => Math.max(0, v.max),
           axisLabel: {
             color: "#8b98a5",
             fontSize: 11,
@@ -207,13 +218,18 @@ export default function GraphTab() {
 
       function visibleWindow() {
         const dz = chart.getOption().dataZoom?.[0];
-        if (dz?.startValue != null && dz?.endValue != null) {
-          return [Number(dz.startValue), Number(dz.endValue)];
-        }
-        return null;
+        const start = Number(dz?.startValue);
+        const end = Number(dz?.endValue);
+        // A stray zoom/pan gesture on an axis with no data extent yet (e.g.
+        // right after the tab mounts, before the first load resolves) can
+        // hand back NaN start/endValue. Treating that as "no window" — rather
+        // than a real [NaN, x] range — stops it from reaching loadRange/the
+        // live tick, which would otherwise poll from=NaN forever (2026-09-20).
+        return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
       }
 
       function setWindow(fromMs, toMs) {
+        if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) return;
         programmatic = true;
         chart.dispatchAction({
           type: "dataZoom",
