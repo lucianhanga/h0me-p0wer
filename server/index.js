@@ -38,6 +38,7 @@ import {
   getCloudGridRows,
   pruneCloudGrid,
   getPvDaily,
+  getCloudPvDayPower,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -387,15 +388,15 @@ app.get("/api/timeseries", (req, res) => {
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
   // data (local wins). Still-open 20-min intervals are skipped — their
   // partial averages produce phantom dips.
+  const fromDate = localDate(new Date(from - 86400000));
+  const toDate = localDate(new Date(to));
+  // Anchors reach one cloud interval past the window edges so interpolation
+  // can bridge gaps that straddle the boundary (the edge buckets otherwise
+  // stay null — a data outage ending just inside the window has no in-window
+  // left anchor). Edge anchors are never emitted (output starts at `from`).
+  const anchorFrom = from - CLOUD_INTERVAL_MS;
   const sn = poller.snapshot?.meter?.sn;
   if (sn) {
-    const fromDate = localDate(new Date(from - 86400000));
-    const toDate = localDate(new Date(to));
-    // Anchors reach one cloud interval past the window edges so interpolation
-    // can bridge gaps that straddle the boundary (the edge buckets otherwise
-    // stay null — a data outage ending just inside the window has no in-window
-    // left anchor). Edge anchors are never emitted (output starts at `from`).
-    const anchorFrom = from - CLOUD_INTERVAL_MS;
     const cloudRows = [];
     for (const r of getCloudDayPower(sn, fromDate, toDate)) {
       if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
@@ -437,6 +438,22 @@ app.get("/api/timeseries", (req, res) => {
         }
       }
     }
+  }
+
+  // Source 2b: cloud PV production day-trend (site-level "solar_production",
+  // no device SN — see cloud_pv_history in db.js), the SAME real 20-min
+  // curve the Anker app itself draws its production history from.
+  // `catchUpBatteryPvHistory` already backfills this on startup for the
+  // last `BACKFILL_DAYS` (30) days, so it reaches well past the 48h
+  // `battery_snapshots` retention — this is what lets 7d/30d zoom show an
+  // actual production shape instead of a flat estimate for older days
+  // (2026-09-20 user report + follow-up: "in the Anker app I can see...
+  // accurate enough to draw some good visualization graphics").
+  for (const r of getCloudPvDayPower(fromDate, toDate)) {
+    if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
+    if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
+    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+    if (!acc.get(bt)?.pv) add(bt, "pv", r.power);
   }
 
   // Final pass: bridge consecutive GRID-bearing buckets (local or cloud
