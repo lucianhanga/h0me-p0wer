@@ -71,11 +71,11 @@
     "name": "Anker SOLIX Solarbank 4 E5000 Pro + 1× BP5000 + Smart Meter Gen 2",
     "desc": "Full next-gen bundle (5 kWh Solarbank 4 Pro + one BP5000 expansion + a second-generation Smart Meter) — a whole-system upgrade path, not an add-on to the installed E1600 Plus; would supersede rather than complement the standalone BP5000 entry above. Seller: atc_solarvolt / New Power GmbH, Aschauer Str. 32, 81549 München. eBay Artikelnr. 127918005920, Bestellnummer 03-15200-52914.",
     "qty": 1,
-    "unitPriceEur": 2349.00,
+    "unitPriceEur": 2299.00,
     "excluded": true,
     "category": "extended",
     "url": "https://www.ebay.de/itm/127918005920",
-    "priceSnapshotDate": "2026-09-19"
+    "priceSnapshotDate": "2026-09-20"
   },
   {
     "asin": "ROCKWOOL50MM",
@@ -87,5 +87,16 @@
     "category": "extended",
     "url": "https://www.amazon.de/s?k=Rockwool+KLIMAMAT+Steinwolle+Lamellenmatte+alukaschiert+50mm+5m+x+1m",
     "priceSnapshotDate": "2026-09-19"
+  },
+  {
+    "asin": "SOLIXPOWERDOCK",
+    "name": "Anker SOLIX Power Dock",
+    "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — a whole-system upgrade path, not an add-on to the installed E1600 Plus.",
+    "qty": 1,
+    "unitPriceEur": 299.00,
+    "excluded": true,
+    "category": "extended",
+    "url": "https://www.ankersolix.com/de/products/a17c5-multisystem?variant=58394961281373&ref=naviMenu_1_5_1_1_img&s_combine=BE100GZK&o_c=de&o_tab=1",
+    "priceSnapshotDate": "2026-09-20"
   }
 ]
