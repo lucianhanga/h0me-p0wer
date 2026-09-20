@@ -370,7 +370,13 @@ export function registerRoiRoute(app, deps = {}) {
     const asin = String(req.params.asin).replace(/[^A-Za-z0-9]/g, "");
     const file = path.join(IMG_DIR, `${asin}.jpg`);
     if (fs.existsSync(file)) {
-      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      // NOT immutable: these files get replaced in place (wrong/placeholder
+      // photo swapped for the real one, 2026-09-20) and the URL has no
+      // content hash to bust the cache — `immutable` told browsers to never
+      // even revalidate for a year, so a fixed image stayed stuck showing
+      // the old bytes. `sendFile`'s default ETag/Last-Modified still lets a
+      // revalidated request come back as a cheap 304 when nothing changed.
+      res.setHeader("Cache-Control", "public, max-age=3600");
       return res.sendFile(file);
     }
     res.status(404).setHeader("Content-Type", "image/gif").send(PIXEL_GIF);
