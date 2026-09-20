@@ -98,5 +98,27 @@
     "category": "extended",
     "url": "https://www.ankersolix.com/de/products/a17c5-multisystem?variant=58394961281373&ref=naviMenu_1_5_1_1_img&s_combine=BE100GZK&o_c=de&o_tab=1",
     "priceSnapshotDate": "2026-09-20"
+  },
+  {
+    "asin": "B0DXVVDWTF",
+    "name": "ABB S203-C32 Leitungsschutzschalter, 3-polig, C32A, 6kA",
+    "desc": "3-pole miniature circuit breaker (400V three-phase, 32A, 6kA breaking capacity), DIN-rail mount. Planned three-phase protection ahead of a Power Dock / Multisystem upgrade — not part of the installed single-phase E1600 Plus setup.",
+    "qty": 1,
+    "unitPriceEur": 39.90,
+    "excluded": true,
+    "category": "extended",
+    "url": "https://www.amazon.de/dp/B0DXVVDWTF",
+    "priceSnapshotDate": "2026-09-20"
+  },
+  {
+    "asin": "B003A6DLBQ",
+    "name": "ABB F204 A-40/0.03-L FI-Schutzschalter, Typ A, 4-polig, 40A, 30mA",
+    "desc": "4-pole Type A residual current device (400V three-phase + neutral, 40A, 30mA trip), DIN-rail mount. Planned three-phase protection ahead of a Power Dock / Multisystem upgrade — not part of the installed single-phase E1600 Plus setup.",
+    "qty": 1,
+    "unitPriceEur": 30.39,
+    "excluded": true,
+    "category": "extended",
+    "url": "https://www.amazon.de/dp/B003A6DLBQ",
+    "priceSnapshotDate": "2026-09-20"
   }
 ]
