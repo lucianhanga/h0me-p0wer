@@ -1,7 +1,20 @@
 # h0me-p0wer — project guide for agents
 
-Dashboard POC for the **Anker SOLIX Smart Meter Gen 2 (AE1X0)**. Two data
-sources merged into one stock-chart-style visualization.
+Home-energy dashboard **and controller** for an **Anker SOLIX** balcony
+setup: Smart Meter Gen 2 (AE1X0, local Modbus TCP) + Solarbank 2 E1600 Plus
+battery + 2×500 W PV — live monitoring, history, AI briefings, ROI tracking,
+and its own PV-aware power plan that drives the battery's output preset. Six
+tabs: Welcome / Live / Strategy / Graph / Dashboard / ROI — see README.md for
+the user-facing tour; this file is the "why," not the "what."
+
+**Picking this up fresh (new session, or a different AI in parallel)?** Read
+"Current state" right below first, then search this file for a specific
+topic/filename rather than reading top to bottom — the sections below it are
+a chronological decision log (newest additions are appended at the bottom),
+kept for the reasoning behind non-obvious choices, not meant to be read
+start to finish. If two sessions/agents are working on this repo at once,
+coordinate branches the normal git way (separate branches, PRs, don't both
+push straight to `main`) — nothing here does that coordination for you.
 
 ## Run
 
@@ -138,30 +151,93 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-- Meter SN syncs from the live Modbus reading (not hardcoded). Cloud sync waits
-  for the first snapshot before starting.
-- **PV is LIVE since 2026-09-13**: 2×500 W (SSW, 17°) connected to the
-  Solarbank's DC inputs (pv1_w/pv2_w report per-string watts). The Welcome/Ask
-  AI detects it via `pvLiveToday` (any pv_w > 0 today) and switches from
-  "planned PV estimates" to actuals; the production card title follows.
-  (The meter's secondary CT still reads 0 — PV is measured at the battery.)
+**As of 2026-09-21, v1.5.32, `main`, working tree clean, nothing pending.**
+Latest: grid target lowered 100→25 W and new Dashboard "Grid tracking"
+card measuring export/over-target lag deviation from raw meter samples —
+see the last log entry at the bottom of this file.
+Last session's work (PRs #166-177, all merged, chronologically the tail end
+of the log below) in one line each:
+- Graph tab: y-axis no longer floors above zero at high zoom (#166/167),
+  round tick labels + fewer gridlines, each graph's span (1h/6h/.../30d)
+  now persists across tab switches (#168), a `from=NaN` live-tick loop
+  fixed, and a rare spike no longer flattens the normal range — robust
+  (p98) axis cap + an "off-scale" note (#175).
+- `/api/timeseries` PV now has real history past the 48h local-sample
+  window: first a `pv_daily` flat-average fallback (#171), then upgraded
+  to the actual cloud 20-min production curve already being collected but
+  unused (`cloud_pv_history`, #172) — see "PV history beyond 48h" below.
+- ROI BOM: real product photos (the eBay bundle's was a broken scrape),
+  fixed a `Cache-Control: immutable` bug that made a photo fix invisible
+  (#169), added two planned three-phase electrical-protection entries
+  (#170).
+- `house_priority` discharge-floor hysteresis + PV-passthrough-at-floor fix
+  (#174) — caught via a code walkthrough with the user BEFORE it caused a
+  real yoyo, mirroring the already-fixed `battery_priority` ceiling bug.
+- Battery UI: multi-battery-ready vertical card stack (#176), then actual
+  visual beautification — hero-sized SOC percentage, meter tinted
+  end-to-end by charge level (#177), applying the loaded `dataviz` skill's
+  own specs.
+
+**Open / not done:**
+- `docs/phone-*.png` (referenced by README.md) are stale — still show
+  v0.22.14 and a tab labeled "Battery" (renamed to "Strategy" long ago),
+  predating essentially everything in this file. Automated capture failed
+  this session (browser automation's `resize_window` reported success
+  without ever changing the tab's actual `window.innerWidth`, confirmed via
+  JS — so the app never rendered its real mobile layout); user was going to
+  capture manually. If you're picking this up: ask before assuming it's
+  done, and if these ever get updated, the Graph/ROI/Battery screenshots
+  specifically would now look meaningfully different (zero-floored axis,
+  real ROI photos, the new hero-figure battery gauge).
+- Per-phase (L1/L2/L3) toggle in the Graph tab — the data's already in
+  `/api/timeseries`, just not surfaced as a chart option there (it IS
+  shown elsewhere, e.g. Live tab's phase cards).
+- No automated tests anywhere in the repo (no `*.test.js`, no test runner
+  in either `package.json`) — verification this whole session was manual
+  dry-run scripts against copies of the real db, or live-in-browser checks
+  via the Chrome automation tools, never a checked-in test suite.
+
+**Standing facts, still true:**
+- Meter SN syncs from the live Modbus reading (not hardcoded). Cloud sync
+  waits for the first snapshot before starting.
+- PV live since 2026-09-13: 2×500 W (SSW, 17°) on the Solarbank's DC inputs.
 - npm's `allow-scripts` blocks esbuild's postinstall on fresh installs:
   `npm approve-scripts esbuild && npm rebuild esbuild` if Vite misbehaves.
-- Git identity is repo-local: `lucianhanga` + GitHub noreply email.
-- Headless screenshot tooling (Chrome/Playwright) was too slow on this machine;
-  `docs/screenshot.png` is a manual capture.
-- Home-screen/PWA icons live in `web/public/` (`icon.svg` master, PNGs rendered
-  via headless Chrome). Chrome does NOT scale a bare SVG to tiny viewports
-  (renders it 1:1, cropped) — re-render sizes through a wrapper HTML with an
-  `<img style="width:Npx;height:Npx">` (see `git show` the icon commit).
+- Git identity is repo-local: `lucianhanga` + GitHub noreply email. Every
+  PR this project does bumps root/web/server `package.json` patch version,
+  even doc-only or tiny fixes (see this session's PRs for the pattern) —
+  and PRs get merged (not just opened) as part of finishing the task,
+  branch deleted locally + remotely afterward.
+- Production deploys are the user's own step — never SSH/deploy there;
+  this repo's job stops at commit/PR/merge to `main`. (The live server at
+  the user's LAN address DOES get redeployed fairly promptly after a
+  merge in practice — confirmed via curl mid-session — but that's the
+  user doing it, not something to rely on or trigger yourself.)
+- Home-screen/PWA icons live in `web/public/` (`icon.svg` master, PNGs
+  rendered via headless Chrome) — Chrome does NOT scale a bare SVG to tiny
+  viewports (renders it 1:1, cropped); re-render sizes through a wrapper
+  HTML with an `<img style="width:Npx;height:Npx">` (see `git show` the
+  icon commit).
 
 ## Ideas for next iterations
 
-- Auto-start both processes (launchd/systemd or a root `npm run dev` with
-  concurrently); serve the built frontend from the backend for single-port use.
-- kWh integration from local 5 s samples; cost estimation with tariff config.
-- Per-phase toggle in the chart (phases are already in `/api/timeseries`).
-- Docker packaging.
+- Per-phase (L1/L2/L3) toggle in the Graph tab (see "Open / not done").
+- `BACKFILL_DAYS` (30, `server/index.js`) is a lookback window for the
+  startup catch-up, not a retention cap — `cloud_history`/
+  `cloud_pv_history`/`pv_daily` are never pruned and already hold 30+ days
+  on the live account. If more than 30 days of *gap-recovery* reach is
+  ever needed (not just organic accumulation), that constant is the one
+  dial to turn — no redesign required (discussed at length with the user
+  2026-09-20/21, decided NOT to do a wipe-and-repopulate; see "PV history
+  beyond 48h" below for why).
+- A second physical battery is expected "soon" per the user (2026-09-21)
+  — the Battery UI is already structured to take a `data.batteries` array
+  with zero frontend changes (see "Battery UI" entry below), but
+  `GET /api/battery/params` and everywhere else in the backend that
+  assumes exactly one battery device (`getBatterySn()`'s "the one
+  cloud_history device_sn that isn't the meter", `power-plan.js`,
+  `battery-params.js`) would need real design work once that hardware
+  actually exists — deliberately not built speculatively ahead of it.
 
 ## Cost estimation (epic #33, done 2026-09-10)
 
@@ -2936,3 +3012,36 @@ EPIPE noise on every client disconnect).
     tinted amber end-to-end with a genuinely hero-scaled "40 %", vs. the
     previous flat-dark-track-plus-small-number look; details panel and
     tick labels below unaffected.
+
+## Grid target 100→25 W + lag-deviation metrics on the Dashboard (2026-09-21, user request)
+
+- User: "reduce ... the amount which I get from the grid to 25W" under
+  house_priority, and — because the device/cloud lags real demand changes —
+  measure how much is ACTUALLY sent to the grid when demand drops (preset
+  briefly too high) and how far the grid import deviates above the target
+  when demand rises (preset briefly too low), "put it in the dashboards."
+- `GRID_TARGET_W` default 100 → 25 (`server/power-plan.js`), now
+  `export`ed so the stats side uses the exact same number the controller
+  aims for rather than a second env read. Also affects battery_priority's
+  hold-phase ceiling (`demandW - GRID_TARGET_W`), same constant by design.
+  `.env.example` updated (`GRID_TARGET_W=25`; also fixed the stale
+  `DISCHARGE_TOLERANCE_PCT=4` → 3, matching the code since 2026-09-19).
+- New `gridTracking` block in `/api/stats/overview`
+  (`gridTrackingForWindow()`, `server/stats.js`): the route's existing
+  `today.exportKwh` comes from 30-min bucket AVERAGES, which dilute or
+  outright cancel the seconds-to-minutes lag spikes this feature is about
+  — so these metrics integrate the RAW ~5 s local samples
+  (`getSnapshotRows`, signed `grid_total`) with `cloud_grid_snapshots`
+  rows as the meter-down fallback, cloud rows filtered to minutes with no
+  local sample so the merge never double-counts. Same trapezoid + >30 min
+  gap-skip policy as everywhere else. Per window: `exportKwh`/
+  `exportPeakW` (trapezoid/peak of `max(0, -gridW)`) and `overTargetKwh`/
+  `overTargetPeakW` (same for `max(0, gridW - GRID_TARGET_W)`), plus
+  `coveragePct`. Served for today and yesterday (both fit the 48 h raw
+  retention).
+- Dashboard: new "Grid tracking · target ≤ N W" card
+  (`web/src/dashboard/Dashboard.jsx`, `.gridtrack-*` CSS) fed by the
+  existing overview poll — Today/Yesterday side by side, "exported" in the
+  established PV green and "above target" in grid orange, each
+  `X.XX kWh · peak NNN W`; amber `.src-gap-note` when a day's sample
+  coverage < 90%. No new endpoint, no new fetch cycle.

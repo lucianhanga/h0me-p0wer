@@ -11,10 +11,12 @@ import {
   getEarliestCloudDay,
   getCloudTrend,
   getLatestBattery,
+  getCloudGridRows,
 } from "./db.js";
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
+import { GRID_TARGET_W } from "./power-plan.js";
 
 // /api/stats/* — Dashboard + top-days: today's live profile, week/month/
 // year rollups, single-period time navigation, and production leaderboards.
@@ -73,6 +75,54 @@ function pvStoredTotals(fromDate, toDate) {
     toBatt += r.to_batt;
   }
   return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
+}
+
+// Grid-tracking metrics vs the power plan's GRID_TARGET_W (2026-09-21 user
+// request): the device/cloud lags behind real demand changes, so the
+// preset is briefly too HIGH when demand drops (-> export to the grid) and
+// too LOW when demand rises (-> grid import above the target). Measured
+// from the raw ~5 s local meter samples — the 30-min profile buckets in
+// the overview route would dilute or outright cancel these short spikes —
+// with cloud grid rows as the meter-down fallback (only where no local
+// sample exists, so nothing double-counts). Same trapezoid + >30 min
+// gap-skip policy as everywhere else.
+function gridTrackingForWindow(fromMs, toMs) {
+  const local = getSnapshotRows(fromMs, toMs).filter((r) => r.grid_total != null);
+  const localMinutes = new Set(local.map((r) => Math.floor(r.ts / 60000)));
+  const rows = [
+    ...local.map((r) => ({ ts: r.ts, w: r.grid_total })),
+    ...getCloudGridRows(fromMs, toMs)
+      .filter((r) => r.grid_w != null && !localMinutes.has(Math.floor(r.ts / 60000)))
+      .map((r) => ({ ts: r.ts, w: r.grid_w })),
+  ].sort((a, b) => a.ts - b.ts);
+  const MAX_GAP_MS = 30 * 60 * 1000;
+  let exportWh = 0;
+  let overTargetWh = 0;
+  let exportPeakW = 0;
+  let overTargetPeakW = 0;
+  let coveredMs = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const w = rows[i].w;
+    if (-w > exportPeakW) exportPeakW = -w;
+    if (w - GRID_TARGET_W > overTargetPeakW) overTargetPeakW = w - GRID_TARGET_W;
+    const n = rows[i + 1];
+    if (!n) continue;
+    const dt = n.ts - rows[i].ts;
+    if (dt > MAX_GAP_MS) continue; // real outage — don't guess across it
+    coveredMs += dt;
+    const h = dt / 3600000;
+    const nw = n.w;
+    exportWh += ((Math.max(0, -w) + Math.max(0, -nw)) / 2) * h;
+    overTargetWh += ((Math.max(0, w - GRID_TARGET_W) + Math.max(0, nw - GRID_TARGET_W)) / 2) * h;
+  }
+  const r2 = (v) => Math.round(v * 100) / 100;
+  return {
+    exportKwh: r2(exportWh / 1000),
+    exportPeakW: Math.round(exportPeakW),
+    overTargetKwh: r2(overTargetWh / 1000),
+    overTargetPeakW: Math.round(overTargetPeakW),
+    coveragePct: Math.max(0, Math.min(100, Math.round((coveredMs / Math.max(1, toMs - fromMs)) * 100))),
+  };
 }
 
 // deps: getMeterSn(), getBatterySn(), getLiveBattery() — same shape/names
@@ -518,7 +568,15 @@ export function registerStatsRoute(app, deps) {
       }
       return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
     });
-  
+
+    // How well the grid actually tracked the power plan's target today —
+    // raw-sample export/over-target figures (see gridTrackingForWindow).
+    const gridTracking = {
+      gridTargetW: GRID_TARGET_W,
+      today: gridTrackingForWindow(dayStartMs, now),
+      yesterday: gridTrackingForWindow(dayStartMs - 86400000, dayStartMs),
+    };
+
     res.json({
       ok: true,
       data: {
@@ -534,6 +592,7 @@ export function registerStatsRoute(app, deps) {
         flows,
         costs,
         byPeriod,
+        gridTracking,
         week: weekRows,
         month: monthRowsCur,
         year: yearRows,
