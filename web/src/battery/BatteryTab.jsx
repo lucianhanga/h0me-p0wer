@@ -25,41 +25,33 @@ function ParamRow({ k, v }) {
   );
 }
 
-// Battery tab: animated SOC gauge (with the configured min/max markers right
-// on it) + every battery parameter, from GET /api/battery/params (10 s poll —
-// the slow-changing device config is cached server-side for 6 h).
-// dischargeTolerancePct comes from the power-plan controller (StrategyTab's
-// /api/power-plan poll) — the account's discharge floor isn't actually where
-// the controller stops discharging; it pads that floor by this many points
-// as a safety margin (2026-09-17, user question: "why does it not go under
-// 14%" when the account floor shows 10% — margin lowered to 3 points,
-// 2026-09-19 user request, so this is 13% today, computed dynamically
-// below, not hardcoded).
-export default function BatteryTab({ dischargeTolerancePct } = {}) {
-  const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
+// One battery: animated SOC gauge (with the configured min/max markers right
+// on it) + every battery parameter. Split out of BatteryTab (2026-09-21,
+// user request) so a second physical battery — "it will soon come," not
+// installed yet — is a data change, not a redesign: BatteryTab already
+// maps over an array and stacks cards vertically (see its own comment for
+// why vertical, not side-by-side — battery UI/UX research below).
+//
+// Own/muted next to the state text, never color alone (2026-09-21,
+// applying that same research): the near-full/low SOC zones already had
+// distinct gauge colors, but nothing NAMED the zone — you had to read the
+// number and know the thresholds yourself. `zoneLabel` below adds that.
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh }) {
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
 
-  // Force a live refetch of the (server-side, 6h-cached) device config —
-  // a different URL from the poll above, so it stays a one-off fetch
-  // outside the hook rather than forcing the hook to support query params
-  // it otherwise never needs.
   const forceRefresh = () => {
     setRefreshing(true);
-    fetch("/api/battery/params?refresh=1")
-      .then((r) => r.json())
-      .then((res) => res.ok && setData(res.data))
-      .finally(() => setRefreshing(false));
+    onRefresh().finally(() => setRefreshing(false));
   };
 
-  if (error && !data) return <div className="error-box">{error}</div>;
-  if (!data) return <p className="muted">loading…</p>;
+  if (!live) return <p className="muted">no battery data yet</p>;
 
-  const { live, config, features, constants } = data;
-  const soc = live?.soc ?? 0;
+  const soc = live.soc ?? 0;
   // 2026-09-17: near-full gets its own color (user request) — distinct from
   // "just healthy" (lvl-high) so a topped-up battery reads at a glance.
   const lvlClass = soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  const zoneLabel = lvlClass === "lvl-full" ? "Full" : lvlClass === "lvl-low" ? "Low" : null;
   // 2026-09-16 fix: outputW is the TOTAL inverter output (PV pass-through +
   // cell discharge combined, see server/battery-params.js's
   // deriveBatteryFlow) — comparing it directly misread pure PV pass-through
@@ -70,8 +62,8 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   // noise (see AGENTS.md), not real simultaneous charge+discharge; a naive
   // "chargeW > 0" check let a tiny charging blip override a real, larger
   // discharge.
-  const chargeW = live?.chargeW ?? 0;
-  const cellsW = live?.cellsW ?? 0;
+  const chargeW = live.chargeW ?? 0;
+  const cellsW = live.cellsW ?? 0;
   const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
   const minPct = config?.dischargeLowerLimitPct;
   const maxPct = config?.chargeUpperLimitPct;
@@ -101,91 +93,83 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
 
   return (
     <div>
-      <UpdatedStamp at={live?.ts}>
-        {live?.name ?? "battery"} · {live?.sn ?? "—"}
-      </UpdatedStamp>
-
       <div className="card batt-gauge-card">
-        {live ? (
-          <>
-            <div className="batt-gauge-wrap">
-              <div className="batt-gauge-body">
-                <div
-                  className={`batt-gauge-fill ${lvlClass} ${mode}`}
-                  style={{ width: `${soc}%` }}
-                />
-                {minPct != null && (
-                  <div className="batt-tick" style={{ left: `${minPct}%` }} title={`account discharge floor ${minPct}%`} />
-                )}
-                {effectiveFloorPct != null && (
-                  <div
-                    className="batt-tick batt-tick-floor"
-                    style={{ left: `${effectiveFloorPct}%` }}
-                    title={`controller won't discharge below ${effectiveFloorPct}% (${minPct}% floor + ${dischargeTolerancePct}% safety margin)`}
-                  />
-                )}
-                {maxPct != null && (
-                  <div className="batt-tick" style={{ left: `${maxPct}%` }} title={`max charge ${maxPct}%`} />
-                )}
-                <div className="batt-gauge-center">
-                  <span className="batt-gauge-pct">{soc} %</span>
-                  <span className="batt-gauge-kwh">
-                    {live.storedKwh} kWh of {constants.capacityKwh} kWh
-                  </span>
-                </div>
-              </div>
-              <div className="batt-gauge-cap" />
-              {minPct != null && (
-                <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
-                  min {minPct}%
-                </span>
-              )}
-              {effectiveFloorPct != null && (
-                <span
-                  className="batt-tick-label batt-tick-label-floor"
-                  style={{ left: `${effectiveFloorPct}%` }}
-                >
-                  floor {effectiveFloorPct}%
-                </span>
-              )}
-              {maxPct != null && (
-                <span className="batt-tick-label" style={{ left: `${maxPct}%` }}>
-                  max {maxPct}%
-                </span>
-              )}
+        <div className="batt-card-head">
+          <span className="batt-card-name">{live.name ?? "battery"}</span>
+          {live.sn && <span className="batt-card-sn">{live.sn}</span>}
+        </div>
+        <div className="batt-gauge-wrap">
+          <div className="batt-gauge-body">
+            <div className={`batt-gauge-fill ${lvlClass} ${mode}`} style={{ width: `${soc}%` }} />
+            {minPct != null && (
+              <div
+                className="batt-tick"
+                style={{ left: `${minPct}%` }}
+                title={`account discharge floor ${minPct}%`}
+              />
+            )}
+            {effectiveFloorPct != null && (
+              <div
+                className="batt-tick batt-tick-floor"
+                style={{ left: `${effectiveFloorPct}%` }}
+                title={`controller won't discharge below ${effectiveFloorPct}% (${minPct}% floor + ${dischargeTolerancePct}% safety margin)`}
+              />
+            )}
+            {maxPct != null && (
+              <div className="batt-tick" style={{ left: `${maxPct}%` }} title={`max charge ${maxPct}%`} />
+            )}
+            <div className="batt-gauge-center">
+              <span className="batt-gauge-pct">
+                {soc} %{zoneLabel && <span className={`batt-gauge-zone ${lvlClass}`}>{zoneLabel}</span>}
+              </span>
+              <span className="batt-gauge-kwh">
+                {live.storedKwh} kWh of {constants.capacityKwh} kWh
+              </span>
             </div>
-            <div className={`batt-status ${mode}`}>
-              {mode === "charging" && (
-                <>
-                  <span className="batt-chevs">
-                    <span>▲</span>
-                    <span>▲</span>
-                    <span>▲</span>
-                  </span>
-                  <span className="batt-status-main">⚡ charging {fmtW(chargeW)}</span>
-                  {etaLabel && <span className="batt-status-eta">full in ≈ {etaLabel}</span>}
-                </>
-              )}
-              {mode === "discharging" && (
-                <>
-                  <span className="batt-chevs">
-                    <span>▼</span>
-                    <span>▼</span>
-                    <span>▼</span>
-                  </span>
-                  <span className="batt-status-main">⏏ discharging {fmtW(cellsW)}</span>
-                  {etaLabel && <span className="batt-status-eta">empty in ≈ {etaLabel}</span>}
-                </>
-              )}
-              {mode === "idle" && <span className="batt-status-main">idle</span>}
-              {usableKwh != null && (
-                <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="muted">no battery data yet</p>
-        )}
+          </div>
+          <div className="batt-gauge-cap" />
+          {minPct != null && (
+            <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
+              min {minPct}%
+            </span>
+          )}
+          {effectiveFloorPct != null && (
+            <span className="batt-tick-label batt-tick-label-floor" style={{ left: `${effectiveFloorPct}%` }}>
+              floor {effectiveFloorPct}%
+            </span>
+          )}
+          {maxPct != null && (
+            <span className="batt-tick-label" style={{ left: `${maxPct}%` }}>
+              max {maxPct}%
+            </span>
+          )}
+        </div>
+        <div className={`batt-status ${mode}`}>
+          {mode === "charging" && (
+            <>
+              <span className="batt-chevs">
+                <span>▲</span>
+                <span>▲</span>
+                <span>▲</span>
+              </span>
+              <span className="batt-status-main">⚡ charging {fmtW(chargeW)}</span>
+              {etaLabel && <span className="batt-status-eta">full in ≈ {etaLabel}</span>}
+            </>
+          )}
+          {mode === "discharging" && (
+            <>
+              <span className="batt-chevs">
+                <span>▼</span>
+                <span>▼</span>
+                <span>▼</span>
+              </span>
+              <span className="batt-status-main">⏏ discharging {fmtW(cellsW)}</span>
+              {etaLabel && <span className="batt-status-eta">empty in ≈ {etaLabel}</span>}
+            </>
+          )}
+          {mode === "idle" && <span className="batt-status-main">idle</span>}
+          {usableKwh != null && <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>}
+        </div>
       </div>
 
       <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
@@ -238,18 +222,79 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
 
           <div className="card">
             <div className="card-label">Status</div>
-            <ParamRow k="Temperature" v={fmtTemp(live?.temperatureC)} />
-            <ParamRow k="Charging status" v={live?.chargingStatus ?? "—"} />
-            <ParamRow k="Error code" v={live?.errCode ?? "—"} />
-            <ParamRow k="Heating power" v={fmtW(live?.heatingPower)} />
-            <ParamRow k="PV1 / PV2" v={`${fmtW(live?.pv1W)} / ${fmtW(live?.pv2W)}`} />
-            <ParamRow k="Grid → battery" v={fmtW(live?.gridToBatteryW)} />
-            <ParamRow k="PV → grid" v={fmtW(live?.pvToGridW)} />
-            <ParamRow k="Home load" v={fmtW(live?.homeLoadW)} />
-            <ParamRow k="Device" v={live?.sn ? `${live.name} · ${live.sn}` : (live?.name ?? "—")} />
+            <ParamRow k="Temperature" v={fmtTemp(live.temperatureC)} />
+            <ParamRow k="Charging status" v={live.chargingStatus ?? "—"} />
+            <ParamRow k="Error code" v={live.errCode ?? "—"} />
+            <ParamRow k="Heating power" v={fmtW(live.heatingPower)} />
+            <ParamRow k="PV1 / PV2" v={`${fmtW(live.pv1W)} / ${fmtW(live.pv2W)}`} />
+            <ParamRow k="Grid → battery" v={fmtW(live.gridToBatteryW)} />
+            <ParamRow k="PV → grid" v={fmtW(live.pvToGridW)} />
+            <ParamRow k="Home load" v={fmtW(live.homeLoadW)} />
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Battery section: one card per battery, stacked VERTICALLY (2026-09-21,
+// user request — "it will soon come a second one"). Vertical, not side by
+// side, for two reasons found researching multi-device battery dashboards:
+// (1) each card already needs real width for its gauge's three threshold
+// labels (min/floor/max) plus the collapsible parameter cards below it —
+// squeezing two side by side on anything but a wide desktop would crowd
+// both; (2) fleet/multi-battery UI guidance favors a clear per-device
+// identity (name visible on ITS OWN card, not a shared header) over
+// density, since users scan "which battery is doing what" one at a time,
+// not comparing two gauges side by side at a glance the way you would two
+// KPI numbers.
+//
+// The endpoint (GET /api/battery/params) only ever returns ONE battery's
+// {live, config, features, constants} today — there's no second physical
+// battery yet. Rather than wait for that to design around, this reads an
+// optional `data.batteries` array first and falls back to treating the
+// current single-battery payload as a one-item list — so the day the
+// backend actually adds a second device to the response, this component
+// needs no changes at all, just more items in the array.
+export default function BatteryTab({ dischargeTolerancePct } = {}) {
+  const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
+
+  // Force a live refetch of the (server-side, 6h-cached) device config —
+  // a different URL from the poll above, so it stays a one-off fetch
+  // outside the hook rather than forcing the hook to support query params
+  // it otherwise never needs. Single-endpoint today (no per-device `sn`
+  // param exists server-side yet) — fine while there's only one battery;
+  // revisit once a second device needs its own independent refresh.
+  const forceRefresh = () =>
+    fetch("/api/battery/params?refresh=1")
+      .then((r) => r.json())
+      .then((res) => res.ok && setData(res.data));
+
+  if (error && !data) return <div className="error-box">{error}</div>;
+  if (!data) return <p className="muted">loading…</p>;
+
+  const batteries = Array.isArray(data.batteries) ? data.batteries : [data];
+  const latestTs = batteries.reduce((max, b) => Math.max(max, b.live?.ts ?? 0), 0) || null;
+
+  return (
+    <div>
+      <UpdatedStamp at={latestTs}>
+        {batteries.length > 1 ? `${batteries.length} batteries` : (batteries[0].live?.name ?? "battery")}
+      </UpdatedStamp>
+
+      <div className="battery-list">
+        {batteries.map((b, i) => (
+          <BatteryCard
+            key={b.live?.sn ?? i}
+            live={b.live}
+            config={b.config}
+            features={b.features}
+            constants={b.constants}
+            dischargeTolerancePct={dischargeTolerancePct}
+            onRefresh={forceRefresh}
+          />
+        ))}
+      </div>
     </div>
   );
 }
