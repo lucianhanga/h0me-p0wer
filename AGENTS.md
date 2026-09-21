@@ -151,9 +151,9 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-21, v1.5.32, `main`, working tree clean, nothing pending.**
-Latest: grid target lowered 100→25 W and new Dashboard "Grid tracking"
-card measuring export/over-target lag deviation from raw meter samples —
+**As of 2026-09-21, v1.5.33, `main`, working tree clean, nothing pending.**
+Latest: grid target lowered 100→25 W and a Dashboard "Lag losses" card
+measuring export/over-target lag deviation from raw meter samples —
 see the last log entry at the bottom of this file.
 Last session's work (PRs #166-177, all merged, chronologically the tail end
 of the log below) in one line each:
@@ -3045,3 +3045,13 @@ of the log below) in one line each:
   established PV green and "above target" in grid orange, each
   `X.XX kWh · peak NNN W`; amber `.src-gap-note` when a day's sample
   coverage < 90%. No new endpoint, no new fetch cycle.
+- **Same-day follow-up: renamed to "Lag losses" (user couldn't parse the
+  original wording)** — the numbers were already the two losses the user
+  asked for, but "exported"/"above target" didn't read as losses. Card is
+  now titled "Lag losses · target N W from grid" with a one-line caption
+  ("energy misplaced while the device catches up after demand changes (~1
+  min reaction lag)"); rows renamed "pushed to grid" (demand dropped
+  faster than the device reacted) and "extra from grid" (import above the
+  target while the device was still ramping up), each with a hover title
+  spelling out that exact meaning. Display-only change, same underlying
+  `gridTracking` payload.
