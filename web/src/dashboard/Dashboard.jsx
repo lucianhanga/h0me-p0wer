@@ -78,24 +78,24 @@ export default function Dashboard() {
   );
 }
 
-// How well the grid actually tracked the power plan's target: the device/
-// cloud lags real demand changes, so when demand DROPS the preset is briefly
-// too high (energy exported to the grid) and when it RISES the grid covers
-// more than the target while PV+battery ramp up. Measured from the raw 5 s
-// meter samples, not the 30-min profile buckets (those would average the
-// short lag spikes away) — see gridTrackingForWindow in server/stats.js.
-function GridTrackPeriod({ label, d }) {
+// Losses caused by the system's reaction lag: the device/cloud needs ~1 min
+// to adopt a new preset, so when demand DROPS the preset is briefly too high
+// (surplus pushed into the grid) and when it RISES the grid covers more than
+// the target while PV+battery ramp up. Measured from the raw 5 s meter
+// samples, not the 30-min profile buckets (those would average the short lag
+// spikes away) — see gridTrackingForWindow in server/stats.js.
+function GridTrackPeriod({ label, d, gridTargetW }) {
   return (
     <div className="gridtrack-period">
       <div className="gridtrack-label">{label}</div>
-      <div className="gridtrack-row">
-        <span className="wx-c-pv">exported</span>
+      <div className="gridtrack-row" title="Demand dropped faster than the device reacted — surplus energy pushed into the grid">
+        <span className="wx-c-pv">pushed to grid</span>
         <span>
           {d.exportKwh.toFixed(2)} kWh{d.exportPeakW > 0 ? ` · peak ${d.exportPeakW} W` : ""}
         </span>
       </div>
-      <div className="gridtrack-row">
-        <span className="wx-c-grid">above target</span>
+      <div className="gridtrack-row" title={`Device still ramping up after demand rose — grid import above the ${gridTargetW} W target it would have covered`}>
+        <span className="wx-c-grid">extra from grid</span>
         <span>
           {d.overTargetKwh.toFixed(2)} kWh{d.overTargetPeakW > 0 ? ` · peak ${d.overTargetPeakW} W` : ""}
         </span>
@@ -111,11 +111,14 @@ function GridTrackingCard({ data }) {
   return (
     <div className="src-card gridtrack-card">
       <div className="tile-title src-title">
-        <span>Grid tracking · target ≤ {data.gridTargetW} W</span>
+        <span>Lag losses · target {data.gridTargetW} W from grid</span>
+      </div>
+      <div className="gridtrack-caption muted">
+        energy misplaced while the device catches up after demand changes (~1 min reaction lag)
       </div>
       <div className="gridtrack-grid">
-        <GridTrackPeriod label="Today" d={data.today} />
-        <GridTrackPeriod label="Yesterday" d={data.yesterday} />
+        <GridTrackPeriod label="Today" d={data.today} gridTargetW={data.gridTargetW} />
+        <GridTrackPeriod label="Yesterday" d={data.yesterday} gridTargetW={data.gridTargetW} />
       </div>
     </div>
   );

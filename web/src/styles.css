@@ -942,6 +942,11 @@ pre {
   margin-bottom: 0.3rem;
 }
 
+.gridtrack-caption {
+  font-size: 0.75rem;
+  margin: -0.2rem 0 0.6rem;
+}
+
 .gridtrack-row {
   display: flex;
   justify-content: space-between;
