@@ -2870,3 +2870,45 @@ EPIPE noise on every client disconnect).
   readable); 24h view showed several clipped spikes with the same
   flat-top-plus-note pattern; Battery's dual-sided cap confirmed correct
   with both a positive and negative outlier clipped simultaneously.
+
+## Battery UI: multi-battery-ready vertical stack + zone labels (2026-09-21, user request)
+
+- User: enhance the Strategy tab's battery UX, "think that it will soon
+  come a second one" — display multiple batteries vertically, and check
+  battery UI/UX best practices generally. Researched (see chat, two
+  searches — general battery dashboards, then home-storage-specific):
+  color-zone thresholds and time-remaining ETAs were already implemented
+  here (this component was already fairly close to best practice, not a
+  rebuild); the one gap was that SOC zones were communicated by gauge-fill
+  color ALONE, no text/icon naming the zone.
+- Split `BatteryTab.jsx` into `BatteryCard` (presentational, one battery —
+  everything the old single-battery component rendered, now with its own
+  name/SN header instead of relying on a single shared page-level stamp)
+  and `BatteryTab` (fetch + map). `GET /api/battery/params` only returns
+  ONE battery's `{live, config, features, constants}` today — no second
+  physical battery exists to design a real multi-battery payload around
+  yet. Rather than invent one speculatively, `BatteryTab` reads an
+  optional `data.batteries` array first and falls back to treating the
+  current single-battery response as a one-item list — so adding a real
+  second device later is a backend data change only, zero frontend
+  changes needed. `forceRefresh()` stays single-endpoint (no per-device
+  `sn` param exists server-side) — noted as needing revisiting once a
+  second device is real, not solved speculatively now.
+- New `.battery-list` (flex column) stacks cards vertically — chosen over
+  side-by-side because (1) each card already needs real width for its
+  gauge's three threshold labels (min/floor/max) plus the collapsible
+  parameter cards below, squeezing two side by side would crowd both on
+  anything but a wide desktop, and (2) multi-device dashboard guidance
+  favors per-device identity over density here — users check "which
+  battery is doing what" one at a time, not comparing two gauges in one
+  glance the way you would two KPI numbers.
+- New `.batt-gauge-zone` badge: "Full"/"Low" text next to the percentage,
+  shown only for the two zones actually worth calling out (near-full,
+  low) — matching "status ships with an icon/label, never color alone."
+  Colors match the gauge fill's own `lvl-full`/`lvl-low` gradient, so it
+  reads as the same signal restated in text, not a new one.
+- Verified live against the real backend: card renders its own
+  "h-battery · APCN900E26200204" header, gauge/ticks/status/ETA all
+  intact, "Battery information" toggle still expands/collapses correctly
+  with Configuration and Status unchanged (dropped the now-redundant
+  "Device" row from Status, since name/SN moved to the card header).
