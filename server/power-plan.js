@@ -31,6 +31,12 @@
 //                        strategy ("grid ≈ 100 W best-effort") — the same
 //                        day it was decided House Priority should just BE
 //                        that behavior, and the 3rd option was removed.
+//                        The floor is latched with
+//                        DISCHARGE_RESUME_HYSTERESIS_PCT, not a bare
+//                        threshold (mirrors battery_priority's ceiling
+//                        latch below) — once hit, stays in PV-passthrough-
+//                        only mode until SOC climbs back above the floor
+//                        by that many points, not just 1.
 //   battery_priority -> while soc < chargeCeilingPct AND pv > 0: target=0
 //                        (PV is deliberately withheld from the house so it
 //                        charges the battery instead; house demand comes
@@ -118,6 +124,15 @@ const STEP_UP_HOLD_MS = 90 * 1000;
 // these aren't runtime/UI-adjustable.
 const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
 const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 3);
+// Discharge/hold hysteresis for house_priority (2026-09-21, identified
+// before it hit production — same failure mode as CHARGE_RESUME_HYSTERESIS_PCT
+// below, just on the floor instead of the ceiling: the unit's own standby/
+// BMS draw, or a brief PV dip, nudges SOC across a BARE floor threshold
+// back and forth, snapping the preset between full discharge and 0 every
+// time. Once the floor is hit, hold PV-passthrough-only mode (see
+// dischargeToTarget()) until SOC has climbed this many points back above
+// the floor, not just 1.
+const DISCHARGE_RESUME_HYSTERESIS_PCT = Number(process.env.DISCHARGE_RESUME_HYSTERESIS_PCT ?? 3);
 // Charge/hold hysteresis for battery_priority (2026-09-17, real production
 // incident: at a fixed chargeCeilingPct threshold, the unit's OWN standby/
 // BMS draw — a few watts, continuous, not something this app controls or
@@ -197,6 +212,7 @@ export class PowerPlanController {
     this.trigger = "auto";
     this.manualDischarge = false;
     this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
+    this.holdingAtFloor = false; // house_priority discharge/hold latch — see DISCHARGE_RESUME_HYSTERESIS_PCT
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
@@ -337,9 +353,31 @@ export class PowerPlanController {
   // Discharge continuously to cover demand (minus GRID_TARGET_W), regardless
   // of PV level, down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT. Used
   // by house_priority (always) and by the manual "discharge" toggle.
-  dischargeToTarget({ demandW, soc, dischargeFloorPct, max, step }) {
+  //
+  // Floor/resume hysteresis (2026-09-21, caught before it hit production —
+  // same failure mode CHARGE_RESUME_HYSTERESIS_PCT already fixed on the
+  // ceiling side, see that constant's comment for the real incident it
+  // mirrors): a bare `soc <= effectiveFloor` check would let the unit's own
+  // standby draw, or a brief PV dip, tick SOC back and forth across the
+  // floor, snapping the preset between full discharge and 0 every time.
+  // Once the floor is hit, stay in floor mode until SOC has climbed
+  // DISCHARGE_RESUME_HYSTERESIS_PCT points back above it, not just 1.
+  //
+  // Floor mode is passthroughOnly(), not a hard 0: this function's return
+  // value is the Solarbank's single inverter-output preset, sourced from
+  // EITHER PV or cells by the device itself — a hard 0 would block
+  // legitimate free PV pass-through too, forcing 100% grid draw even when
+  // PV alone could already cover some or all of demand without ever
+  // touching the battery.
+  dischargeToTarget(args) {
+    const { soc, dischargeFloorPct, demandW, max, step } = args;
     const effectiveFloor = dischargeFloorPct + DISCHARGE_TOLERANCE_PCT;
-    if (soc <= effectiveFloor) return 0;
+    if (soc <= effectiveFloor) {
+      this.holdingAtFloor = true;
+    } else if (soc >= effectiveFloor + DISCHARGE_RESUME_HYSTERESIS_PCT) {
+      this.holdingAtFloor = false;
+    }
+    if (this.holdingAtFloor) return this.passthroughOnly(args);
     return this.roundDown(Math.max(0, Math.min(max, demandW - GRID_TARGET_W)), step);
   }
 
@@ -571,6 +609,8 @@ export class PowerPlanController {
         atChargeCeiling: soc >= chargeCeilingPct,
         holdingAtCeiling: this.holdingAtCeiling,
         holdProbeW: this.holdProbeW,
+        dischargeResumeHysteresisPct: DISCHARGE_RESUME_HYSTERESIS_PCT,
+        holdingAtFloor: this.holdingAtFloor,
       };
     } catch (err) {
       this.lastError = err.message;
