@@ -99,7 +99,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           {live.sn && <span className="batt-card-sn">{live.sn}</span>}
         </div>
         <div className="batt-gauge-wrap">
-          <div className="batt-gauge-body">
+          <div className={`batt-gauge-body ${lvlClass}`}>
             <div className={`batt-gauge-fill ${lvlClass} ${mode}`} style={{ width: `${soc}%` }} />
             {minPct != null && (
               <div
@@ -127,7 +127,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               </span>
             </div>
           </div>
-          <div className="batt-gauge-cap" />
+          <div className={`batt-gauge-cap ${lvlClass}`} />
           {minPct != null && (
             <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
               min {minPct}%

@@ -2912,3 +2912,27 @@ EPIPE noise on every client disconnect).
   intact, "Battery information" toggle still expands/collapses correctly
   with Configuration and Status unchanged (dropped the now-redundant
   "Device" row from Status, since name/SN moved to the card header).
+- **Follow-up same day: "so no beautification? I see no change"** — fair
+  hit. The multi-battery-readiness PR above was structural (invisible
+  with one battery at a non-extreme SOC); it didn't actually make the
+  gauge look better. Went back to the loaded `dataviz` skill's own specs
+  rather than eyeball it:
+  - **Hero figure, ≥48px** ("the data is the only thing allowed to be
+    loud") — the SOC percentage was 1.6rem (25.6px), easy to miss next to
+    the surrounding chrome. Now 3rem (48px) desktop / 2.1rem (33.6px)
+    phone; grew `.batt-gauge-body` 76px → 92px (60px → 76px phone) to
+    give it room without cramping the kWh subtitle.
+  - **Meter spec**: "the unfilled track is a lighter step of the SAME
+    ramp as the fill... so state reads across the whole bar." The track
+    was a flat neutral (`#101418`) regardless of level — now
+    `.batt-gauge-body`/`.batt-gauge-cap` both take the `lvl-*` class too,
+    tinted to a lighter step of that level's own gradient (e.g. mid/orange
+    now tints the WHOLE gauge amber, not just the fill), with a matching
+    tinted border. Deliberately did NOT add glow/shadow decoration on top
+    — the skill's framing is "quiet, considered... a few fixed specs," so
+    the fix is making the data (number, fill-vs-track) louder, not adding
+    ornamental effects around it.
+  - Verified live: at 40% (`lvl-mid`), the gauge is now unmistakably
+    tinted amber end-to-end with a genuinely hero-scaled "40 %", vs. the
+    previous flat-dark-track-plus-small-number look; details panel and
+    tick labels below unaffected.
