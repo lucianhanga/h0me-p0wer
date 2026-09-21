@@ -2784,3 +2784,48 @@ EPIPE noise on every client disconnect).
   system): ABB S203-C32 3-pole breaker (400V/32A/6kA, €39.90) and ABB
   F204 A-40/0.03-L 4-pole Type A RCD (400V/40A/30mA, €30.39) — three-phase
   protection ahead of a possible future Power Dock/Multisystem upgrade.
+
+## house_priority discharge-floor hysteresis + PV passthrough at the floor (2026-09-21, user-caught before production)
+
+- User walked through `dischargeToTarget()`'s code with me and asked: since
+  the floor check was a bare `soc <= effectiveFloor` threshold with no
+  hysteresis, could this yoyo the same way the (already-fixed)
+  `battery_priority` ceiling once did? Yes — confirmed it's the identical
+  failure mode as the 2026-09-17 `CHARGE_RESUME_HYSTERESIS_PCT` incident
+  (unit's own standby/BMS draw, or a brief PV dip, ticks SOC back and forth
+  across a bare threshold), just never fixed on the discharge-floor side.
+  Traced it through rather than assuming; user then proposed the fix
+  approach and asked to also decide time-based vs. percentage-based for
+  the resume wait — went with percentage (`DISCHARGE_RESUME_HYSTERESIS_PCT`,
+  default 3, mirrors `CHARGE_RESUME_HYSTERESIS_PCT` exactly): a timer
+  either resumes too early on a cloudy day (SOC barely recovered) or holds
+  too long on a sunny one, where percentage directly encodes "meaningfully
+  recovered."
+- Second, related fix surfaced during the walkthrough: at the floor,
+  `dischargeToTarget()` returned a hard `0` — but that `0` is the
+  Solarbank's single inverter-output preset, sourced from EITHER PV or
+  cells by the device itself, so it was blocking legitimate free PV
+  pass-through too (forcing 100% grid draw even when PV alone could
+  already cover some or all of demand without ever touching the battery).
+  Floor mode now returns `passthroughOnly(args)` instead — capped at
+  current PV, so it can never pull from cells, but still uses PV when
+  available.
+- Implementation (`server/power-plan.js`): `dischargeToTarget()` now takes
+  the whole `args` object (needs `pvW` for the passthrough call, which it
+  didn't receive before) and latches `this.holdingAtFloor` exactly like
+  `computeBatteryPriority()` already latches `this.holdingAtCeiling` — set
+  on `soc <= effectiveFloor`, cleared only once `soc >= effectiveFloor +
+  DISCHARGE_RESUME_HYSTERESIS_PCT`. Both `holdingAtCeiling` and
+  `holdingAtFloor` are transient (not persisted across restarts), same as
+  the existing ceiling latch. Surfaced `holdingAtFloor`/
+  `dischargeResumeHysteresisPct` in `lastDecision` for parity with the
+  ceiling fields, though no UI was built around it (not asked for).
+- Verified with a standalone dry run (no live hardware touched — this
+  writes real commands to the real battery, so trace-tested the pure
+  function instead): fed `dischargeToTarget()` a SOC sequence wobbling
+  12→14→12→13 across the old bare boundary (floor 10%, tolerance 3% ->
+  effectiveFloor 13%) with pvW=50 — confirmed it stays latched at
+  target=50 (passthrough) the whole time instead of flipping to
+  target=400 on every uptick, then correctly resumes full discharge only
+  once SOC actually reaches 16% (effectiveFloor + 3), and correctly
+  re-latches on a real subsequent decline back to 13%.
