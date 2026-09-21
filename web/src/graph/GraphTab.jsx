@@ -75,6 +75,25 @@ const GRAPHS = [
 // resets only on a full page reload.
 const savedSpanMs = GRAPHS.map(() => null);
 
+// Robust axis cap: a rare, narrow spike (a handful of points out of ~800)
+// shouldn't set the whole chart's scale and flatten the normal range into a
+// thin band near the bottom (screenshot report, 2026-09-21: a brief
+// transient to ~2500 W squashed the usual ~200-800 W variation). The 98th
+// percentile barely differs from the true max on a genuine sustained peak
+// (many points near it stay in the top 2%), but excludes a narrow 1-2-point
+// transient — so this self-corrects: an ordinary window is untouched
+// (returns null, meaning "let the axis auto-scale as before"), only a real
+// outlier gets capped. `values` must already be non-negative (callers pass
+// `Math.abs()`'d magnitudes for a signed series' negative side).
+function robustCap(values) {
+  const sorted = values.filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
+  if (!sorted.length) return null;
+  const rawMax = sorted[sorted.length - 1];
+  const p98 = sorted[Math.min(sorted.length - 1, Math.floor(0.98 * sorted.length))];
+  const cap = Math.ceil((p98 * 1.15) / 50) * 50;
+  return rawMax > cap ? { cap, rawMax } : null;
+}
+
 // "Home" is the only series that SUMS two independently-polled feeds: the
 // fast local grid meter (~5 s) and the battery's own reported output, which
 // can lag the real power flow by up to ~1 min (device + cloud relay — see
@@ -120,6 +139,9 @@ export default function GraphTab() {
   const apiRefs = useRef(GRAPHS.map(() => null)); // per-graph { setSpan(ms) }
   // Per-graph UI state: stats line + which span preset is highlighted.
   const [statsArr, setStatsArr] = useState(GRAPHS.map(() => null));
+  // Per-graph "an outlier is being clipped off the top/bottom of this
+  // view" note — see robustCap().
+  const [clippedArr, setClippedArr] = useState(GRAPHS.map(() => null));
   const [activeArr, setActiveArr] = useState(() =>
     GRAPHS.map((_, i) => savedSpanMs[i] ?? 24 * 3600 * 1000),
   );
@@ -255,7 +277,36 @@ export default function GraphTab() {
         // Resolution-aware envelope: collapse to the mean above 5-min buckets.
         const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
         const homeSmoothed = smoothHome(rows.map((r) => rowValue("home", r, envelopeOn)));
+
+        // Robust axis scaling (see robustCap()) — per-graph "envelope": the
+        // one series whose height actually determines how tall the chart
+        // needs to be. Battery is signed, so its positive (discharge) and
+        // negative (charge) sides are capped independently.
+        const posCap =
+          gi === 0
+            ? robustCap(homeSmoothed)
+            : gi === 1
+              ? robustCap(rows.map((r) => r.pv))
+              : robustCap(rows.map((r) => battCellsOf(r)));
+        const negCap = gi === 2 ? robustCap(rows.map((r) => -battChgNetOf(r))) : null;
+        setClippedArr((arr) =>
+          arr.map((c, i) =>
+            i === gi
+              ? posCap || negCap
+                ? {
+                    high: posCap ? Math.round(posCap.rawMax) : null,
+                    low: negCap ? -Math.round(negCap.rawMax) : null,
+                  }
+                : null
+              : c,
+          ),
+        );
+
         chart.setOption({
+          yAxis: {
+            max: posCap ? posCap.cap : null,
+            min: negCap ? -negCap.cap : null,
+          },
           series: def.series.map((s) => ({
             name: s.name,
             data:
@@ -438,6 +489,20 @@ export default function GraphTab() {
                   ? `${statsArr[i].bucketMs / 1000}s`
                   : `${(statsArr[i].bucketMs / 60000).toFixed(1)}min`}{" "}
                 res
+              </span>
+            )}
+            {clippedArr[i] && (
+              <span
+                className="muted"
+                style={{ marginLeft: statsArr[i] ? 8 : "auto" }}
+                title="A brief spike is taller than this view's scale — the line is clipped at the top/bottom so normal variation stays readable."
+              >
+                · peak{" "}
+                {[clippedArr[i].high, clippedArr[i].low]
+                  .filter((v) => v != null)
+                  .map((v) => `${v} W`)
+                  .join(" / ")}{" "}
+                (off-scale)
               </span>
             )}
           </div>

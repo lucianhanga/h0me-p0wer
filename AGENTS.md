@@ -2829,3 +2829,44 @@ EPIPE noise on every client disconnect).
   target=400 on every uptick, then correctly resumes full discharge only
   once SOC actually reaches 16% (effectiveFloor + 3), and correctly
   re-latches on a real subsequent decline back to 13%.
+
+## Graph tab: robust axis cap for rare spikes (2026-09-21, user report + best-practices research)
+
+- User screenshot: Home Power Usage at 1h zoom, a brief transient spike to
+  ~2500 W stretched the y-axis so far that the normal ~200-800 W variation
+  got squashed into a thin band near the bottom — "does not look ok,"
+  asked to research outlier best practices rather than just guess.
+  Searched (see chat) — the applicable technique for a live monitoring
+  line/area chart (not a static analytical one, where you'd remove/smooth
+  data) is **visual trimming with markers**: cap the axis at a robust
+  (not raw-max) bound and flag that a point exceeds it, rather than a log
+  scale (breaks the stacked-area metaphor entirely, and doesn't handle
+  Battery's signed data) or dual axis (an explicit anti-pattern).
+- `robustCap()` (`web/src/graph/GraphTab.jsx`): 98th percentile of the
+  window's per-graph "envelope" series (`home` for Home Power Usage, `pv`
+  for Power Production, `battCells`/`-battChgNeg` independently for
+  Battery's signed sides) × 1.15 headroom, rounded up to the nearest 50 W.
+  Self-correcting by construction — a genuine sustained peak (many points
+  near it) barely moves the 98th percentile vs. the true max, so ordinary
+  windows are untouched (`robustCap` returns `null`, axis stays on
+  ECharts' default auto-scale from the earlier zero-floor fix); only a
+  narrow 1-2-point transient gets excluded from the percentile and thus
+  capped.
+  Computed in `applyRows()` (needs the raw row array for the percentile,
+  unlike the axis `min`/`max` callbacks used before, which only ever see
+  `{min, max}`) and applied via `chart.setOption({yAxis: {max, min}})` —
+  must always pass both explicitly (`null` when no outlier) since a
+  merge-style `setOption` leaves a previously-set bound in place if the
+  key is simply omitted on a later call.
+  The clipped-off value isn't lost: a new `clippedArr` state renders
+  "· peak 1379 W (off-scale)" next to the existing avg/resolution line
+  (both high and low shown for Battery, e.g. "457 W / -691 W") whenever
+  capping is active for that graph's current window — the "marker" half
+  of the researched technique, so a flat-topped line reads as "there was
+  a spike here" instead of looking like a rendering glitch.
+- Verified live against the real backend (proxied dev server): 1h view
+  reproduced the exact reported scenario (spike to 1379 W, axis capped at
+  1100 W, "off-scale" note shown, normal 0-600 W variation clearly
+  readable); 24h view showed several clipped spikes with the same
+  flat-top-plus-note pattern; Battery's dual-sided cap confirmed correct
+  with both a positive and negative outlier clipped simultaneously.
