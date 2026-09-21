@@ -151,10 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-21, v1.5.33, `main`, working tree clean, nothing pending.**
-Latest: grid target lowered 100→25 W and a Dashboard "Lag losses" card
-measuring export/over-target lag deviation from raw meter samples —
-see the last log entry at the bottom of this file.
+**As of 2026-09-21, v1.5.34, `main`, working tree clean, nothing pending.**
+Latest: grid target lowered 100→25 W. A Dashboard "Lag losses" tile built
+on the new `/api/stats/overview` `gridTracking` block was REMOVED again
+the same evening at the user's request ("this is wrong — get rid of the
+new tile, leave it like this for now") — the backend `gridTracking`
+payload still ships in the overview response, unused, as the measurement
+foundation whenever the idea is revisited. See the last log entries.
 Last session's work (PRs #166-177, all merged, chronologically the tail end
 of the log below) in one line each:
 - Graph tab: y-axis no longer floors above zero at high zoom (#166/167),
@@ -3055,3 +3058,14 @@ of the log below) in one line each:
   target while the device was still ramping up), each with a hover title
   spelling out that exact meaning. Display-only change, same underlying
   `gridTracking` payload.
+- **Same-evening removal (user: "this is wrong — get rid of the new tile,
+  leave it like this for now")**: the "Lag losses" tile (`GridTrackingCard`/
+  `GridTrackPeriod` in `Dashboard.jsx` + the `.gridtrack-*` CSS) was removed
+  from the Dashboard entirely — frontend only. The backend `gridTracking`
+  block in `/api/stats/overview` (`gridTrackingForWindow`, stats.js) stays
+  in the response, currently unused by any UI: it's the verified raw-sample
+  measurement (export kWh/peak, over-target kWh/peak, coverage per today/
+  yesterday) to build on whenever the lag-losses idea comes back — likely
+  needing controller-attribution (only count moments where the plan was
+  actively trying to hold the target) rather than the meter-truth approach
+  the removed tile used, per the caveat already noted in the entry above.
