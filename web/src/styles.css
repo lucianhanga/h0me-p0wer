@@ -924,44 +924,6 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
-/* Grid tracking card — export / above-target lag metrics vs the power
-   plan's grid target. Reuses .src-card chrome like the top-days cards. */
-.gridtrack-card {
-  margin: 0 0 1rem;
-}
-
-.gridtrack-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: 0.9rem;
-}
-
-.gridtrack-label {
-  font-size: 0.8rem;
-  color: #8b98a5;
-  margin-bottom: 0.3rem;
-}
-
-.gridtrack-caption {
-  font-size: 0.75rem;
-  margin: -0.2rem 0 0.6rem;
-}
-
-.gridtrack-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.6rem;
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-  padding: 0.15rem 0;
-  white-space: nowrap;
-}
-
-.gridtrack-period .src-gap-note {
-  white-space: normal;
-  margin: 0.3rem 0 0;
-}
-
 /* Consistent "updated …" line — first element of every tab, same place
    everywhere (right under the nav). */
 .updated-stamp {

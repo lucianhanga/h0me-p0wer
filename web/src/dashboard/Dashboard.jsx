@@ -73,53 +73,6 @@ export default function Dashboard() {
           <TopDaysCard title="Lowest production days" rows={topDays.bottom} />
         </div>
       )}
-      {stats.gridTracking && <GridTrackingCard data={stats.gridTracking} />}
-    </div>
-  );
-}
-
-// Losses caused by the system's reaction lag: the device/cloud needs ~1 min
-// to adopt a new preset, so when demand DROPS the preset is briefly too high
-// (surplus pushed into the grid) and when it RISES the grid covers more than
-// the target while PV+battery ramp up. Measured from the raw 5 s meter
-// samples, not the 30-min profile buckets (those would average the short lag
-// spikes away) — see gridTrackingForWindow in server/stats.js.
-function GridTrackPeriod({ label, d, gridTargetW }) {
-  return (
-    <div className="gridtrack-period">
-      <div className="gridtrack-label">{label}</div>
-      <div className="gridtrack-row" title="Demand dropped faster than the device reacted — surplus energy pushed into the grid">
-        <span className="wx-c-pv">pushed to grid</span>
-        <span>
-          {d.exportKwh.toFixed(2)} kWh{d.exportPeakW > 0 ? ` · peak ${d.exportPeakW} W` : ""}
-        </span>
-      </div>
-      <div className="gridtrack-row" title={`Device still ramping up after demand rose — grid import above the ${gridTargetW} W target it would have covered`}>
-        <span className="wx-c-grid">extra from grid</span>
-        <span>
-          {d.overTargetKwh.toFixed(2)} kWh{d.overTargetPeakW > 0 ? ` · peak ${d.overTargetPeakW} W` : ""}
-        </span>
-      </div>
-      {d.coveragePct < 90 && (
-        <div className="src-gap-note">⚠ {d.coveragePct}% of the day covered by meter samples</div>
-      )}
-    </div>
-  );
-}
-
-function GridTrackingCard({ data }) {
-  return (
-    <div className="src-card gridtrack-card">
-      <div className="tile-title src-title">
-        <span>Lag losses · target {data.gridTargetW} W from grid</span>
-      </div>
-      <div className="gridtrack-caption muted">
-        energy misplaced while the device catches up after demand changes (~1 min reaction lag)
-      </div>
-      <div className="gridtrack-grid">
-        <GridTrackPeriod label="Today" d={data.today} gridTargetW={data.gridTargetW} />
-        <GridTrackPeriod label="Yesterday" d={data.yesterday} gridTargetW={data.gridTargetW} />
-      </div>
     </div>
   );
 }
