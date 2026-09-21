@@ -73,6 +73,50 @@ export default function Dashboard() {
           <TopDaysCard title="Lowest production days" rows={topDays.bottom} />
         </div>
       )}
+      {stats.gridTracking && <GridTrackingCard data={stats.gridTracking} />}
+    </div>
+  );
+}
+
+// How well the grid actually tracked the power plan's target: the device/
+// cloud lags real demand changes, so when demand DROPS the preset is briefly
+// too high (energy exported to the grid) and when it RISES the grid covers
+// more than the target while PV+battery ramp up. Measured from the raw 5 s
+// meter samples, not the 30-min profile buckets (those would average the
+// short lag spikes away) — see gridTrackingForWindow in server/stats.js.
+function GridTrackPeriod({ label, d }) {
+  return (
+    <div className="gridtrack-period">
+      <div className="gridtrack-label">{label}</div>
+      <div className="gridtrack-row">
+        <span className="wx-c-pv">exported</span>
+        <span>
+          {d.exportKwh.toFixed(2)} kWh{d.exportPeakW > 0 ? ` · peak ${d.exportPeakW} W` : ""}
+        </span>
+      </div>
+      <div className="gridtrack-row">
+        <span className="wx-c-grid">above target</span>
+        <span>
+          {d.overTargetKwh.toFixed(2)} kWh{d.overTargetPeakW > 0 ? ` · peak ${d.overTargetPeakW} W` : ""}
+        </span>
+      </div>
+      {d.coveragePct < 90 && (
+        <div className="src-gap-note">⚠ {d.coveragePct}% of the day covered by meter samples</div>
+      )}
+    </div>
+  );
+}
+
+function GridTrackingCard({ data }) {
+  return (
+    <div className="src-card gridtrack-card">
+      <div className="tile-title src-title">
+        <span>Grid tracking · target ≤ {data.gridTargetW} W</span>
+      </div>
+      <div className="gridtrack-grid">
+        <GridTrackPeriod label="Today" d={data.today} />
+        <GridTrackPeriod label="Yesterday" d={data.yesterday} />
+      </div>
     </div>
   );
 }

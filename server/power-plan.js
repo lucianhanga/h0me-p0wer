@@ -65,14 +65,15 @@
 // Never above houseDemand in any branch => zero export by construction. The
 // device itself enforces its configured SOC reserve / charge limits on top.
 //
-// Grid target (GRID_TARGET_W env var, default 100 W) and discharge
-// tolerance (DISCHARGE_TOLERANCE_PCT env var, default 3 points — lowered
+// Grid target (GRID_TARGET_W env var, default 25 W — lowered from 100,
+// 2026-09-21 user request) and discharge tolerance
+// (DISCHARGE_TOLERANCE_PCT env var, default 3 points — lowered
 // from 4, 2026-09-19 user request: "the defined SOC + 3%") are BOTH
 // deployment-time constants, not user-adjustable at runtime (like
 // TARIFF_EUR_PER_KWH elsewhere in this codebase) — not exposed in the
 // Strategy tab UI, by request, to keep the UI to just the two dropdowns +
 // the manual toggle. dischargeToTarget() leaves demandW - GRID_TARGET_W for
-// PV+battery to cover (the original ask was "keep grid supply UNDER 100 W",
+// PV+battery to cover (the ask is "keep grid supply around 25 W",
 // not literally 0), down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT
 // (padding the account's real reserve, since this mode bypasses the normal
 // PV-based restraint that would otherwise protect it).
@@ -121,8 +122,10 @@ const MIN_WRITE_GAP_MS = 30 * 1000; // never write more often than this
 // responding noticeably faster to genuine demand/strategy changes.
 const STEP_UP_HOLD_MS = 90 * 1000;
 // Deployment-time constants (2026-09-16) — see the file header for why
-// these aren't runtime/UI-adjustable.
-const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 100);
+// these aren't runtime/UI-adjustable. GRID_TARGET_W is exported so
+// stats.js's gridTracking metrics use the exact same number the
+// controller aims for, not a second copy.
+export const GRID_TARGET_W = Number(process.env.GRID_TARGET_W ?? 25);
 const DISCHARGE_TOLERANCE_PCT = Number(process.env.DISCHARGE_TOLERANCE_PCT ?? 3);
 // Discharge/hold hysteresis for house_priority (2026-09-21, identified
 // before it hit production — same failure mode as CHARGE_RESUME_HYSTERESIS_PCT
