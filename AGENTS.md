@@ -151,12 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.41, `main`, working tree clean, nothing pending.**
-Latest: the Strategy tab's battery gauge is now live-pushed too — the WS
-channel became a shared `useLiveStream` hook (one socket, fanned out) used
-by LiveTab and BatteryTab. Before that: ±20 W grid display deadband, meter
-poll 5→2 s, WS live push, native self-consumption house_priority — see the
-last log entries.
+**As of 2026-09-22, v1.5.42, `main`, working tree clean, nothing pending.**
+Latest: every WS live push now carries the server version and stale open
+tabs self-reload on mismatch — the "UI still updates at 5 s" report was a
+pre-deploy bundle in a long-open tab, not the server (verified: production
+was already pushing at 2 s, serving v1.5.41 with correct cache headers).
+See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3316,3 +3316,27 @@ of the log below) in one line each:
   while a headless-Chrome screenshot of the Strategy tab showed the gauge
   mid-charge (30 %, charging 394 W, ETA, fresh stamp) matching the
   pushed payload exactly.
+
+## Stale open tabs self-reload on version change (2026-09-22, user report)
+
+- User after the WS push + 2 s meter poll: "the UI still gets values once
+  at 5 seconds." Investigation showed the server was NOT the problem:
+  production was pushing at ~2 s (measured gaps 2050/3151/... ms) and
+  serving the v1.5.41 bundle with the WS code inside, `max-age=0` on both
+  index.html and assets, no service worker, and NO 5 s timer left anywhere
+  in the frontend (grepped). Exactly-5-second updates = the OLD bundle's
+  poll loop → the user's tab was opened before the deploy; an open tab
+  never re-fetches index.html on its own, so it ran the pre-push code
+  indefinitely.
+- Fix (durable, not "tell the user to hard-refresh"): `APP_VERSION` (root
+  package.json, read once at startup) is piggybacked as `v` on every WS
+  live push; `useLiveStream.js` compares it against the bundle's baked-in
+  `__APP_VERSION__` and reloads the page ONCE on mismatch (sessionStorage
+  guard against reload loops — e.g. the brief dev window where a version
+  bump hasn't rebuilt dist yet). Every tab benefits, since all live
+  surfaces share the hook. Verified: push carries `v` and smoke test
+  passes.
+- Note for debugging future "UI is stale" reports: check the served
+  bundle's embedded version (`curl -s .../assets/index-*.js | grep -o
+  "1\\.5\\.[0-9]*"`) against root package.json — they differ exactly when
+  the deploy is partial or the tab predates it (the latter now self-heals).

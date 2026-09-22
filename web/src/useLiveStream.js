@@ -28,6 +28,20 @@ function connect() {
     }
     if (msg?.type !== "live") return;
     backoff = 2000; // healthy message — reset reconnect backoff
+    // Deploy marker: the server piggybacks its app version on every push.
+    // A tab still running an OLD bundle (opened before a deploy — the
+    // 2026-09-22 "UI still updates at 5 s" report) reloads itself once,
+    // the first time it sees a newer version.
+    if (
+      msg.v &&
+      typeof __APP_VERSION__ !== "undefined" &&
+      msg.v !== __APP_VERSION__ &&
+      !sessionStorage.getItem("hp-reloaded")
+    ) {
+      sessionStorage.setItem("hp-reloaded", "1");
+      location.reload();
+      return;
+    }
     for (const fn of subscribers) fn(msg);
   };
   ws.onclose = () => {

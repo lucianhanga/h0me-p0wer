@@ -3,6 +3,7 @@
 // are evaluated, not just before this file's OWN body runs).
 import "./env.js";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer } from "ws";
@@ -42,6 +43,14 @@ import {
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
+// Root package.json version — piggybacked on every WS live push so a stale
+// open browser tab (old JS bundle from before a deploy) reloads itself
+// instead of silently running the old code forever (2026-09-22, user
+// report: "the UI still updates at 5 s" — the server was already pushing
+// at 2 s; their tab simply predated the deploy).
+const APP_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 const METER_IP = process.env.METER_IP ?? "192.168.1.102";
 const METER_PORT = Number(process.env.METER_PORT ?? 502);
 
@@ -1069,6 +1078,7 @@ const server = app.listen(PORT, () => {
 async function buildLiveMessage() {
   return JSON.stringify({
     type: "live",
+    v: APP_VERSION, // lets stale open tabs self-reload — see APP_VERSION above
     meter: getLiveState(), // same shape/fallback as /api/live's data
     flow: await computeFlowPayload(), // same as /api/flow's data
   });
