@@ -206,7 +206,7 @@ export default function WelcomeTab() {
     `Weather: ${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun${gt.radiationSumKwhM2Today != null ? `, ${gt.radiationSumKwhM2Today} kilowatt-hours per square meter of radiation` : ""}.`,
     `How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, ${data.startOfDay.gridImportKwhUntilSunrise} kilowatt-hours from the grid and ${data.startOfDay.battDischargeKwhUntilSunrise} from the battery until sunrise.`,
     `Right now: ${data.today.statusQuo} ${data.production.todayKwh} kilowatt-hours produced today, ${data.production.weekKwh} this week so far, ${data.production.monthKwh} this month so far.`,
-    `How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved.`,
+    `How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours of solar direct to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved.`,
     yesterday
       ? `Yesterday: ${yesterday.homeKwh} kilowatt-hours used, ${yesterday.pvProducedKwh} produced by the panels, spent ${yesterday.gridEur} euros, saved ${yesterday.savedEur}.`
       : null,
@@ -311,10 +311,10 @@ export default function WelcomeTab() {
           <SpeakButton
             id="endOfDay"
             className="speak-corner"
-            text={`How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved. ${data.endOfDay.note}`}
+            text={`How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours of solar direct to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved. ${data.endOfDay.note}`}
           />
           <h3>How today will end</h3>
-          <p>battery ≈ {fmtPct(data.endOfDay.batterySocEstimate)}% · house ≈ {fmt1(data.endOfDay.toHouseKwh)} kWh</p>
+          <p>battery ≈ {fmtPct(data.endOfDay.batterySocEstimate)}% · PV to house ≈ {fmt1(data.endOfDay.toHouseKwh)} kWh</p>
           <p className="muted">
             to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈{" "}
             <span className="wx-c-grid">{fmt1(data.endOfDay.gridExportKwh)} kWh</span>

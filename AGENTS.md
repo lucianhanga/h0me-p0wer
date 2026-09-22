@@ -151,8 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.52, `main`, working tree clean, nothing pending.**
-Latest: the Home line on the Graph tab is the exact raw sum grid +
+**As of 2026-09-22, v1.5.54, `main`, working tree clean, nothing pending.**
+Latest: Welcome "How today will end" savings is production-based again
+(€0.00-under-battery_priority bug — toHouseKwh=0 hid 4.28 kWh of real
+savings), "house" label clarified to "PV to house", and the Graph's Grid
+range envelope now only renders at ≤30 s buckets (1h/6h) — the brown
+min/max band no longer dominates 12h/24h. See the last log entries.
+Previously: the Home line on the Graph tab is the exact raw sum grid +
 batteryOut again — smoothHome() (added 2026-09-17 for the ~1 min
 cross-feed lag of that era) was damping real appliance spikes 15-25%
 next to the raw grid series, now that grid samples at 1 s and battery
@@ -3677,3 +3682,46 @@ of the log below) in one line each:
   numerically against the production 5 s window (Home ≡ grid row-for-row
   at battOut=0); the dev-server screenshot path was unusable for visual
   verification (nearly-empty dev DB → interpolation artifacts, unrelated).
+
+## Welcome endOfDay savings basis + "house" label (2026-09-22, user report)
+
+- User: the "How today will end" tile is "completely wrong" — it showed
+  "house ≈ 0.0 kWh · ≈ €0.00 saved today" next to a note citing 4.28 kWh
+  produced. Two separate problems:
+  1. `estimatedSavingsEur` was based on `ai.endOfDay.toHouseKwh` (the
+     2026-09-18 "internal coherence" choice). Under battery_priority, PV
+     goes to the battery and the house runs on grid, so toHouseKwh is
+     legitimately 0 → €0.00 — while the canonical production-based rule
+     (savings.js, used by Dashboard/ROI/week) says every produced kWh
+     avoids a grid import somewhere: 4.28 kWh ≈ €1.31. The card
+     contradicted both its own note and the Dashboard's Today tile.
+     Fix (welcome.js): basis is now
+     `savedEur(pvProjectedTodayKwh ?? pvProducedTodayKwh, tariff)` —
+     production-based like everything else. SYSTEM_PROMPT's endOfDay
+     bullet updated to match (savings is production-based and meaningful
+     even when toHouseKwh is 0).
+  2. The "house ≈ X kWh" label: X is PV DIRECT-to-house, not house
+     consumption — under battery_priority it reads as "the house used
+     nothing" next to the note's "grid import 4.3 kWh". Relabeled to
+     "PV to house ≈ X kWh" (tile + both speak texts).
+- The 2026-09-18 rationale (endOfDay is a forward guess with no sibling
+  to reconcile against) still holds, but battery_priority invalidated
+  its hidden assumption that toHouseKwh ≈ production.
+
+## Graph "Grid range" envelope only at ≤30 s buckets (2026-09-22, user report)
+
+- User sent 1h/6h/12h/24h screenshots after the smoothHome removal: the
+  brown min/max envelope dominated the coarser spans. Root cause: at 1 s
+  sampling a 1.8-min bucket holds ~108 samples, so every 15 s kettle
+  pulse inflated the envelope of EVERY bucket it touched to ~2 kW (at
+  5 s polling, buckets held few samples and the envelope rarely caught
+  the peaks). A server-side p95 variant was tried first and REVERTED —
+  a 15 s pulse is ~14% of a 108 s bucket, so p95 still contains it;
+  percentile tuning couldn't cleanly separate "kettle" from "sustained".
+- Fix (GraphTab.jsx): `envelopeOn` threshold 5 min → 30 s, so the band
+  renders only on the 1h (5 s) and 6h (27 s) views where near-real-time
+  transients are its whole point; coarser spans collapse it to the mean
+  (the existing `rowValue` fallback already returns r.grid for gridMin/
+  gridMax when envelopeOn is false — the band just disappears). Home and
+  Grid stay raw (the consistency fix from earlier the same evening
+  stands — the user's complaint was the envelope, not the raw lines).

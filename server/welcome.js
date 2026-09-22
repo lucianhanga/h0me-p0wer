@@ -112,26 +112,24 @@ export function registerWelcomeRoute(app, deps) {
         weekKwh: context.pvProducedWeekToDateKwh ?? ai.production?.weekKwh,
         monthKwh: context.pvProducedMonthToDateKwh ?? ai.production?.monthKwh,
       },
-      // endOfDay.estimatedSavingsEur: derived from THIS SAME CARD's own
-      // toHouseKwh (2026-09-18, second fix same week — user: "it cannot
-      // be only this if you estimate [2.9 kWh to the house]" — €0.17
-      // sat next to "house ≈ 2.9 kWh" because the two numbers came from
-      // completely disconnected calculations: toHouseKwh is the AI's own
-      // forward estimate, while estimatedSavingsEur was independently
-      // derived from pvProjectedTodayKwh — a full-day PRODUCTION
-      // projection with no guaranteed relationship to toHouseKwh at all.
-      // Unlike Dashboard/ROI/Yesterday (real, HISTORICAL measurements,
-      // where production-based accounting matters so today/yesterday/
-      // week/month don't double-count or drift against each other —
-      // see savings.js), this card is a single forward-looking GUESS with
-      // no other card it needs to reconcile against once the day is over
-      // — the REAL, measured, production-based figure appears elsewhere
-      // once today becomes yesterday. Internal coherence with the number
-      // shown right next to it matters more here than matching a
-      // philosophy built for reconciling separate historical cards.
+      // endOfDay.estimatedSavingsEur: PRODUCTION-BASED, like every other
+      // savings figure in the app (server/savings.js — "one canonical
+      // savings calculation, used everywhere": with zero export enforced
+      // and baseload always above PV, every produced kWh avoids a grid
+      // import somewhere, today or after a battery round-trip). The
+      // 2026-09-18 basis (toHouseKwh) breaks under battery_priority
+      // (2026-09-22, user report): PV then goes to the battery and the
+      // house runs on grid, so toHouseKwh is legitimately 0 and the card
+      // showed "≈ €0.00 saved" next to a note citing 4.28 kWh produced —
+      // while the Dashboard showed ≈ €1.31 for the same day. Full-day
+      // projected production is the correct full-day basis here; the
+      // measured so-far figure is the fallback.
       endOfDay: {
         ...ai.endOfDay,
-        estimatedSavingsEur: savedEur(ai.endOfDay?.toHouseKwh, config.tariff),
+        estimatedSavingsEur: savedEur(
+          context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh,
+          config.tariff,
+        ),
       },
       // Was previously based on ai.production?.weekKwh — already a latent
       // mismatch (production.weekKwh answers "how much so far", not "how
