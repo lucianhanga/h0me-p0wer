@@ -37,7 +37,7 @@ EPIPE noise on every client disconnect).
 
 - `server/` — Node 20+ ESM, no build step:
   - `index.js` — Express routes + WS broadcast + cloud sync scheduling
-  - `modbus.js` — `MeterPoller`: reads the meter every 2 s, reconnects with 10 s backoff
+  - `modbus.js` — `MeterPoller`: reads the meter every 1 s, reconnects with 10 s backoff
   - `registers.js` — AE1X0 register map + decoders
   - `anker-cloud.js` — Anker EU cloud client (reverse-engineered auth)
   - `db.js` — SQLite via built-in `node:sqlite` (no native deps)
@@ -151,11 +151,11 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.43, `main`, working tree clean, nothing pending.**
-HOTFIX: v1.5.42 crashed on boot IN DOCKER (the runtime stage lacks the
-root package.json the new WS version stamp reads) — production was down
-until this fix. The read is now try/catch-guarded AND the Dockerfile
-runtime stage copies the root package.json. See the last log entry.
+**As of 2026-09-22, v1.5.44, `main`, working tree clean, nothing pending.**
+Latest: meter poll default 2 s → 1 s (register freshness floor — the WS
+push was already instant). Before that: HOTFIX for the v1.5.42 Docker boot
+crash; WS version stamp + tab self-reload; ±20 W grid display deadband;
+native self-consumption house_priority. Details in the last log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3361,3 +3361,26 @@ of the log below) in one line each:
   If CI ever gains a `docker build` step, this class is covered; until
   then, any new startup-time file read must be checked against the
   Dockerfile's runtime COPY list.
+
+## Sub-second meter cadence (2026-09-22, user request)
+
+- User: "besides the REST API can you provide a kinda' direct socket
+  connection where you can get the values faster, under a second if
+  required. Check for the best practices and standards." Research
+  conclusion: we're already ON the standard — WebSocket push is the
+  canonical real-time dashboard transport (SSE is the one-way equivalent;
+  MQTT-over-WS is what Anker itself uses internally); no change needed
+  there. The only remaining latency was the meter SAMPLE rate.
+- `POLL_INTERVAL_MS` default 2000 → 1000 ms. Tried to measure the AE1X0's
+  register freshness directly with a brief transient connection — refused:
+  production holds the meter's single Modbus connection persistently (by
+  design after the .env fix). So: 1 s is the floor based on typical ~1 s
+  register freshness; POLL_INTERVAL_MS=500 remains as an env-var
+  experiment, but below ~1 s you mostly re-read the same value. The
+  battery side is hard-limited by the device's own MQTT reporting
+  (~3-5 s) — no faster channel exists for third parties (the direct
+  10004-class control/telemetry path is blocked, per earlier findings).
+- Net effect: grid values reach the UI ~1-1.2 s after physical change;
+  battery values ~3-5 s (Anker's own cadence). DB cost of 1 s sampling:
+  ~173k snapshot rows/48 h ≈ 4 MB — negligible per the same day's DB
+  sizing analysis.

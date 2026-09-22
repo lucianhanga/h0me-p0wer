@@ -76,13 +76,14 @@ export function localDate(d = new Date()) {
 }
 
 const poller = new MeterPoller(METER_IP, METER_PORT, {
-  // POLL_INTERVAL_MS: poll cadence (default 2000 — lowered from 5000 on
-  // 2026-09-22, user request: live UI should update at the Anker app's
-  // cadence; the WS push (below) is instant, so the meter sample rate was
-  // the remaining bottleneck. The register updates ~1 s; 2 s over LAN
-  // Modbus TCP is trivial for both sides). MODBUS_TRANSIENT=true:
+  // POLL_INTERVAL_MS: poll cadence (default 1000 — the AE1X0's registers
+  // update at ~1 s, so this is the fastest cadence that yields new values;
+  // 2026-09-22: lowered 5000 → 2000 → 1000 as the live UI moved to WS push,
+  // user asked for sub-second "like the Anker app". Set 500 to experiment —
+  // below ~1 s you mostly re-read the same register value. 3 batch reads
+  // per cycle, trivial for LAN Modbus TCP even at 1 s). MODBUS_TRANSIENT=true:
   // connect-read-disconnect per cycle so two instances can share the meter.
-  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 2000),
+  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 1000),
   transient: process.env.MODBUS_TRANSIENT === "true",
 });
 // CLOUD_ENABLED=false runs meter-only: no Anker login attempts at all
