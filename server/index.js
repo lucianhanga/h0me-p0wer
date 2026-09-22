@@ -124,6 +124,17 @@ app.get("/api/health", (req, res) => {
       meterDirect: poller.getState().connected, // Modbus TCP healthy
       cloud: { enabled: anker.configured, lastOkAt: lastCloudOkAt },
       battery: { lastTs: batt?.ts ?? null },
+      // MQTT telemetry channel diagnostics (2026-09-22: the broker can accept
+      // the session while routing ZERO messages — Anker-side stall, seen
+      // 2026-09-11 and again 2026-09-22; isFresh() distinguishes
+      // connected-but-silent from actually-streaming).
+      batteryMqtt: batteryMqtt
+        ? {
+            connected: batteryMqtt.connected,
+            fresh: batteryMqtt.isFresh(),
+            lastDataAt: batteryMqtt.lastDataAt,
+          }
+        : null,
     },
   });
 });
@@ -1197,9 +1208,37 @@ async function syncBattery() {
 // Background-first (2026-09-14): the server always pulls — clients just read
 // what's in memory/DB. Unconditional 10 s scen_info cadence (6 calls/min,
 // safely inside the ~10-12/min guideline); MQTT push layers on top as the
-// fast channel. (The Anker app itself gets its live view over MQTT.)
+// fast channel.
+let lastBatterySyncAt = 0;
+async function syncBatteryThrottled(minGapMs) {
+  if (Date.now() - lastBatterySyncAt < minGapMs) return;
+  lastBatterySyncAt = Date.now();
+  await syncBattery();
+}
 setTimeout(syncBattery, 10 * 1000);
-setInterval(syncBattery, 10 * 1000).unref();
+setInterval(() => syncBatteryThrottled(10 * 1000), 10 * 1000).unref();
+
+// Fast path while a frontend is watching (2026-09-22, user report: "the
+// Anker app is much faster, our UI is delayed a few seconds, intermediate
+// steps are missing"). Investigation that day: Anker's MQTT telemetry
+// channel was stalled broker-side AGAIN (the 2026-09-11 pattern — connack/
+// suback fine, zero messages routed; confirmed from a dev instance: 120 s
+// watchdog reconnect loop with no data while the user's Anker app updated
+// happily), so MQTT was delivering NOTHING and our UI ran on the 10 s REST
+// cadence. The Anker app gets its live view by POLLING get_scen_info every
+// few seconds while its live screen is open — the realtime trigger (0057)
+// has no interval field (community CMD_REALTIME_TRIGGER: on/off + timeout
+// only), so MQTT can never be made faster than ~3-5 s anyway, and it
+// silently degrades to nothing during these broker stalls. Matched here:
+// 3 s scen_info cadence whenever at least one WS client is connected (the
+// UI is being watched), deduped against the 10 s baseline loop. Above the
+// ~10-12/min guideline (~20/min) — same on-demand precedent as the
+// modbus-down 3 s sync (failures just log), and exactly the traffic
+// pattern the Anker app itself produces.
+setInterval(() => {
+  if (!wss.clients.size) return;
+  syncBatteryThrottled(2500);
+}, 1000).unref();
 
 // While Modbus is down, keep today's cloud day-trend fresh (1 call / 2 min —
 // far inside the endpoint's rate limit) so the /api/flow + /api/live fallback
