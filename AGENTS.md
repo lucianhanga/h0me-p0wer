@@ -151,12 +151,11 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.42, `main`, working tree clean, nothing pending.**
-Latest: every WS live push now carries the server version and stale open
-tabs self-reload on mismatch — the "UI still updates at 5 s" report was a
-pre-deploy bundle in a long-open tab, not the server (verified: production
-was already pushing at 2 s, serving v1.5.41 with correct cache headers).
-See the last log entry.
+**As of 2026-09-22, v1.5.43, `main`, working tree clean, nothing pending.**
+HOTFIX: v1.5.42 crashed on boot IN DOCKER (the runtime stage lacks the
+root package.json the new WS version stamp reads) — production was down
+until this fix. The read is now try/catch-guarded AND the Dockerfile
+runtime stage copies the root package.json. See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3340,3 +3339,25 @@ of the log below) in one line each:
   bundle's embedded version (`curl -s .../assets/index-*.js | grep -o
   "1\\.5\\.[0-9]*"`) against root package.json — they differ exactly when
   the deploy is partial or the tab predates it (the latter now self-heals).
+
+## HOTFIX: v1.5.42 crashed on boot in Docker — production down (2026-09-22)
+
+- User: "nothing is served on 3001." Root cause: the version-stamp change
+  read the ROOT package.json at startup (`readFileSync(new
+  URL("../package.json", import.meta.url))` in index.js) — but the
+  Dockerfile's RUNTIME stage only copies `server/` + `web/dist` (only the
+  WEBBUILD stage had the root package.json, for vite). Every local/CI
+  smoke test passes because the repo layout always has it; only the
+  Docker layout doesn't. Reproduced exactly without Docker: old code in a
+  server/+web/dist-only layout crashes `ENOENT .../package.json` on boot.
+- Fix, two layers (defense in depth): (1) the read is now try/catch
+  guarded with an "unknown" fallback — a cosmetic version string must
+  never be able to take the server down; (2) the Dockerfile runtime stage
+  now also `COPY package.json /app/package.json` so the real version
+  ships (the tab self-reload feature needs the true value).
+- **Standing lesson / known gap**: the CI smoke test (and local smoke
+  runs) exercise the REPO layout, not the Docker runtime layout — a
+  startup crash that only happens in the image layout sails through CI.
+  If CI ever gains a `docker build` step, this class is covered; until
+  then, any new startup-time file read must be checked against the
+  Dockerfile's runtime COPY list.
