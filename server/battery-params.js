@@ -10,7 +10,13 @@
 import { kvGet, kvSet } from "./db.js";
 
 const CONFIG_KV_KEY = "battery_config";
-const CONFIG_TTL_MS = 6 * 3600 * 1000;
+// How long the (rarely-changing) account config is cached. Was 6 h —
+// lowered to 1 h on 2026-09-22 after a user changed the discharge cutoff
+// in the Anker app and our app kept showing the old value for hours. 3
+// cloud calls per refresh; 24 refreshes/day is still trivially inside the
+// rate budget, and the Battery tab's ↻ button (?refresh=1) bypasses the
+// cache entirely for immediate pickup.
+const CONFIG_TTL_MS = 3600 * 1000;
 
 // A17C3 Solarbank 2 E1600 Plus hardware constants (datasheet).
 export const CONSTANTS = {
@@ -127,6 +133,20 @@ async function fetchConfig(anker, getLiveBattery) {
   try {
     const cutoff = await readPowerCutoff(anker, siteId, deviceSn);
     if (cutoff) {
+      // The USER-VISIBLE discharge cutoff (what the Anker app displays and
+      // lets you change) lives in the SELECTED power_cutoff_data profile's
+      // output_cutoff_data — the community client derives its power_cutoff
+      // exactly this way. The top-level discharge_lower_limit is the NEW
+      // SOC-limit system's field (introduced by a 2026-09 firmware update,
+      // cmd_type 1, sitting at its 5% default unless the new system is
+      // explicitly used) — preferring it (the bug found 2026-09-22)
+      // silently moved our floor from the user's configured 10% to 5%
+      // after that firmware update, and app-side changes to the cutoff
+      // never showed up in our app.
+      const selected = (cutoff.power_cutoff_data ?? []).find((p) => Number(p?.is_selected) > 0);
+      if (selected && config.dischargeLowerLimitPct == null) {
+        config.dischargeLowerLimitPct = numOrNull(selected.output_cutoff_data);
+      }
       applyLimits(cutoff);
       config.powerCutoffRaw = cutoff;
       config.limitsSource ??= "power_cutoff";
