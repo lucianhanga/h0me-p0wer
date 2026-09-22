@@ -13,6 +13,18 @@ import { batteryEtaHours, formatEta } from "../batteryEta.js";
 // app", whose own live view is MQTT push at ~3-5 s). An initial REST fetch
 // paints immediately, and a slow 30 s REST poll remains as a safety net in
 // case the WS silently dies. Health/profile stay on their own slow polls.
+// Display deadband (2026-09-22, user report: "our app almost always shows
+// pushing into the grid, the Anker app the opposite"). Verified against 24h
+// of production data: the meter reads a small NEGATIVE value 24% of
+// daylight buckets — the Solarbank's zero-export regulation oscillates a
+// few watts around zero when PV ≈ demand (median −9 W, worst −85 W), and
+// Anker's own cloud trend shows the same −7…−11 W class — but the Anker
+// APP smooths that band to "0 W" while we lit up a visible export arc for
+// every flicker. DISPLAY-ONLY: graphs, stats, and the controller's export
+// watchdog keep the raw signed value; sustained real export (> 20 W)
+// still shows.
+const GRID_DISPLAY_DEADBAND_W = 20;
+
 export default function LiveTab() {
   const [live, setLive] = useState(null); // meter state (WS meter / /api/live)
   const [flow, setFlow] = useState(null); // flow payload (WS flow / /api/flow)
@@ -101,6 +113,15 @@ export default function LiveTab() {
   const phases = snapshot?.primary?.phases;
   const battery = flow?.battery;
   const pv = flow?.pv;
+  // Display-deadbanded grid (see GRID_DISPLAY_DEADBAND_W above): tile and
+  // flow diagram both use the clamped values, raw stays in the flip-side
+  // chart and everywhere else.
+  const gridDisplay = grid != null && Math.abs(grid) <= GRID_DISPLAY_DEADBAND_W ? 0 : grid;
+  const flowDisplay =
+    flow?.grid &&
+    Math.abs((flow.grid.import ?? 0) - (flow.grid.export ?? 0)) <= GRID_DISPLAY_DEADBAND_W
+      ? { ...flow, grid: { ...flow.grid, import: 0, export: 0 } }
+      : flow;
   // Charge/discharge ETA (2026-09-18, user request) — same shared helper as
   // BatteryTab.jsx; maxPct/floorPct/capacityKwh come from /api/flow's
   // battery object (server-resolved account limits, see server/index.js).
@@ -173,7 +194,7 @@ export default function LiveTab() {
       </p>
 
       <h3>Power Flow</h3>
-      <FlowDiagram flow={flow} />
+      <FlowDiagram flow={flowDisplay} />
 
       <div className="cards">
         <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
@@ -190,13 +211,13 @@ export default function LiveTab() {
         >
           <div className="card">
             <div className="card-label">
-              Grid {grid != null && (grid >= 0 ? "import" : "export")}
+              Grid {gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "balanced") : ""}
             </div>
-            <div className={`card-value ${grid != null ? (grid >= 0 ? "import" : "export") : ""}`}>
-              {grid != null ? `${Math.abs(grid)} W` : "—"}
+            <div className={`card-value ${gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "") : ""}`}>
+              {gridDisplay != null ? `${Math.abs(gridDisplay)} W` : "—"}
             </div>
             <div className="card-label">
-              {gridFromCloud ? "via cloud" : grid != null ? "meter direct" : "—"}
+              {gridFromCloud ? "via cloud" : gridDisplay != null ? "meter direct" : "—"}
             </div>
           </div>
         </FlipTile>
