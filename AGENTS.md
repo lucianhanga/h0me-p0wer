@@ -151,13 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.47, `main`, working tree clean, nothing pending.**
-Latest: power_cutoff parsing fixed — the discharge floor now comes from
-the SELECTED profile (what the Anker app shows/sets), not the new
-SOC-limit system's top-level field that a September firmware update added
-at 5% (this was the real cause of the "battery at 5%" morning, NOT an
-account change — see the corrected entry below). Config cache TTL 6h→1h.
-Before that: grid display smoothing. See the last log entries.
+**As of 2026-09-22, v1.5.48, `main`, working tree clean, nothing pending.**
+HOTFIX: preset path now re-reads the schedule periodically and VOIDS a
+stale lastWrittenPower when the device is in self-consumption (mode 1) —
+live incident this evening: battery_priority selected but the device kept
+self-consuming 521 W at 7% SOC because cur==target==0 meant "within
+deadband" and mode 3 was never written. Before that: power_cutoff
+selected-profile parsing fix. See the last log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3480,3 +3480,33 @@ of the log below) in one line each:
   value the DEVICE actually enforces (10% profile vs 5% new-system field)
   — with the corrected floor of 10+3=13% our controller stops at 13%
   either way, which matches the user's intent.
+
+## HOTFIX: preset path never wrote mode 3 when the device was already in self-consumption (2026-09-22 evening, live incident)
+
+- User: "I switched to Battery priority but the change does not happen —
+  the Anker app still shows self-consumption." Live data: controller
+  believed `lastWrittenPower: 0` with reason "within deadband" while the
+  DEVICE discharged **521 W at 7% SOC** — it was still in mode 1
+  (self-consumption ignores the custom preset entirely).
+- Root cause (self-inflicted by today's reconcileWrittenPower mode-1
+  skip): the preset path read the schedule, saw mode_type 1, skipped
+  reconcile, and kept the persisted belief `lastWrittenPower: 0` (from a
+  much older write). battery_priority's target at 7% SOC/no-PV is also 0
+  → cur == target → "within deadband" → NO write ever happened, so mode 3
+  never landed. Same stale-belief class as the 2026-09-16 incident, just
+  a new door. The `nativeMode` reset only fired when OUR native branch
+  had confirmed mode 1 in-session — not after a restart or any other
+  path into self-consumption.
+- Fix (`power-plan.js` preset path): the schedule is now re-read on cold
+  start AND every REFRESH_MS (5 min) — previously the preset path only
+  read it when the template was missing, so a device flipped to mode 1
+  via the Anker app was invisible forever. Whenever the (re-)read or the
+  cached template shows mode_type 1, `lastWrittenPower` is VOIDED (the
+  custom plan is dormant; the belief is meaningless) → write discipline
+  treats the next target as "initial" and unconditionally writes mode 3 +
+  the computed preset, taking the device out of self-consumption.
+- Verified by reproducing the exact incident in simulation (persisted
+  belief 0 + device in mode 1 + battery_priority): old code would write
+  nothing forever; fixed code voids the belief and writes mode 3 preset 0
+  on the first tick. Native-transition sim and export-watchdog sim both
+  still pass unchanged.

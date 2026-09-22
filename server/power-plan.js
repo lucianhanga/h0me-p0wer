@@ -623,7 +623,17 @@ export class PowerPlanController {
         this.lastWrittenPower = null;
         this.template = null;
       }
-      if (!this.template) {
+      // Preset path (battery_priority / manual trigger): the device can be
+      // in mode 1 (self-consumption) without OUR native branch knowing —
+      // app restart, or the user flipping the mode in the Anker app.
+      // Re-read the schedule on cold start AND periodically (REFRESH_MS),
+      // same as the native branch does. Live incident 2026-09-22 evening:
+      // device in mode 1 discharging 521 W at 7% SOC while the controller
+      // believed lastWrittenPower=0 — battery_priority's target is also 0,
+      // so cur == target meant "within deadband" and NO write ever
+      // happened (the same stale-belief class as 2026-09-16, reopened by
+      // reconcileWrittenPower's mode-1 skip).
+      if (!this.template || Date.now() - this.lastScheduleReadAt >= REFRESH_MS) {
         const { parsed, raw } = await this.readSchedule();
         this.template = parsed;
         this.lastScheduleReadAt = Date.now();
@@ -631,7 +641,30 @@ export class PowerPlanController {
           this.originalRaw = raw;
           this.saveState();
         }
-        this.reconcileWrittenPower(parsed);
+        if (parsed?.mode_type === NATIVE_SELF_CONSUMPTION_MODE) {
+          // The custom-rate-plan value is DORMANT — the device follows the
+          // smart meter, not the plan — so lastWrittenPower can't be
+          // trusted at all. Void it: the write discipline then treats this
+          // as "initial" and unconditionally writes mode 3 + the computed
+          // preset, taking the device OUT of self-consumption.
+          if (this.lastWrittenPower != null) {
+            console.log(
+              `[power-plan] device is in self-consumption (mode 1) — voiding stale preset belief ${this.lastWrittenPower} W, will write mode 3`,
+            );
+          }
+          this.lastWrittenPower = null;
+        } else {
+          this.reconcileWrittenPower(parsed);
+        }
+      }
+      // Same voiding when the template is ALREADY cached as mode 1 — e.g.
+      // enable() just read it, or the device was flipped to
+      // self-consumption in the Anker app between our periodic re-reads.
+      if (
+        this.template?.mode_type === NATIVE_SELF_CONSUMPTION_MODE &&
+        this.lastWrittenPower != null
+      ) {
+        this.lastWrittenPower = null;
       }
       const { dischargeFloorPct, chargeCeilingPct } = await getBatteryLimits(
         this.anker,
