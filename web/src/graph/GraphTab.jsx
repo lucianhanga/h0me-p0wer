@@ -269,8 +269,16 @@ export default function GraphTab() {
       let fetchSeq = 0;
 
       function applyRows(rows) {
-        // Resolution-aware envelope: collapse to the mean above 5-min buckets.
-        const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
+        // The min/max "Grid range" envelope only at fine buckets (2026-09-22,
+        // user report with screenshots at every span): at 1 s sampling a
+        // 1.8-min bucket holds ~108 samples, so every kettle pulse inflated
+        // the envelope of EVERY bucket it touched to 2 kW+ — the brown band
+        // dominated the 12h/24h charts. Show it only where it's genuinely
+        // informative (1h/6h views, near-real-time transients); coarser
+        // spans show the mean only. (A p95 server-side variant was tried
+        // and reverted: a 15 s pulse is >5% of a 108 s bucket, so p95
+        // still contains it — hiding at coarse buckets is the honest fix.)
+        const envelopeOn = rowsRef.bucketMs <= 30 * 1000;
         // Home is the RAW sum grid + batteryOut (2026-09-22, user report:
         // "house consumption is not consistent with the grid spikes").
         // smoothHome()'s 1-2-1 average (added 2026-09-17 for the ~1 min
