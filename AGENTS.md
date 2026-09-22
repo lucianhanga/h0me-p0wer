@@ -151,11 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.44, `main`, working tree clean, nothing pending.**
-Latest: meter poll default 2 s → 1 s (register freshness floor — the WS
-push was already instant). Before that: HOTFIX for the v1.5.42 Docker boot
-crash; WS version stamp + tab self-reload; ±20 W grid display deadband;
-native self-consumption house_priority. Details in the last log entries.
+**As of 2026-09-22, v1.5.45, `main`, working tree clean, nothing pending.**
+Latest: scen_info fast path — 3 s battery/PV sync whenever a frontend is
+watching (the Anker app's own live-view mechanism is REST polling, not
+MQTT; Anker's MQTT broker was stalled again, delivering zero messages —
+see the last log entry). /api/health now exposes batteryMqtt
+connected/fresh/lastDataAt.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3384,3 +3385,37 @@ of the log below) in one line each:
   battery values ~3-5 s (Anker's own cadence). DB cost of 1 s sampling:
   ~173k snapshot rows/48 h ≈ 4 MB — negligible per the same day's DB
   sizing analysis.
+
+## How the Anker app is fast + scen_info 3 s fast path (2026-09-22, user report)
+
+- User: "the Anker app is much faster and has other values; our UI is
+  delayed a few seconds and intermediate steps are missing — figure out
+  how the Anker app uses the Anker backend." Investigation:
+  1. The MQTT realtime trigger (0057) has NO interval field (community
+     CMD_REALTIME_TRIGGER: on/off + timeout only) — device telemetry
+     (0405) is fixed at ~3-5 s for the battery, ~5 s for the meter's own
+     MQTT (AE1X0 map: grid_power_signed etc.). Nobody gets faster data
+     over MQTT, including the Anker app.
+  2. **Anker's MQTT broker was stalled AGAIN** (the 2026-09-11 pattern):
+     production battery readings were arriving only at the 10 s REST
+     cadence; a dev instance with MQTT_DEBUG=1 confirmed connack/suback
+     fine but ZERO messages routed (watchdog forcing 120 s reconnect
+     loops), while the user's Anker app updated happily — so the app's
+     live view does NOT depend on that MQTT stream: **it polls
+     get_scen_info every few seconds while the screen is open.**
+- Fix (index.js): `syncBatteryThrottled()` + a 1 s ticker that syncs every
+  ~3 s whenever at least one WS client is connected (a UI is actually
+  watching — zero cost when closed), deduped against the unconditional
+  10 s baseline loop. ~20 req/min on that endpoint — above the
+  ~10-12/min guideline, same on-demand precedent as the modbus-down 3 s
+  sync (failures just log), and exactly the traffic pattern the Anker app
+  itself generates. This also self-heals the MQTT stall case: when the
+  broker routes nothing, the UI still gets 3 s data.
+- `/api/health` gained `batteryMqtt: {connected, fresh, lastDataAt}` —
+  `fresh=false` with `connected=true` is the stall signature; checkable
+  from outside without touching the account.
+- Verified live on the dev stack: with a WS client connected, distinct
+  battery readings every ~3 s (REST ts advancing 3 s per reading, live
+  values changing); health reports batteryMqtt connected-but-not-fresh
+  during the stall. Note MQTT may silently resume later (both channels
+  write into the same latestBattery — harmless).
