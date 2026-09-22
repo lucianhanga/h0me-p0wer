@@ -151,11 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.37, `main`, working tree clean, nothing pending.**
-Latest: house_priority is now the device's NATIVE self-consumption mode
-(schedule mode_type 1) instead of our preset loop — sub-second local
-regulation, exactly like the Anker app. battery_priority unchanged (preset
-path, never empties the battery). See the last log entry.
+**As of 2026-09-22, v1.5.38, `main`, working tree clean, nothing pending.**
+Latest: Live tab is now WebSocket-PUSHED (meter snapshot + battery
+MQTT/REST updates push {type:"live"} instantly) instead of 5 s polling —
+matching the Anker app's live-view cadence. Before that: house_priority
+became the device's native self-consumption mode (mode_type 1) — see the
+last two log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3218,3 +3219,33 @@ of the log below) in one line each:
   results exactly (6.17 Wh, ends at apply-lag floor, no oscillation).
 - Live note: production was running strategy `anker_app` at the time — no
   behavior change until the user picks House priority there again.
+
+## Live tab: WebSocket push instead of 5 s polling (2026-09-22, user request)
+
+- User: "make sure the UI/UX is like in the Anker app when it comes to
+  displaying the current status — should be faster." The Anker app's live
+  view is MQTT-push at ~3-5 s; our Live tab POLLED /api/live + /api/flow
+  every 5 s, adding up to 5 s of pure UI latency on top of every reading.
+- The server already had a WS broadcast (`/ws`) — but it sent raw meter
+  poller state to ZERO consumers (nothing in web/src ever connected).
+  Redefined the message: `{type:"live", meter: getLiveState(), flow:
+  await computeFlowPayload()}` — same payloads as /api/live and /api/flow
+  (both extracted into shared functions: `getLiveState()` includes the
+  modbus-down cloud fallback; `computeFlowPayload()` is the /api/flow
+  handler body verbatim, now also calling `refreshHomeConsumption()` so
+  pushed Home values are as fresh as the triggering sample). Pushed on:
+  every meter snapshot (5 s Modbus; 20 s in dev's MODBUS_TRANSIENT mode),
+  every MQTT battery message (~3-5 s), and every 10 s scen_info REST sync
+  — battery-triggered pushes throttled to >= 2 s. On connect, a full live
+  message is sent immediately.
+- `LiveTab.jsx`: WS subscription replaces the 5 s fast poll; initial REST
+  fetch for instant paint; 30 s REST safety-net poll while the WS is down;
+  reconnect with 2 s→30 s exponential backoff. Dev mode connects DIRECTLY
+  to `ws://localhost:3001/ws` (never through the Vite proxy — the EPIPE
+  noise rule already documented above finally gets its real consumer).
+  Health (10 s) and today's profile (60 s) stay on their own REST polls.
+- Verified: node WS client against the dev stack saw pushes at MQTT/REST
+  cadence (3.8-10 s gaps) with the correct payload shape and real values;
+  headless-Chrome screenshot of the Live tab rendering entirely from
+  WS-delivered data (flow diagram, tiles, ETA). In production (5 s meter +
+  3-5 s MQTT) updates land every ~2-5 s.

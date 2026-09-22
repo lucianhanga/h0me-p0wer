@@ -74,16 +74,21 @@ const anker = new AnkerClient(
 const app = express();
 app.use(express.json());
 
-app.get("/api/live", (req, res) => {
+// Meter state for /api/live AND the WS live push — Modbus down: attach the
+// shared grid fallback so both show the SAME cloud value as /api/flow
+// (source: cloud-live → live scen_info, cloud → newest closed 20-min
+// interval).
+function getLiveState() {
   const state = poller.getState();
-  // Modbus down: attach the shared grid fallback so the UI shows the SAME
-  // cloud value as /api/flow (source: cloud-live → live scen_info, cloud →
-  // newest closed 20-min interval).
   if (!state.snapshot) {
     const gl = getGridLive();
     if (gl.power != null) state.cloud = gl;
   }
-  res.json({ ok: true, data: state });
+  return state;
+}
+
+app.get("/api/live", (req, res) => {
+  res.json({ ok: true, data: getLiveState() });
 });
 
 // Connectivity health for the Live tab badges.
@@ -216,7 +221,12 @@ function getPvStringKwhToday() {
   return pvStringKwhCache.result;
 }
 
-app.get("/api/flow", async (req, res) => {
+// The /api/flow payload, extracted so BOTH the REST route and the WebSocket
+// live-push (broadcastLive below) share the exact same computation.
+// refreshHomeConsumption() is called here (not just on the 10 s tick) so
+// WS-pushed updates carry a Home value as fresh as the meter sample that
+// triggered them — the despike median-of-3 simply sees more samples.
+async function computeFlowPayload() {
   const gl = getGridLive();
   const grid = gl.power;
   const gridTs = gl.ts;
@@ -244,63 +254,65 @@ app.get("/api/flow", async (req, res) => {
     () => latestBattery ?? getLatestBattery(),
   );
   const dischargeTolerancePct = powerPlan.getState().dischargeTolerancePct ?? 0;
-  res.json({
-    ok: true,
-    data: {
-      ts: Date.now(),
-      obtainedAt: new Date().toISOString(), // when the server obtained these values
-      grid: {
-        import: grid != null ? Math.max(grid, 0) : null,
-        export: grid != null ? Math.max(-grid, 0) : null,
-        ts: gridTs,
-        source: gridSource,
-      },
-      battery: b
-        ? {
-            soc: b.soc,
-            discharge: b.outputW,
-            charge: chargeW,
-            // Cells-only output to the house (inverter total minus the PV
-            // pass-through) — the PV→Home arc carries pvToHome separately.
-            cells: cellsW,
-            // Charging sourced from the grid (chargeW beyond what PV covers)
-            // — the Home→Battery arc, normally 0.
-            gridCharge: gridChargeW,
-            name: b.name ?? "Solarbank",
-            pv1W: b.pv1W ?? 0,
-            pv2W: b.pv2W ?? 0,
-            ts: b.ts ?? null,
-            source: "online", // battery data is always cloud (REST/MQTT)
-            // Charge/discharge ETA inputs — see the note above the route.
-            // floorPct is the EFFECTIVE floor (account discharge floor +
-            // the controller's safety margin), not the bare account value —
-            // "including the extra amount" per the user's request.
-            capacityKwh: CONSTANTS.capacityKwh,
-            maxPct: chargeCeilingPct,
-            floorPct: dischargeFloorPct + dischargeTolerancePct,
-          }
-        : null,
-      pv: {
-        production: pvW,
-        toBattery: pvToBattery,
-        toHome: pvToHome,
-        // Per-string energy today (kWh), integrated locally from the 10 s
-        // per-string power samples — the cloud has no per-string kWh.
-        pv1KwhToday: getPvStringKwhToday().pv1Kwh,
-        pv2KwhToday: getPvStringKwhToday().pv2Kwh,
-        ts: b?.ts ?? null,
-        source: b ? "online" : null,
-      },
-      home: {
-        // Shared, despiked computation — see refreshHomeConsumption() above
-        // for why (2026-09-17: this used to be computed inline here with a
-        // DIFFERENT formula than the power-plan controller used, and
-        // un-despiked, so the two could disagree and both could show a
-        // transient bad reading right after a preset change).
-        consumption: latestHomeConsumptionW,
-      },
+  refreshHomeConsumption(); // keep Home as fresh as the trigger sample
+  return {
+    ts: Date.now(),
+    obtainedAt: new Date().toISOString(), // when the server obtained these values
+    grid: {
+      import: grid != null ? Math.max(grid, 0) : null,
+      export: grid != null ? Math.max(-grid, 0) : null,
+      ts: gridTs,
+      source: gridSource,
     },
-  });
+    battery: b
+      ? {
+          soc: b.soc,
+          discharge: b.outputW,
+          charge: chargeW,
+          // Cells-only output to the house (inverter total minus the PV
+          // pass-through) — the PV→Home arc carries pvToHome separately.
+          cells: cellsW,
+          // Charging sourced from the grid (chargeW beyond what PV covers)
+          // — the Home→Battery arc, normally 0.
+          gridCharge: gridChargeW,
+          name: b.name ?? "Solarbank",
+          pv1W: b.pv1W ?? 0,
+          pv2W: b.pv2W ?? 0,
+          ts: b.ts ?? null,
+          source: "online", // battery data is always cloud (REST/MQTT)
+          // Charge/discharge ETA inputs — see the note above the route.
+          // floorPct is the EFFECTIVE floor (account discharge floor +
+          // the controller's safety margin), not the bare account value —
+          // "including the extra amount" per the user's request.
+          capacityKwh: CONSTANTS.capacityKwh,
+          maxPct: chargeCeilingPct,
+          floorPct: dischargeFloorPct + dischargeTolerancePct,
+        }
+      : null,
+    pv: {
+      production: pvW,
+      toBattery: pvToBattery,
+      toHome: pvToHome,
+      // Per-string energy today (kWh), integrated locally from the 10 s
+      // per-string power samples — the cloud has no per-string kWh.
+      pv1KwhToday: getPvStringKwhToday().pv1Kwh,
+      pv2KwhToday: getPvStringKwhToday().pv2Kwh,
+      ts: b?.ts ?? null,
+      source: b ? "online" : null,
+    },
+    home: {
+      // Shared, despiked computation — see refreshHomeConsumption() above
+      // for why (2026-09-17: this used to be computed inline here with a
+      // DIFFERENT formula than the power-plan controller used, and
+      // un-despiked, so the two could disagree and both could show a
+      // transient bad reading right after a preset change).
+      consumption: latestHomeConsumptionW,
+    },
+  };
+}
+
+app.get("/api/flow", async (req, res) => {
+  res.json({ ok: true, data: await computeFlowPayload() });
 });
 
 // Persisted live samples for chart backfill: /api/history?minutes=60
@@ -1039,9 +1051,49 @@ const server = app.listen(PORT, () => {
   throw err;
 });
 
+// Live push over WebSocket (2026-09-22, user request: "the current status
+// should be as fast as the Anker app"). The Anker app's live view is
+// MQTT-push at ~3-5 s; our Live tab used to POLL /api/live + /api/flow every
+// 5 s, adding up to 5 s of pure UI latency on top of every reading. Now the
+// server pushes the moment new data exists: on every meter snapshot (5 s
+// Modbus) and on every battery update (MQTT 3-5 s / scen_info 10 s),
+// battery-triggered pushes throttled to >= 2 s so a chatty MQTT burst can't
+// spam clients. Message shape: {type:"live", meter: <poller state, same as
+// /api/live's data>, flow: <same as /api/flow's data>}. No other consumer
+// existed before this — the WS previously broadcast raw meter state to zero
+// listeners — so the format change breaks nothing.
+async function buildLiveMessage() {
+  return JSON.stringify({
+    type: "live",
+    meter: getLiveState(), // same shape/fallback as /api/live's data
+    flow: await computeFlowPayload(), // same as /api/flow's data
+  });
+}
+function broadcastLiveSync(msg) {
+  for (const ws of wss.clients) {
+    if (ws.readyState === ws.OPEN) ws.send(msg);
+  }
+}
+let lastBatteryPushAt = 0;
+async function broadcastLive({ batteryTriggered = false } = {}) {
+  if (!wss.clients.size) return;
+  if (batteryTriggered) {
+    const now = Date.now();
+    if (now - lastBatteryPushAt < 2000) return;
+    lastBatteryPushAt = now;
+  }
+  try {
+    broadcastLiveSync(await buildLiveMessage());
+  } catch (err) {
+    console.warn("[ws] live broadcast failed:", err.message);
+  }
+}
+
 const wss = new WebSocketServer({ server, path: "/ws" });
 wss.on("connection", (ws) => {
-  ws.send(JSON.stringify(poller.getState()));
+  buildLiveMessage()
+    .then((msg) => ws.send(msg))
+    .catch(() => {});
 });
 poller.onSnapshot((state) => {
   if (state.snapshot) {
@@ -1051,10 +1103,7 @@ poller.onSnapshot((state) => {
       console.warn("[db] failed to persist snapshot:", err.message);
     }
   }
-  const msg = JSON.stringify(state);
-  for (const ws of wss.clients) {
-    if (ws.readyState === ws.OPEN) ws.send(msg);
-  }
+  broadcastLive();
 });
 
 // Prune samples older than the retention window once an hour; also roll up
@@ -1089,6 +1138,7 @@ function startBatteryMqtt() {
     } catch (err) {
       console.warn("[db] failed to persist battery snapshot:", err.message);
     }
+    broadcastLive({ batteryTriggered: true }); // MQTT cadence ~3-5 s, throttled inside
   };
   batteryMqtt.start(); // never rejects — retries internally with backoff
 }
@@ -1103,6 +1153,7 @@ async function syncBattery() {
       latestBattery = { ...info, temperatureC: latestBattery?.temperatureC ?? null };
       lastCloudOkAt = Date.now();
       saveBatterySnapshot(latestBattery);
+      broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside
       // Grid channel from the same call — the best available source when
       // Modbus is down; graphs merge it below local snapshots.
       if (info.gridToHomeW != null) {

@@ -7,11 +7,15 @@ import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
-// grid/PV detail breakdown. Polls the backend every 5 s (flow/meter) and
-// 10 s (battery/health).
+// grid/PV detail breakdown. Live data arrives over the WebSocket
+// (/ws, {type:"live"} messages pushed the moment the server has new
+// meter/battery data — 2026-09-22, user request: "as fast as the Anker
+// app", whose own live view is MQTT push at ~3-5 s). An initial REST fetch
+// paints immediately, and a slow 30 s REST poll remains as a safety net in
+// case the WS silently dies. Health/profile stay on their own slow polls.
 export default function LiveTab() {
-  const [live, setLive] = useState(null); // /api/live (meter snapshot)
-  const [flow, setFlow] = useState(null); // /api/flow
+  const [live, setLive] = useState(null); // meter state (WS meter / /api/live)
+  const [flow, setFlow] = useState(null); // flow payload (WS flow / /api/flow)
   const [health, setHealth] = useState(null); // /api/health
   const [detailsOpen, setDetailsOpen] = useState(false); // Details section: collapsed by default
   const [todayProfile, setTodayProfile] = useState(null); // /api/stats/overview's profile, for the flip-side mini charts
@@ -38,11 +42,52 @@ export default function LiveTab() {
     fast();
     slow();
     today();
-    const t1 = setInterval(fast, 5000);
+
+    // Push channel. Dev mode connects DIRECTLY to the backend — do NOT
+    // proxy through Vite (proxying caused EPIPE noise on every client
+    // disconnect — see AGENTS.md).
+    let ws = null;
+    let backoff = 2000;
+    let wsTimer = null;
+    const connect = () => {
+      if (!mounted.current) return;
+      const url = import.meta.env.DEV
+        ? "ws://localhost:3001/ws"
+        : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+      ws = new WebSocket(url);
+      ws.onmessage = (ev) => {
+        if (!mounted.current) return;
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg?.type !== "live") return;
+          backoff = 2000; // healthy message — reset reconnect backoff
+          if (msg.meter) setLive(msg.meter);
+          if (msg.flow) setFlow(msg.flow);
+        } catch {
+          // malformed message — ignore
+        }
+      };
+      ws.onclose = () => {
+        if (!mounted.current) return;
+        wsTimer = setTimeout(connect, backoff);
+        backoff = Math.min(backoff * 2, 30000);
+      };
+      ws.onerror = () => ws.close();
+    };
+    connect();
+
+    // Safety net: if the WS is down (reconnect backoff running), the UI
+    // still refreshes — just slowly.
+    const t1 = setInterval(fast, 30000);
     const t2 = setInterval(slow, 10000);
     const t3 = setInterval(today, 60000);
     return () => {
       mounted.current = false;
+      clearTimeout(wsTimer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
       clearInterval(t1);
       clearInterval(t2);
       clearInterval(t3);
