@@ -85,13 +85,28 @@ const savedSpanMs = GRAPHS.map(() => null);
 // (returns null, meaning "let the axis auto-scale as before"), only a real
 // outlier gets capped. `values` must already be non-negative (callers pass
 // `Math.abs()`'d magnitudes for a signed series' negative side).
+//
+// A spike only counts as an outlier when it beats the typical range by BOTH
+// a ratio AND an absolute margin (2026-09-22, user rule: mostly ~100 W with
+// one 1000 W -> outlier; mostly 0 W with one 100-200 W -> NOT an outlier).
+// A percentile-only test breaks down exactly on a near-zero baseline
+// (verified against live data: a window that's mostly 0 W with a brief
+// legit 150 W got capped at 0 W, hiding the real values entirely), and a
+// ratio-only test would cap e.g. 500 W baseline + 900 W peak, which is just
+// normal house variation. Hence both tests.
+const MIN_OUTLIER_DELTA_W = 300; // must be > the user's "100 or 200 over 0" case
+const MIN_OUTLIER_RATIO = 2;
 function robustCap(values) {
   const sorted = values.filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
   if (!sorted.length) return null;
   const rawMax = sorted[sorted.length - 1];
   const p98 = sorted[Math.min(sorted.length - 1, Math.floor(0.98 * sorted.length))];
-  const cap = Math.ceil((p98 * 1.15) / 50) * 50;
-  return rawMax > cap ? { cap, rawMax } : null;
+  const cap = Math.max(50, Math.ceil((p98 * 1.15) / 50) * 50);
+  const isOutlier =
+    rawMax > cap &&
+    rawMax - p98 >= MIN_OUTLIER_DELTA_W &&
+    (p98 <= 0 || rawMax >= p98 * MIN_OUTLIER_RATIO);
+  return isOutlier ? { cap, rawMax } : null;
 }
 
 // "Home" is the only series that SUMS two independently-polled feeds: the
