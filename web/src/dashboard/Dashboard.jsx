@@ -27,6 +27,9 @@ export default function Dashboard() {
           setStats(overviewRes.data);
           if (topRes?.ok) setTopDays(topRes.data);
           setUpdatedAt(new Date());
+          setError(null); // clear a previous transient failure — success must
+          // unwedge the tab (2026-09-22 code review: one failed poll used to
+          // stick the error screen forever while polls recovered underneath)
         })
         .catch((e) => setError(String(e.message ?? e)));
     };

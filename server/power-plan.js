@@ -259,6 +259,7 @@ export class PowerPlanController {
     this.lastWriteDown = false; // last write direction — see SETTLE_AFTER_WRITE_MS
     this.nativeMode = false; // device confirmed in native self-consumption (mode_type 1)
     this.lastScheduleReadAt = 0; // last time the schedule was (re-)read from the cloud
+    this.ticking = false; // re-entry guard — see tick()
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
@@ -481,7 +482,15 @@ export class PowerPlanController {
     if (!this.holdingAtCeiling) {
       this.holdProbeW = 0; // start conservative every time we (re)enter hold
       this.lastProbeUpAt = 0;
-      if (pvW > 0) return 0; // withhold PV, charge the battery
+      // Withhold PV so it charges the battery — and at night there is
+      // NOTHING to probe: the hill-climb exists to discover available PV,
+      // never to spend cells (2026-09-22 code-review finding: the probe
+      // below used to fire at night too — pvW==0 skipped this return, the
+      // just-reset lastProbeUpAt=0 made PROBE_MIN_INTERVAL_MS trivially
+      // true, and holdProbeW jumped to PROBE_STEP_W every tick, so the
+      // device pulsed ~150 W of CELL discharge all night down to the floor
+      // — under the strategy that must never discharge).
+      return 0;
     }
     const ceilingW = this.roundDown(Math.max(0, demandW - GRID_TARGET_W), step);
     const now = Date.now();
@@ -494,10 +503,12 @@ export class PowerPlanController {
       // "just tested" — don't immediately retry upward.
       this.holdProbeW = Math.max(0, (this.lastWrittenPower ?? this.holdProbeW) - cellsW);
       this.lastProbeUpAt = now;
-    } else if (this.holdProbeW < ceilingW && now - this.lastProbeUpAt >= PROBE_MIN_INTERVAL_MS) {
+    } else if (pvW > 0 && this.holdProbeW < ceilingW && now - this.lastProbeUpAt >= PROBE_MIN_INTERVAL_MS) {
       // Confirmed safe, and enough time has passed since the last probe
       // for the cloud to have actually reported on it — try one step
-      // beyond the current candidate.
+      // beyond the current candidate. Gated on pvW > 0 (2026-09-22): at
+      // night any probe can only be sourced from cells — a deliberate
+      // battery drain this strategy exists to forbid.
       this.holdProbeW = Math.min(this.holdProbeW + PROBE_STEP_W, ceilingW);
       this.lastProbeUpAt = now;
     }
@@ -505,6 +516,7 @@ export class PowerPlanController {
     // currently written) — it must hold steady across ticks for the
     // write-discipline's STEP_UP_HOLD_MS to ever actually see a
     // continuously-elevated target and commit the write at all.
+    if (pvW <= 0) return 0; // night: nothing to discover — never spend cells
     return this.roundDown(this.holdProbeW, step);
   }
 
@@ -523,6 +535,23 @@ export class PowerPlanController {
   // Called on every battery sync with the latest scen_info payload.
   async tick(info) {
     if (!this.enabled || !info || !this.anker.siteId) return;
+    // Re-entry guard (2026-09-22 code review): index.js fires ticks from a
+    // 10 s interval WITHOUT awaiting, and one tick can hold several cloud
+    // round-trips (schedule read, limits fetch, schedule write) that
+    // occasionally exceed the interval — overlapping ticks could both pass
+    // the write-gap check and issue duplicate preset writes, or land a
+    // write after disable() restored the user's schedule (enabled is
+    // re-checked right before the write below).
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      await this.tickInner(info);
+    } finally {
+      this.ticking = false;
+    }
+  }
+
+  async tickInner(info) {
     // Never act on stale samples: right after a (re)start the DB/MQTT merge
     // can hand us an old reading, and a prompt step-down on that once wrote
     // a bogus 100 W preset (2026-09-15).
@@ -718,12 +747,26 @@ export class PowerPlanController {
         // lower output) — the difference shows up as grid import instead.
         // Acting on it steps straight back down and oscillates (sim: up at
         // t=400, false down at t=470, repeat). Suppress reverse direction
-        // until the device+cloud reflect the write; export corrections stay
-        // exempt.
+        // until the device+cloud reflect the write. TWO exemptions: export
+        // corrections, AND any step-down while cellsW > 0 — the battery is
+        // then REALLY discharging, which is the same class of
+        // measured-must-act-now signal (2026-09-22 code review: the guard
+        // was delaying the battery_priority probe's cellsW correction by
+        // up to 120 s, breaking its "corrected within one tick" safety
+        // property — worse since the 3 s scen_info fast path made cellsW
+        // arrive well inside the window).
         this.pendingUp = null;
         const minDelta = exportCorrection ? EXPORT_CORRECT_MIN_W : WRITE_MIN_DELTA_W;
+        // Second exemption: battery_priority's hill-climb probe touching
+        // real cells — its "never touch the battery" safety property needs
+        // the correction written immediately (2026-09-22 code review).
+        // Deliberately strategy-scoped: under house_priority/manual,
+        // discharge is the INTENT, and a post-up-write step-down is exactly
+        // the deflated-demandW false reading the guard exists to suppress.
+        const probeCorrection = this.strategy === "battery_priority" && cellsW > 0;
         if (
           !exportCorrection &&
+          !probeCorrection &&
           this.lastWriteDown === false &&
           this.lastWriteAt > 0 &&
           now - this.lastWriteAt < SETTLE_AFTER_WRITE_MS
@@ -784,7 +827,11 @@ export class PowerPlanController {
       let wrote = false;
       if (shouldWrite) {
         const writeGap = exportCorrection ? EXPORT_WRITE_GAP_MS : MIN_WRITE_GAP_MS;
-        if (now - this.lastWriteAt >= writeGap) {
+        if (!this.enabled) {
+          // disable() ran while this tick was awaiting cloud calls — the
+          // user's original schedule was just restored; never overwrite it.
+          reason = "disabled mid-tick — write dropped";
+        } else if (now - this.lastWriteAt >= writeGap) {
           const body = this.buildPresetSchedule(targetW);
           await this.writeSchedule(body);
           // Keep the cache truthful: the device now holds exactly this
