@@ -151,8 +151,15 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-21, v1.5.34, `main`, working tree clean, nothing pending.**
-Latest: grid target lowered 100→25 W. A Dashboard "Lag losses" tile built
+**As of 2026-09-22, v1.5.35, `main`, working tree clean, nothing pending.**
+Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
+margin (a mostly-0 W window with a legit 100-200 W value was being capped
+to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
+battery at 5% is the ACCOUNT's discharge lower limit having changed
+10%→5% (Anker-app side; our app has no write path for it) plus overnight
+standby draw — controller behaved correctly (stopped at floor+3%=8%,
+zero output all night).
+Previously: grid target lowered 100→25 W. A Dashboard "Lag losses" tile built
 on the new `/api/stats/overview` `gridTracking` block was REMOVED again
 the same evening at the user's request ("this is wrong — get rid of the
 new tile, leave it like this for now") — the backend `gridTracking`
@@ -3069,3 +3076,47 @@ of the log below) in one line each:
   needing controller-attribution (only count moments where the plan was
   actively trying to hold the target) rather than the meter-truth approach
   the removed tile used, per the caveat already noted in the entry above.
+
+## Graph outlier cap: dual threshold, not percentile-only (2026-09-22, user report)
+
+- User: "if most of the values are about 100 and there is 1000 then that one
+  is an outlier. but if most of values are 0 and there is a 100 or 200 this
+  is not an outlier." Verified the bug against live 24h data:
+  `robustCap()` (web/src/graph/GraphTab.jsx) capped at `p98 × 1.15`
+  REGARDLESS of absolute magnitude, so a near-zero-baseline window (e.g. PV
+  overnight / battery at rest) with a brief legit 150 W value produced
+  `cap: 0` — the axis flattened to zero and hid real data entirely. Same
+  mechanism was also over-capping normal variation on the live window
+  (battCells max 499 capped at 400, charge max 691 capped at 550 — deltas
+  of ~150-210 W are ordinary swings, not outliers).
+- Fix: a spike is an outlier only when it beats the typical range by BOTH
+  tests — `rawMax - p98 >= MIN_OUTLIER_DELTA_W` (300 W, deliberately above
+  the user's "100 or 200 over 0" case) AND `rawMax >= p98 ×
+  MIN_OUTLIER_RATIO` (2, so e.g. a 900 W peak over a 500 W baseline —
+  normal house variation — stays uncapped). Cap itself gets a 50 W floor
+  for the p98≈0 outlier case. Verified against the live 24h window (home's
+  real 2054 W spike still capped at 1150, everything else null) and the
+  exact synthetic cases from the original 2026-09-21 incident plus the
+  user's two examples; browser-verified on the dev stack that all three
+  graphs auto-scale normally with no clipping.
+
+## Battery at 5% — diagnosed, not our bug (2026-09-22, user report)
+
+- User: "I see the battery at 5% — it should not get there." Investigation
+  (no code change): the account's discharge lower limit, read live from
+  `get_power_cutoff`, is **5%** — it was 10% in September (gauge showed
+  "min 10%", effective floor 13-14%). This app has NO write path for that
+  setting (`set_power_cutoff` is never called), so the change came from
+  the Anker app side. The controller followed its rules exactly: effective
+  floor 5+3=8%, last preset write 20:16 (target 0), and the production
+  24h timeseries confirms ZERO battery output 21:00→07:00. The final
+  8%→5% overnight was the unit's own standby draw (~4.7 W average over
+  ~10 h = 3% of 1.6 kWh — the known housekeeping consumption, can't be
+  prevented by any preset), bottoming at the device's 5% floor. Community
+  reference (thomluther/anker-solix-api api.py `get_power_cutoff`/
+  `set_power_cutoff`): top-level `discharge_lower_limit` is the real
+  SB2 SOC limit (writable range 5-20), distinct from the legacy
+  `power_cutoff_data[]` profiles; `charge_upper_limit` range 80-100.
+  Options offered to the user: set the cutoff back to 10% in the Anker
+  app (picked up within the 6h cache / on restart), or raise
+  `DISCHARGE_TOLERANCE_PCT` as an app-side margin.
