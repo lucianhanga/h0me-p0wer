@@ -191,6 +191,34 @@ const PROBE_STEP_W = Number(process.env.PROBE_STEP_W ?? 150);
 // grid meter reacting to real changes the cloud hadn't caught up to) and
 // undermined the actual safety property.
 const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 2 * 60 * 1000);
+// Export watchdog (2026-09-22, user request: "I don't want to push power
+// into the grid — ramp down fast if I start exporting"). The strategy
+// target is computed from ESTIMATED demand (despiked, partly cloud-lagged)
+// and structurally cannot see export at all: index.js's
+// refreshHomeConsumption() clamps negative grid to 0, so while the device
+// overshoots, demandW keeps reading ~the OLD demand until cloud telemetry
+// catches up (~1 min typical, up to ~5). Only the local meter sees real
+// export, within ~5 s — when it does, cut the preset by exactly the
+// exported amount plus GRID_TARGET_W (landing grid ON the target, not at
+// 0). EXPORT_RECORRECT_MS ≈ the device's apply lag: re-correcting against
+// a grid reading that still reflects the PREVIOUS preset would subtract
+// the same export twice (double-correction). cloud-live grid is excluded
+// on purpose: it's import-minus-PV-feed-in and can never report battery
+// overshoot as negative — only the meter sees true export.
+const EXPORT_CORRECT_MIN_W = Number(process.env.EXPORT_CORRECT_MIN_W ?? 20);
+const EXPORT_RECORRECT_MS = 60 * 1000;
+const EXPORT_WRITE_GAP_MS = 15 * 1000;
+// How long reverse-direction changes are suppressed after a write — the
+// demand estimate is unreliable until the device+cloud have reflected the
+// new preset: INFLATED by cloud-lagged outputW after a down-write (would
+// falsely re-raise the preset — see tick()'s settling guard), DEFLATED
+// after an up-write (would falsely step back down). Must cover apply lag
+// (~60 s) + reporting lag (~30 s) + the median-of-3 despike (2 ticks) —
+// 90 s was caught one tick short by the simulation (guard lifted exactly
+// as the despike still held the stale value). Export corrections are
+// exempt — export is wasted energy NOW and must always correct
+// immediately.
+const SETTLE_AFTER_WRITE_MS = 120 * 1000;
 // Hard local safety switch (2026-09-16): a dev instance and production can
 // both run against the same real meter/Anker account at once (see AGENTS.md
 // dual-control note) — only ONE should ever hold the battery schedule.
@@ -216,6 +244,7 @@ export class PowerPlanController {
     this.manualDischarge = false;
     this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
     this.holdingAtFloor = false; // house_priority discharge/hold latch — see DISCHARGE_RESUME_HYSTERESIS_PCT
+    this.lastWriteDown = false; // last write direction — see SETTLE_AFTER_WRITE_MS
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
@@ -500,6 +529,7 @@ export class PowerPlanController {
         demandW,
         soc,
         cellsW,
+        exportW: info.gridSource === "meter" && info.gridW != null ? Math.min(0, info.gridW) : 0,
         strategy: this.strategy,
         trigger: this.trigger,
         manualDischarge: this.manualDischarge,
@@ -521,7 +551,7 @@ export class PowerPlanController {
         this.anker,
         this.getLiveBattery,
       );
-      const targetW = this.computeTarget({
+      let targetW = this.computeTarget({
         pvW,
         demandW,
         soc,
@@ -534,6 +564,24 @@ export class PowerPlanController {
       });
       const now = Date.now();
       const cur = this.lastWrittenPower;
+      // Export watchdog — see the constants' comment above for the full
+      // reasoning. Meter-sourced only; cut by exactly the exported amount
+      // plus GRID_TARGET_W, never above the strategy's own target.
+      const exportW =
+        info.gridSource === "meter" && info.gridW != null ? Math.min(0, info.gridW) : 0;
+      let exportCorrection = false;
+      if (
+        exportW <= -EXPORT_CORRECT_MIN_W &&
+        cur != null &&
+        now - this.lastWriteAt >= EXPORT_RECORRECT_MS
+      ) {
+        const step = this.template?.step ?? 10;
+        const cut = this.roundDown(Math.max(0, cur + exportW - GRID_TARGET_W), step);
+        if (cut < targetW) {
+          targetW = cut;
+          exportCorrection = true;
+        }
+      }
       let shouldWrite = false;
       let reason = "within deadband";
       let holdProgress = null; // {heldMs, totalMs} while waiting out the step-up hold
@@ -541,11 +589,30 @@ export class PowerPlanController {
         shouldWrite = true;
         reason = "initial";
       } else if (targetW < cur) {
-        // Step down promptly (preset above PV burns the battery).
+        // Step down promptly (preset above PV burns the battery). An active
+        // export correction tightens the deadband — export is wasted energy
+        // NOW, not a drift to smooth out.
+        //
+        // Settling guard (symmetric to the up-side one below, caught by the
+        // same simulation): right after a step-UP write, demandW is
+        // DEFLATED by the cloud-lagged outputW (still reporting the OLD,
+        // lower output) — the difference shows up as grid import instead.
+        // Acting on it steps straight back down and oscillates (sim: up at
+        // t=400, false down at t=470, repeat). Suppress reverse direction
+        // until the device+cloud reflect the write; export corrections stay
+        // exempt.
         this.pendingUp = null;
-        if (cur - targetW >= WRITE_MIN_DELTA_W) {
+        const minDelta = exportCorrection ? EXPORT_CORRECT_MIN_W : WRITE_MIN_DELTA_W;
+        if (
+          !exportCorrection &&
+          this.lastWriteDown === false &&
+          this.lastWriteAt > 0 &&
+          now - this.lastWriteAt < SETTLE_AFTER_WRITE_MS
+        ) {
+          reason = `settling after step up (${Math.round((now - this.lastWriteAt) / 1000)}s/${SETTLE_AFTER_WRITE_MS / 1000}s)`;
+        } else if (cur - targetW >= minDelta) {
           shouldWrite = true;
-          reason = "step down";
+          reason = exportCorrection ? `export correction (${exportW} W)` : "step down";
         } else if (now - this.lastWriteAt >= REFRESH_MS) {
           shouldWrite = true;
           reason = "refresh";
@@ -561,6 +628,22 @@ export class PowerPlanController {
         // (the documented intent — see the file header's PV-wobble
         // simulation note), not one that merely changes magnitude while
         // staying above it.
+        //
+        // Settling guard (2026-09-22, caught by the export-watchdog
+        // simulation): right after a step-DOWN write, demandW is inflated
+        // by the cloud-lagged outputW (it still reports the OLD, higher
+        // output — the meter-preferred formula max(grid,0)+outputW can't
+        // tell consumption from export). A demand estimate inflated by the
+        // just-removed output pushes the target back ABOVE the corrected
+        // preset, and the 90 s hold can complete BEFORE the cloud catches
+        // up (sim: hold reached 80s/90s, 10 s from a false re-raise that
+        // would have recreated the export the watchdog just fixed). Don't
+        // accumulate hold time until the device+cloud have had time to
+        // reflect the last down-write.
+        if (this.lastWriteDown && now - this.lastWriteAt < SETTLE_AFTER_WRITE_MS) {
+          this.pendingUp = null;
+          reason = `settling after step down (${Math.round((now - this.lastWriteAt) / 1000)}s/${SETTLE_AFTER_WRITE_MS / 1000}s)`;
+        } else {
         if (!this.pendingUp) {
           this.pendingUp = { since: now };
         }
@@ -575,13 +658,16 @@ export class PowerPlanController {
             holdProgress = { heldMs: Math.max(0, heldMs), totalMs: STEP_UP_HOLD_MS };
           }
         }
+        }
       } else {
         this.pendingUp = null;
       }
       let wrote = false;
       if (shouldWrite) {
-        if (now - this.lastWriteAt >= MIN_WRITE_GAP_MS) {
+        const writeGap = exportCorrection ? EXPORT_WRITE_GAP_MS : MIN_WRITE_GAP_MS;
+        if (now - this.lastWriteAt >= writeGap) {
           await this.writeSchedule(this.buildPresetSchedule(targetW));
+          this.lastWriteDown = targetW < cur; // cur == null handled above (initial)
           this.lastWrittenPower = targetW;
           this.lastWriteAt = now;
           this.pendingUp = null;
@@ -614,6 +700,8 @@ export class PowerPlanController {
         holdProbeW: this.holdProbeW,
         dischargeResumeHysteresisPct: DISCHARGE_RESUME_HYSTERESIS_PCT,
         holdingAtFloor: this.holdingAtFloor,
+        exportW,
+        exportCorrection,
       };
     } catch (err) {
       this.lastError = err.message;

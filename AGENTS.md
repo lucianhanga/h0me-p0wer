@@ -151,7 +151,10 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.35, `main`, working tree clean, nothing pending.**
+**As of 2026-09-22, v1.5.36, `main`, working tree clean, nothing pending.**
+Latest: export watchdog + reverse-direction settling guards in the power
+plan (see the last log entry) — the controller now reacts to METER-measured
+export within one tick instead of being structurally blind to it.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3120,3 +3123,45 @@ of the log below) in one line each:
   Options offered to the user: set the cutoff back to 10% in the Anker
   app (picked up within the 6h cache / on restart), or raise
   `DISCHARGE_TOLERANCE_PCT` as an app-side margin.
+
+## Export watchdog + reverse-direction settling guards (2026-09-22, user request)
+
+- User: "I don't want to push power into the grid — make sure the ramp-down
+  happens fast if I start exporting; check the algorithm, how does it work,
+  is it efficient?" Answer was NO, and the closed-loop simulation (real
+  `PowerPlanController` class, fake `Date.now`, device model with 60 s
+  apply lag + 30 s cloud-reporting lag, mirroring production's
+  `refreshHomeConsumption` formula incl. the median-of-3 despike) showed
+  something worse than "slow": the old loop was **structurally blind to
+  export** — `refreshHomeConsumption()` clamps negative grid to 0 and adds
+  the cloud-lagged `outputW`, so during export the demand estimate reads
+  ~the OLD demand forever and the preset never steps down meaningfully
+  (sim: 370 W continuous export after a 600→200 W demand drop, never
+  corrected within 6 min — only −30 W per 5-min "refresh" write).
+- **Watchdog** (`server/power-plan.js` `tick()`, fed by `index.js` passing
+  `getGridLive()`'s signed `gridW` + `gridSource` into tick): when the
+  METER reports grid ≤ −`EXPORT_CORRECT_MIN_W` (20 W, env-configurable),
+  cut the preset by exactly the exported amount plus `GRID_TARGET_W`
+  (landing grid ON the 25 W target, not at 0), written immediately with a
+  tightened deadband (20 W instead of 50) and write gap (15 s instead of
+  30). Meter-source ONLY: the cloud-live grid channel is
+  import-minus-PV-feed-in and can never report battery overshoot as
+  negative. `EXPORT_RECORRECT_MS` (60 s ≈ device apply lag) prevents
+  double-counting a correction that hasn't propagated yet. Surfaced as
+  `exportW`/`exportCorrection` in `lastDecision` (Strategy tab's decision
+  reason shows `export correction (-NNN W)`).
+- **Two symmetric settling guards the simulation caught** (both real, the
+  second one pre-existing): after a step-DOWN write the demand estimate is
+  INFLATED by cloud-lagged outputW (watchdog correction nearly got
+  reversed by the 90 s step-up hold 10 s before the cloud caught up);
+  after a step-UP write it's DEFLATED (a false immediate step-down —
+  predates the watchdog). Reverse-direction changes are now suppressed for
+  `SETTLE_AFTER_WRITE_MS` (120 s = 60 s apply + 30 s reporting + 2-tick
+  despike margin; 90 s was caught one tick short by the sim). Export
+  corrections are EXEMPT from the suppression — export always corrects
+  immediately.
+- Verified by the same simulation: watchdog ON corrects a 370 W export in
+  one tick (t=60s), export ends at the theoretical floor (device apply
+  lag, t=120s), 6.17 Wh vs 27.94 Wh-and-counting with it off; no
+  oscillation in either direction; a later demand rise (200→500) still
+  steps up normally after the hold. CI smoke test reproduced locally.
