@@ -1,9 +1,12 @@
 {
   "name": "h0me-p0wer-server",
   "private": true,
-  "version": "1.5.50",
+  "version": "1.5.51",
   "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch index.js"

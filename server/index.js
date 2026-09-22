@@ -1349,6 +1349,12 @@ setInterval(() => syncBatteryThrottled(10 * 1000), 10 * 1000).unref();
 // pattern the Anker app itself produces.
 setInterval(() => {
   if (!wss.clients.size) return;
+  // Skip when MQTT is already streaming (2026-09-22 code review): the fast
+  // path exists to cover MQTT's ~3-5 s cadence and its silent broker
+  // stalls — polling scen_info at ~20/min ON TOP of healthy MQTT is zero
+  // informational gain for double the rate-limit exposure. The 10 s
+  // baseline keeps running either way (SN discovery + cloud-grid channel).
+  if (batteryMqtt?.isFresh?.()) return;
   syncBatteryThrottled(2500);
 }, 1000).unref();
 

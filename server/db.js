@@ -8,6 +8,11 @@ const DB_PATH =
 const RETENTION_MS = 48 * 3600 * 1000; // keep 48 h of live-resolution samples
 
 const db = new DatabaseSync(DB_PATH);
+// WAL for the 1 s snapshot cadence (2026-09-22 code review): default
+// journal mode pays a full fsync per insert; WAL amortizes the 1 s +
+// 3-10 s write streams far better. Files live on a local volume (Docker
+// named volume / local disk), so WAL's shared-memory caveat doesn't apply.
+db.exec("PRAGMA journal_mode = WAL");
 db.exec(`
   CREATE TABLE IF NOT EXISTS snapshots (
     ts INTEGER PRIMARY KEY,
@@ -101,17 +106,26 @@ const num = (v) => (v === "" || v == null ? null : Number(v));
 
 export function saveCloudTrend(sn, type, start, dataTrend) {
   const now = Date.now();
-  for (const t of dataTrend) {
-    upsertCloudRow.run(
-      sn,
-      type,
-      start,
-      t.time,
-      num(t.power),
-      num(t.import_energy),
-      num(t.export_energy),
-      now,
-    );
+  // One transaction per trend instead of one per row (2026-09-22 review):
+  // 72 upserts per call add up across the 15-min sync + backfills.
+  db.exec("BEGIN");
+  try {
+    for (const t of dataTrend) {
+      upsertCloudRow.run(
+        sn,
+        type,
+        start,
+        t.time,
+        num(t.power),
+        num(t.import_energy),
+        num(t.export_energy),
+        now,
+      );
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
   }
 }
 
@@ -511,8 +525,15 @@ export function getStoredPvPeriodStarts(type = "day") {
 
 export function saveCloudPvTrend(type, start, dataTrend) {
   const now = Date.now();
-  for (const t of dataTrend) {
-    upsertCloudPvRow.run(type, start, t.time, num(t.power), now);
+  db.exec("BEGIN"); // one transaction per trend — see saveCloudTrend
+  try {
+    for (const t of dataTrend) {
+      upsertCloudPvRow.run(type, start, t.time, num(t.power), now);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
   }
 }
 

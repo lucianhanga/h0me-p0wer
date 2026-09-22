@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
@@ -134,14 +134,22 @@ export default function LiveTab() {
   // and unload" — a single purple line only distinguished by which side of
   // zero it fell on). NOT the raw `batt` field (output_w − charge_w), which
   // conflates PV pass-through with real charge/discharge.
-  const toSeries = (pick) => todayProfile?.map((p) => [p.t, pick(p)]) ?? [];
-  const gridSeries = toSeries((p) => p.power);
-  const houseSeries = toSeries(
-    (p) => Math.max(p.power, 0) + Math.max(p.cells ?? 0, 0) + Math.max(p.pvHome ?? 0, 0),
-  );
-  const battDischargeSeries = toSeries((p) => Math.max(p.cells ?? 0, 0));
-  const battChargeSeries = toSeries((p) => -Math.max(p.chargeW ?? 0, 0));
-  const pvSeries = toSeries((p) => p.pvHome);
+  // Memoized on todayProfile (2026-09-22 code review): these arrays were
+  // rebuilt on EVERY 1-3 Hz WS push render, and TodayMiniChart's effect
+  // keys on `lines` identity — so all four flip-side charts did a full
+  // echarts dispose+init per push even though the profile only changes
+  // once a minute.
+  const [gridSeries, houseSeries, battDischargeSeries, battChargeSeries, pvSeries] =
+    useMemo(() => {
+      const toSeries = (pick) => todayProfile?.map((p) => [p.t, pick(p)]) ?? [];
+      return [
+        toSeries((p) => p.power),
+        toSeries((p) => Math.max(p.power, 0) + Math.max(p.cells ?? 0, 0) + Math.max(p.pvHome ?? 0, 0)),
+        toSeries((p) => Math.max(p.cells ?? 0, 0)),
+        toSeries((p) => -Math.max(p.chargeW ?? 0, 0)),
+        toSeries((p) => p.pvHome),
+      ];
+    }, [todayProfile]);
 
   // Badge logic
   const meterDirect = health?.meterDirect ?? live?.connected ?? false;
