@@ -1194,7 +1194,14 @@ app.post("/api/power-plan/strategy", (req, res) => {
 
 setInterval(() => {
   const homeLoadW = refreshHomeConsumption();
-  powerPlan.tick(latestBattery ? { ...latestBattery, homeLoadW } : latestBattery);
+  // Signed grid + its source for tick()'s export watchdog — only the meter
+  // sees true export (see EXPORT_CORRECT_MIN_W's comment in power-plan.js).
+  const gl = getGridLive();
+  powerPlan.tick(
+    latestBattery
+      ? { ...latestBattery, homeLoadW, gridW: gl.power, gridSource: gl.source }
+      : latestBattery,
+  );
 }, 10 * 1000).unref();
 
 poller.start();
