@@ -37,7 +37,7 @@ EPIPE noise on every client disconnect).
 
 - `server/` — Node 20+ ESM, no build step:
   - `index.js` — Express routes + WS broadcast + cloud sync scheduling
-  - `modbus.js` — `MeterPoller`: reads the meter every 5 s, reconnects with 10 s backoff
+  - `modbus.js` — `MeterPoller`: reads the meter every 2 s, reconnects with 10 s backoff
   - `registers.js` — AE1X0 register map + decoders
   - `anker-cloud.js` — Anker EU cloud client (reverse-engineered auth)
   - `db.js` — SQLite via built-in `node:sqlite` (no native deps)
@@ -151,12 +151,10 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.38, `main`, working tree clean, nothing pending.**
-Latest: Live tab is now WebSocket-PUSHED (meter snapshot + battery
-MQTT/REST updates push {type:"live"} instantly) instead of 5 s polling —
-matching the Anker app's live-view cadence. Before that: house_priority
-became the device's native self-consumption mode (mode_type 1) — see the
-last two log entries.
+**As of 2026-09-22, v1.5.39, `main`, working tree clean, nothing pending.**
+Latest: meter poll cadence 5 s → 2 s — with the WS push already instant,
+the Modbus sample rate was the last bottleneck making the Live tab feel
+like "5 s updates" next to the Anker app. See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3249,3 +3247,19 @@ of the log below) in one line each:
   headless-Chrome screenshot of the Live tab rendering entirely from
   WS-delivered data (flow diagram, tiles, ETA). In production (5 s meter +
   3-5 s MQTT) updates land every ~2-5 s.
+
+## Meter poll 5 s → 2 s (2026-09-22, user report)
+
+- User after the WS-push deploy: "the UI is still 5 second interval
+  updated... I want the same speed like the Anker app." Verified first,
+  not assumed: production WAS already pushing `{type:"live"}` over /ws
+  (measured gaps 2.7-10 s — meter + MQTT/REST battery triggers), and the
+  served bundle DOES contain the WS code (grep `wss` — the asset-hash
+  difference vs a local build is just minifier/version noise, NOT a stale
+  bundle; initial suspicion disproven). The remaining 5 s cadence was the
+  DATA itself: `POLL_INTERVAL_MS` defaulted to 5000 in index.js, so the
+  meter values physically couldn't change faster. Anker's own live chain
+  is ~1-2 s. Default lowered to 2000 ms (registers update ~1 s; 3 batch
+  reads every 2 s is trivial for LAN Modbus TCP; snapshots table doubles
+  to ~86k rows/48 h — nothing for SQLite). Env var still overrides; the
+  MODBUS_TRANSIENT dev coexistence setup (20000 ms) is unaffected.
