@@ -2,5 +2,7 @@ node_modules/
 dist/
 .env
 server/data.db
+server/data.db-wal
+server/data.db-shm
 server/.token-cache.json
 server/.power-plan-state.json
