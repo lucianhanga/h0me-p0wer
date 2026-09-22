@@ -5,6 +5,7 @@ import PowerPlanCard from "./PowerPlanCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
+import { useLiveStream } from "../useLiveStream.js";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Live data arrives over the WebSocket
@@ -55,56 +56,28 @@ export default function LiveTab() {
     slow();
     today();
 
-    // Push channel. Dev mode connects DIRECTLY to the backend — do NOT
-    // proxy through Vite (proxying caused EPIPE noise on every client
-    // disconnect — see AGENTS.md).
-    let ws = null;
-    let backoff = 2000;
-    let wsTimer = null;
-    const connect = () => {
-      if (!mounted.current) return;
-      const url = import.meta.env.DEV
-        ? "ws://localhost:3001/ws"
-        : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
-      ws = new WebSocket(url);
-      ws.onmessage = (ev) => {
-        if (!mounted.current) return;
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg?.type !== "live") return;
-          backoff = 2000; // healthy message — reset reconnect backoff
-          if (msg.meter) setLive(msg.meter);
-          if (msg.flow) setFlow(msg.flow);
-        } catch {
-          // malformed message — ignore
-        }
-      };
-      ws.onclose = () => {
-        if (!mounted.current) return;
-        wsTimer = setTimeout(connect, backoff);
-        backoff = Math.min(backoff * 2, 30000);
-      };
-      ws.onerror = () => ws.close();
-    };
-    connect();
-
-    // Safety net: if the WS is down (reconnect backoff running), the UI
-    // still refreshes — just slowly.
+    // Safety net only: live values arrive over the shared WS push channel
+    // (useLiveStream below); if the socket is down (reconnect backoff
+    // running there), the UI still refreshes — just slowly.
     const t1 = setInterval(fast, 30000);
     const t2 = setInterval(slow, 10000);
     const t3 = setInterval(today, 60000);
     return () => {
       mounted.current = false;
-      clearTimeout(wsTimer);
-      if (ws) {
-        ws.onclose = null;
-        ws.close();
-      }
       clearInterval(t1);
       clearInterval(t2);
       clearInterval(t3);
     };
   }, []);
+
+  // Push channel: the server sends {type:"live", meter, flow} the moment it
+  // has new meter (2 s) or battery (3-5 s MQTT / 10 s REST) data.
+  const streamMsg = useLiveStream();
+  useEffect(() => {
+    if (!streamMsg) return;
+    if (streamMsg.meter) setLive(streamMsg.meter);
+    if (streamMsg.flow) setFlow(streamMsg.flow);
+  }, [streamMsg]);
 
   const snapshot = live?.snapshot;
   const cloudGrid = snapshot == null ? live?.cloud : null;
