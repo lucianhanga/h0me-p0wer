@@ -151,10 +151,11 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.36, `main`, working tree clean, nothing pending.**
-Latest: export watchdog + reverse-direction settling guards in the power
-plan (see the last log entry) — the controller now reacts to METER-measured
-export within one tick instead of being structurally blind to it.
+**As of 2026-09-22, v1.5.37, `main`, working tree clean, nothing pending.**
+Latest: house_priority is now the device's NATIVE self-consumption mode
+(schedule mode_type 1) instead of our preset loop — sub-second local
+regulation, exactly like the Anker app. battery_priority unchanged (preset
+path, never empties the battery). See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3165,3 +3166,55 @@ of the log below) in one line each:
   lag, t=120s), 6.17 Wh vs 27.94 Wh-and-counting with it off; no
   oscillation in either direction; a later demand rise (200→500) still
   steps up normally after the hold. CI smoke test reproduced locally.
+
+## house_priority = native self-consumption mode (2026-09-22, user request)
+
+- User, after learning Anker's loop is device-local and sub-second: "I want
+  the behaviour of our app to match the one of the anker app... House
+  Priority should behave exactly like Anker's Self-Consumption Mode — use
+  the app's setting directly if there is one, otherwise implement it like
+  the app does. Battery priority stays as-is; when the battery is full,
+  continue like house priority WITHOUT emptying the battery."
+- **There IS a direct setting** (community-verified, thomluther/
+  anker-solix-api `SolarbankUsageMode` — "verified by mode switching"): the
+  SB2 schedule payload we already write (param_type 6, cmd 17) carries
+  `mode_type`: **1 = smartmeter = "AC output based on measured smart meter
+  power" = the Anker app's Self-Consumption Mode** (no rate plan needed);
+  3 = manual preset (what we wrote before); 5/7/8 = TOU / AI-EMS /
+  dynamic-tariff. The account's own originalRaw snapshot shows the same
+  payload shape (mode_type next to custom_rate_plan/ai_ems/dynamic_price).
+- **Implementation** (`power-plan.js` tick()): house_priority + auto
+  trigger now takes a native branch — writes `{...schedule, mode_type: 1}`
+  ONCE (re-verified every REFRESH_MS=5 min in case the mode is changed in
+  the Anker app), then only monitors. No preset writes, no export watchdog
+  (zero export is enforced on-device, sub-second), no GRID_TARGET_W / floor
+  margin (the device's own Anker-app SOC cutoffs apply instead). The manual
+  discharge trigger is preset-based by nature and bypasses the native
+  branch; battery_priority is unchanged (charge at preset 0 → ceiling →
+  hold-phase PV-only hill-climb, never touches the cells = "continue like
+  house priority without emptying the battery").
+- **Transitions**: entering the preset path from native mode forces a fresh
+  schedule read + unconditional write (lastWrittenPower null'd — in mode 1
+  the custom-rate-plan value is dormant, so reconcileWrittenPower() now
+  skips mode_type 1 payloads). After every preset write the template cache
+  is updated to the written body — the sim caught that a stale cached
+  template made switching BACK to house_priority silently skip the mode-1
+  write (device left in mode 3) before this fix.
+- **Strategy tab**: House priority copy + help modal rewritten (native
+  mode, fastest possible reaction, Anker-app SOC limits apply); the
+  decision card shows "Native self-consumption active" with live numbers
+  (mirrors the anker_app card) when `lastDecision.nativeMode` is set; the
+  manual toggle's description no longer claims "same as House priority"
+  (it's the preset path with the grid target); the battery gauge's floor
+  margin tick is suppressed in native mode (StrategyTab passes
+  dischargeTolerancePct=0 → floor = the device's own cutoff; BatteryTab
+  skips the second tick when it equals the min tick).
+- **Verified by simulation** (stateful mock device, real controller class):
+  mode-1 write happens exactly once on entry, zero writes in steady state,
+  battery_priority switch writes mode 3 + preset 0, switching back writes
+  mode 1 again; lastWrittenPower never reconciled from a dormant plan. The
+  export-watchdog sim was re-pointed at the preset path via the manual
+  trigger (house_priority no longer has one) and reproduces yesterday's
+  results exactly (6.17 Wh, ends at apply-lag floor, no oscillation).
+- Live note: production was running strategy `anker_app` at the time — no
+  behavior change until the user picks House priority there again.

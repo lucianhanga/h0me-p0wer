@@ -11,12 +11,12 @@ const STRATEGIES = [
   {
     key: "house_priority",
     label: "House priority",
-    desc: "The battery continuously tops up the house, leaving only a small grid target — down to the discharge floor plus a safety margin. This is the default, always-on mode.",
+    desc: "The device runs Anker's native Self-Consumption Mode: it follows the smart meter locally and covers house demand from PV + battery first — sub-second, zero export, exactly like the Anker app. h0me-p0wer only switches the mode on and monitors; the SOC limits from the Anker app apply. This is the default mode.",
   },
   {
     key: "battery_priority",
     label: "Battery priority",
-    desc: "PV charges the battery first; the house draws from the grid meanwhile. Once the battery is full (or PV stops), any PV passes straight through to the house — the battery is never discharged under this strategy.",
+    desc: "PV charges the battery first; the house draws from the grid meanwhile. Once the battery is full, PV alone is ramped toward the house's demand (leaving a small grid margin) — the battery is never discharged under this strategy, so a full battery stays full.",
   },
   {
     key: "anker_app",
@@ -26,7 +26,7 @@ const STRATEGIES = [
 ];
 const TRIGGER_DESC = {
   house_priority:
-    "Automatically applies House priority's behavior above — the battery keeps topping up the house.",
+    "Automatically applies House priority's behavior above — the device's native self-consumption mode.",
   battery_priority:
     "Automatically applies Battery priority's behavior above — the battery only ever charges, never discharges.",
 };
@@ -45,19 +45,23 @@ function StrategyHelp({ onClose }) {
         </button>
         <h4 style={{ marginTop: 0 }}>Distribution strategies</h4>
         <p>
-          <strong>House priority</strong> — the battery continuously tops up the house from
-          stored energy, leaving only a small grid target. It draws down toward its floor as
-          normal, ongoing behavior. This is the default, always-on mode.
+          <strong>House priority</strong> — the device runs Anker's native Self-Consumption Mode:
+          it follows the smart meter locally and covers house demand from PV + battery first,
+          sub-second, with zero export — exactly like the Anker app. h0me-p0wer only switches the
+          mode on and monitors; the SOC limits configured in the Anker app apply (the 25 W grid
+          target and floor margin are only used by the preset-based modes below). This is the
+          default mode.
         </p>
         <p className="muted">
-          Use it for everyday operation: minimize grid import continuously, regardless of how
-          sunny it is.
+          Use it for everyday operation: minimize grid import continuously, with the fastest
+          possible reaction — the device itself regulates, not the cloud.
         </p>
         <p>
           <strong>Battery priority</strong> — while the battery isn't full, PV is deliberately
           withheld from the house so it charges the battery instead; house demand is covered from
-          the grid meanwhile. Once the battery is full (or there's no PV), it passes straight
-          through to the house — the battery itself is never discharged under this strategy.
+          the grid meanwhile. Once the battery is full, PV alone is ramped toward the house's
+          demand (leaving a small grid margin) — the battery itself is never discharged under this
+          strategy, so a full battery stays full.
         </p>
         <p className="muted">
           Use it to prioritize a full battery — e.g. ahead of expected grid outages, or to bank
@@ -135,6 +139,10 @@ export default function StrategyTab() {
 
   const d = state.lastDecision;
   const isAnkerApp = state.strategy === "anker_app";
+  // Native self-consumption: house_priority + auto — the decision came from
+  // the native path (no preset writes), so the target/preset cards don't
+  // apply; show the same live-numbers card as Anker app mode instead.
+  const isNative = !isAnkerApp && d?.nativeMode === true;
   const isManual = !isAnkerApp && state.trigger === "manual";
   const activeStrategy = STRATEGIES.find((s) => s.key === state.strategy);
 
@@ -241,25 +249,30 @@ export default function StrategyTab() {
           </div>
           <p className="muted">
             {state.manualDischarge
-              ? "Battery continuously tops up the house (same behavior as House priority), until you switch this off."
+              ? `Battery continuously tops up the house via preset control, leaving ~${state.gridTargetW ?? 25} W from the grid, until you switch this off.`
               : "Battery never discharges (same behavior as Battery priority once full) — PV passes through to the house, the rest comes from the grid."}
           </p>
         </>
       )}
 
-      {d && isAnkerApp && (
+      {d && (isAnkerApp || isNative) && (
         <div className="cards">
           <div className="card">
-            <div className="card-label">Live numbers (not being written)</div>
+            <div className="card-label">
+              {isAnkerApp ? "Live numbers (not being written)" : "Native self-consumption active"}
+            </div>
             <div className="card-value" style={{ fontSize: "1rem" }}>
               PV {d.pvW} W · house {d.demandW} W · SOC {d.soc}%
             </div>
-            <div className="card-label">{d.reason}</div>
+            <div className="card-label">
+              {d.wrote ? `mode written (${d.reason})` : d.reason}
+              {state.lastWriteAt ? ` · last write ${new Date(state.lastWriteAt).toLocaleTimeString()}` : ""}
+            </div>
           </div>
         </div>
       )}
 
-      {d && !isAnkerApp && (
+      {d && !isAnkerApp && !isNative && (
         <div className="cards">
           <div className="card">
             <div className="card-label">Target output</div>
@@ -293,7 +306,17 @@ export default function StrategyTab() {
         </div>
       )}
 
-      <BatteryTab dischargeTolerancePct={state.dischargeTolerancePct} />
+      {/* In native self-consumption (house_priority + auto) the device
+          enforces its own Anker-app discharge cutoff with no app-side
+          margin — the gauge's floor marker must show that, not the
+          preset-path margin that only battery_priority / manual use. */}
+      <BatteryTab
+        dischargeTolerancePct={
+          state.strategy === "house_priority" && state.trigger === "auto"
+            ? 0
+            : state.dischargeTolerancePct
+        }
+      />
     </div>
   );
 }
