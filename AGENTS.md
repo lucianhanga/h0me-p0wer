@@ -151,12 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.46, `main`, working tree clean, nothing pending.**
-Latest: grid display smoothing — raw 1 s meter samples jitter ±20-25 W
-and flip sign constantly near zero (inverter feeds L1, loads on L3), so
-/api/live + /api/flow + WS pushes now show a 5 s rolling mean, matching
-the Anker app's smoothed presentation. Raw 1 s series untouched in DB,
-stats, and the export watchdog. See the last log entry.
+**As of 2026-09-22, v1.5.47, `main`, working tree clean, nothing pending.**
+Latest: power_cutoff parsing fixed — the discharge floor now comes from
+the SELECTED profile (what the Anker app shows/sets), not the new
+SOC-limit system's top-level field that a September firmware update added
+at 5% (this was the real cause of the "battery at 5%" morning, NOT an
+account change — see the corrected entry below). Config cache TTL 6h→1h.
+Before that: grid display smoothing. See the last log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3446,3 +3447,36 @@ of the log below) in one line each:
 - Verified with the real observed flicker sequence (raw −23…+19 W):
   smoothed output settles to a stable −3…−6 W — the steady ~−5 W the
   Anker app was showing at the same moment.
+
+## power_cutoff parsing: selected profile is the user's cutoff (2026-09-22, user report)
+
+- User: "I changed the battery's discharge SOC to 10% in the Anker app,
+  but our app didn't update." Two compounding causes found:
+  1. **Parser bug (root cause, and the REAL explanation for this
+     morning's 5% battery)**: `applyLimits()` read the top-level
+     `discharge_lower_limit` — a field introduced by a 2026-09 firmware
+     update as part of the NEW SOC-limit system (`cmd_type: 1`, sitting at
+     its 5% default unless that system is explicitly used). The
+     user-visible cutoff the Anker app displays/sets lives in the
+     SELECTED `power_cutoff_data` profile's `output_cutoff_data` — 10% on
+     this account all along (verified in the raw payload: id 1 selected
+     at 10, top-level at 5). The community client's `get_power_cutoff`
+     derives `power_cutoff` from the selected profile exactly this way.
+     So the account floor never "changed 10→5" as concluded this morning —
+     OUR parser broke when the firmware update added the new field. (The
+     overnight physics is ambiguous between the two readings — either
+     reading ends with standby drain reaching 5% — but the app-visible
+     setting was 10% throughout.)
+  2. **Staleness**: config cache TTL was 6 h, so even legitimate app-side
+     changes took hours to appear. Lowered to 1 h (3 calls/refresh,
+     24×/day — trivially inside rate budget); the Battery tab's ↻ button
+     (`?refresh=1`) still bypasses the cache for immediate pickup.
+- Fix (`battery-params.js`): the power_cutoff branch now sets
+  `dischargeLowerLimitPct` from the SELECTED profile first (top-level
+  field only fills in when no profile is selected — i.e. never on this
+  hardware). Verified against the exact production payload: returns 10
+  (was 5), follows a simulated profile-selection change to 5.
+- Follow-up for tomorrow: tonight's discharge behavior will show which
+  value the DEVICE actually enforces (10% profile vs 5% new-system field)
+  — with the corrected floor of 10+3=13% our controller stops at 13%
+  either way, which matches the user's intent.
