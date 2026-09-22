@@ -109,26 +109,6 @@ function robustCap(values) {
   return isOutlier ? { cap, rawMax } : null;
 }
 
-// "Home" is the only series that SUMS two independently-polled feeds: the
-// fast local grid meter (~5 s) and the battery's own reported output, which
-// can lag the real power flow by up to ~1 min (device + cloud relay — see
-// power-plan.js's STEP_UP_HOLD_MS comment). A fast preset/strategy change
-// shows up in the grid meter before the battery's OWN telemetry catches up,
-// producing a momentary dip-then-bump that isn't a real consumption change
-// (2026-09-17, user report — see AGENTS.md). A light 1-2-1 weighted moving
-// average smooths that seam without blurring genuinely fast GRID transients
-// (still shown raw via the separate Grid range envelope, untouched here) or
-// the single-source battery/PV series (no cross-feed lag to smooth there).
-function smoothHome(values) {
-  return values.map((v, i) => {
-    if (v == null) return v;
-    const prev = values[i - 1];
-    const next = values[i + 1];
-    if (prev == null || next == null) return v;
-    return Math.round(((prev + v * 2 + next) / 4) * 100) / 100;
-  });
-}
-
 function rowValue(key, r, envelopeOn) {
   switch (key) {
     case "pvHome":
@@ -291,7 +271,16 @@ export default function GraphTab() {
       function applyRows(rows) {
         // Resolution-aware envelope: collapse to the mean above 5-min buckets.
         const envelopeOn = rowsRef.bucketMs <= 5 * 60 * 1000;
-        const homeSmoothed = smoothHome(rows.map((r) => rowValue("home", r, envelopeOn)));
+        // Home is the RAW sum grid + batteryOut (2026-09-22, user report:
+        // "house consumption is not consistent with the grid spikes").
+        // smoothHome()'s 1-2-1 average (added 2026-09-17 for the ~1 min
+        // cross-feed lag of that era) was dampening REAL appliance spikes
+        // by 15-25% now that grid samples at 1 s and battery telemetry
+        // arrives every 3 s while watching — the cross-feed artifact it
+        // was built to hide is down to 1-2 buckets, far smaller than the
+        // real transients it was eating. Exact sum = consistent by
+        // construction.
+        const homeSeries = rows.map((r) => rowValue("home", r, envelopeOn));
 
         // Robust axis scaling (see robustCap()) — per-graph "envelope": the
         // one series whose height actually determines how tall the chart
@@ -299,7 +288,7 @@ export default function GraphTab() {
         // negative (charge) sides are capped independently.
         const posCap =
           gi === 0
-            ? robustCap(homeSmoothed)
+            ? robustCap(homeSeries)
             : gi === 1
               ? robustCap(rows.map((r) => r.pv))
               : robustCap(rows.map((r) => battCellsOf(r)));
@@ -326,7 +315,7 @@ export default function GraphTab() {
             name: s.name,
             data:
               s.key === "home"
-                ? rows.map((r, i) => [r.t, homeSmoothed[i]])
+                ? rows.map((r, i) => [r.t, homeSeries[i]])
                 : rows.map((r) => [r.t, rowValue(s.key, r, envelopeOn)]),
           })),
         });

@@ -151,13 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.51, `main`, working tree clean, nothing pending.**
-Latest: remaining review backlog cleared — gridTracking dead compute
-removed (1 s-cadence raw-row loads), REST fast path skips when MQTT is
-fresh, TodayMiniChart series memoized, WAL + batched upserts, .dockerignore
-hardened, engines >= 22.13, auth warning in README, CI now smoke-tests the
-Docker runtime layout, README de-staled. Review findings are now fully
-closed out; see the last log entries.
+**As of 2026-09-22, v1.5.52, `main`, working tree clean, nothing pending.**
+Latest: the Home line on the Graph tab is the exact raw sum grid +
+batteryOut again — smoothHome() (added 2026-09-17 for the ~1 min
+cross-feed lag of that era) was damping real appliance spikes 15-25%
+next to the raw grid series, now that grid samples at 1 s and battery
+telemetry arrives every 3 s while watching. See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3656,3 +3655,25 @@ of the log below) in one line each:
 - Verified: node --check all server files, vite build, all sims, full
   smoke incl. WAL pragma confirmed on the fresh DB and gridTracking
   absent from the overview response.
+
+## Home line = exact raw sum, smoothHome removed (2026-09-22, user report)
+
+- User after the kettle-spike analysis: "the house consumption is not
+  consistent with the spikes which represent power drawn from the grid —
+  there should be some consistency." Quantified on the exact window:
+  smoothHome()'s 1-2-1 moving average (added 2026-09-17 for the
+  dip-then-bump cross-feed artifact of the ~1-min-lag battery-telemetry
+  era) rendered Home as 1020/1693/1477 W where the real grid draw was
+  1378/1892/1877 W, and 396/446/526 for the 510/567/672 W pulses — a
+  15-25% under-read of every real spike, while the Grid series next to
+  it stayed raw. The artifact smoothHome was built to hide (battery
+  telemetry lagging the meter ~1 min) has shrunk to 1-2 buckets since
+  the 1 s meter poll + 3 s scen_info fast path — far smaller than the
+  real transients it was eating.
+- Fix (GraphTab.jsx): smoothHome() deleted; the Home series is the raw
+  `grid + max(battOut, 0)` sum — consistent with Grid by construction
+  (identical when the battery is idle). robustCap() for the Home chart
+  now runs on the raw series too (unchanged mechanics). Verified
+  numerically against the production 5 s window (Home ≡ grid row-for-row
+  at battOut=0); the dev-server screenshot path was unusable for visual
+  verification (nearly-empty dev DB → interpolation artifacts, unrelated).
