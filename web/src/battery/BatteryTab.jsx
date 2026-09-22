@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
+import { useLiveStream } from "../useLiveStream.js";
 
 // Rendered inside StrategyTab.jsx (moved out of its own top-level tab
 // 2026-09-16) — the gauge stays visible, the detailed param cards below
@@ -262,6 +263,47 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
 // needs no changes at all, just more items in the array.
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
+
+  // Live push (2026-09-22, user request: status as fast as the Anker app):
+  // the gauge's live fields (SOC, charge/discharge watts, PV) merge straight
+  // from the shared WS channel the moment the server pushes (meter 2 s,
+  // battery MQTT 3-5 s) instead of waiting for the 10 s poll above — the
+  // poll stays for the slow-moving parts (config/features/constants).
+  const streamMsg = useLiveStream();
+  useEffect(() => {
+    const b = streamMsg?.flow?.battery;
+    if (!b) return;
+    setData((prev) => {
+      if (!prev) return prev;
+      const mergeLive = (entry) => {
+        if (!entry?.live) return entry;
+        const cap = entry.constants?.capacityKwh;
+        return {
+          ...entry,
+          live: {
+            ...entry.live,
+            soc: b.soc ?? entry.live.soc,
+            outputW: b.discharge ?? entry.live.outputW,
+            chargeW: b.charge ?? entry.live.chargeW,
+            pvW: streamMsg.flow.pv?.production ?? entry.live.pvW,
+            pv1W: b.pv1W ?? entry.live.pv1W,
+            pv2W: b.pv2W ?? entry.live.pv2W,
+            cellsW: b.cells ?? entry.live.cellsW,
+            gridToBatteryW: b.gridCharge ?? entry.live.gridToBatteryW,
+            ts: b.ts ?? entry.live.ts,
+            // storedKwh derives from soc — recompute against the pushed soc
+            // so the gauge's "X kWh of 1.6 kWh" can't disagree with the %.
+            storedKwh:
+              b.soc != null && cap != null
+                ? Math.round(((b.soc / 100) * cap) * 100) / 100
+                : entry.live.storedKwh,
+          },
+        };
+      };
+      if (Array.isArray(prev.batteries)) return { ...prev, batteries: prev.batteries.map(mergeLive) };
+      return mergeLive(prev);
+    });
+  }, [streamMsg, setData]);
 
   // Force a live refetch of the (server-side, 6h-cached) device config —
   // a different URL from the poll above, so it stays a one-off fetch

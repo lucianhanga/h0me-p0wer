@@ -151,11 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.40, `main`, working tree clean, nothing pending.**
-Latest: Live-tab grid display gets a ±20 W deadband ("balanced") — the
-meter's small zero-export regulation flicker (median −9 W, 24% of sunny
-buckets) no longer shows as constant "exporting" next to the Anker app's
-smoothed 0 W. Raw values untouched everywhere else. See the last log entry.
+**As of 2026-09-22, v1.5.41, `main`, working tree clean, nothing pending.**
+Latest: the Strategy tab's battery gauge is now live-pushed too — the WS
+channel became a shared `useLiveStream` hook (one socket, fanned out) used
+by LiveTab and BatteryTab. Before that: ±20 W grid display deadband, meter
+poll 5→2 s, WS live push, native self-consumption house_priority — see the
+last log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3291,3 +3292,27 @@ of the log below) in one line each:
 - Verified in a browser on the dev stack: with the meter flickering
   around zero at the time, the tile read "Grid balanced · 0 W" and the
   diagram showed Grid 0 W — the Anker-style presentation.
+
+## Shared useLiveStream hook + Strategy-tab battery gauge goes live (2026-09-22, user request)
+
+- User: "does the backend pull the values live? can we have them fast in
+  the UI too?" Verified production first: pushes were already arriving at
+  2.05 s (the 2 s meter poll, confirming that deploy) — the Live tab was
+  fast; what still polled at 10 s was the OTHER current-status surface,
+  the Strategy tab's battery gauge (`/api/battery/params`).
+- New `web/src/useLiveStream.js`: shared singleton WS subscription — one
+  connection fanned out to N subscribers (LiveTab + BatteryTab never open
+  two sockets), lazy connect on first subscriber, disconnect when the
+  last unmounts (the server skips building payloads with zero clients),
+  2 s→30 s reconnect backoff. LiveTab's inline WS code was replaced by
+  the hook (behavior unchanged: initial REST fetch + 30 s safety poll).
+- `BatteryTab.jsx`: merges each pushed `flow.battery` into its polled
+  `{live, config, features, constants}` state (soc/outputW/chargeW/pvW/
+  pv1W/pv2W/cellsW/gridToBatteryW/ts; `storedKwh` recomputed from the
+  pushed soc so the kWh subtitle can't disagree with the %). The 10 s
+  REST poll stays for the slow-moving config/features/constants. The
+  gauge, ETA, and the "updated" stamp now move at push cadence (2-5 s).
+- Verified: dev-stack WS client logged pushes with live battery values
+  while a headless-Chrome screenshot of the Strategy tab showed the gauge
+  mid-charge (30 %, charging 394 W, ETA, fresh stamp) matching the
+  pushed payload exactly.
