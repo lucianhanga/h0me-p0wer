@@ -151,14 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.49, `main`, working tree clean, nothing pending.**
-Latest: full four-area code review (backend infra, power-plan controller,
-frontend, cross-cutting) — found and fixed the same evening: CRITICAL
-night-discharge under battery_priority (probe fired with pvW==0), probe
-correction delayed by the settling guard, tick() re-entry, stripped phase
-current/voltage in the smoothed live state, Dashboard error wedge, and
-the one-shot reload latch. Findings backlog documented in the last log
-entry.
+**As of 2026-09-22, v1.5.50, `main`, working tree clean, nothing pending.**
+Latest: review backlog items 1-4 done — async route handlers wrapped
+(Express 4 crash class), Anker fetch timeouts + scen_info in-flight
+guard, backfill hourly re-arm after rate-limit breaks, native-switch
+exponential backoff, disable() persists the nulled belief. Remaining
+backlog in the review log entry below.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3581,3 +3579,34 @@ of the log below) in one line each:
   shared REST↔WS); envelope standardization actually landed; Docker
   hygiene (non-root, secrets excluded, no registry); comments that
   explain WHY with incident dates.
+
+## Review backlog items 1-4 (2026-09-22, same-day follow-up to the critical cluster)
+
+- **Async route handlers wrapped**: /api/flow (index.js) and
+  /api/battery/params (battery-params.js) were the last two async Express
+  4 handlers without try/catch — a rejection there (e.g. a DB error) was
+  an unhandled rejection = process crash. Both now return
+  {ok:false,error} 500 like cloudRoute().
+- **Anker fetch timeouts + in-flight guard**: login() and post() in
+  anker-cloud.js had NO timeout (undici default parks hung connections
+  for minutes) — AbortSignal.timeout(30 s) on both. And
+  syncBatteryThrottled stamped its timestamp before awaiting, so one
+  slow/hung scen_info call let the 10 s baseline AND the 1 s fast loop
+  stack overlapping calls onto the rate-limited endpoint (amplification
+  exactly when Anker is slow) — syncBatteryInFlight guard (syncBattery
+  renamed syncBatteryInner, wrapper guards).
+- **Backfill re-arm**: all three catch-up loops broke on failure with
+  "leave rest for the next round" — but ran once per process, so a
+  rate-limit trip left older days missing until the next restart. Both
+  loops now re-arm an hourly retry on incomplete backfill (self-
+  throttled at 6 s/call, stops once complete).
+- **Native-mode switch backoff**: an unconfirmed mode-1 write used to
+  re-write every ~30 s forever (≈6 reads + 2 writes/min on a rate-limited
+  endpoint). Now exponential backoff 30 s → 15 min cap with attempt
+  counting (nativeSwitchAttempts/nextNativeSwitchAt), reason strings
+  show retries, lastError after 10 failed attempts. disable() also
+  persists state AGAIN after nulling lastWrittenPower (the only
+  saveState() used to run before the null — stale belief on disk).
+- Verified: syntax checks, all three sims (native transitions, export
+  watchdog, mode-1 incident), full build + smoke (live/index/overview/
+  flow/battery-params).

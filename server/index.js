@@ -411,7 +411,16 @@ async function computeFlowPayload() {
 }
 
 app.get("/api/flow", async (req, res) => {
-  res.json({ ok: true, data: await computeFlowPayload() });
+  // try/catch REQUIRED on every async Express 4 handler (2026-09-22 code
+  // review): Express 4 doesn't forward rejected handler promises to its
+  // error middleware — a rejection here (e.g. a DB error inside
+  // computeFlowPayload) would be an UNHANDLED rejection and crash the
+  // process. cloudRoute() already wraps; this handler was the outlier.
+  try {
+    res.json({ ok: true, data: await computeFlowPayload() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: String(err.message ?? err) });
+  }
 });
 
 // Persisted live samples for chart backfill: /api/history?minutes=60
@@ -1005,6 +1014,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function catchUpCloudHistory() {
   const sn = poller.snapshot?.meter?.sn;
   if (!sn || !anker.configured) return;
+  let completed = true;
 
   const stored = getStoredPeriodStarts(sn, "day");
   const missing = [];
@@ -1029,10 +1039,21 @@ async function catchUpCloudHistory() {
         saveCloudTrend(sn, "day", start, data?.data_trend ?? []);
       } catch (err) {
         console.warn(`[cloud-sync] backfill day ${start} failed: ${err.message}`);
-        break; // rate-limited or login issue — leave rest for the next round
+        completed = false;
+        break; // rate-limited or login issue — retry later (below)
       }
       await sleep(6000);
     }
+  }
+
+  // Re-arm on incomplete backfill (2026-09-22 code review): the loop used
+  // to break with "leave rest for the next round" — but no next round
+  // existed until the next restart, so a rate-limit trip left older days
+  // permanently missing.
+  if (!completed) {
+    console.log("[cloud-sync] backfill incomplete — retrying in 1 h");
+    setTimeout(() => catchUpCloudHistory(), 3600 * 1000).unref();
+    return;
   }
 
   await syncCloudHistory();
@@ -1065,6 +1086,7 @@ async function catchUpBatteryPvHistory() {
   if (!missing.length) return;
 
   console.log(`[cloud-sync] backfilling ${missing.length} day(s) of battery/PV history…`);
+  let completed = true;
   for (const start of missing) {
     try {
       const battData = await anker.getEnergyAnalysis({
@@ -1084,7 +1106,8 @@ async function catchUpBatteryPvHistory() {
       saveCloudTrend(latestBattery.sn, "day", start, battRows);
     } catch (err) {
       console.warn(`[cloud-sync] battery backfill day ${start} failed: ${err.message}`);
-      break; // rate-limited or login issue — leave rest for the next round
+      completed = false;
+      break; // rate-limited or login issue — retry later (below)
     }
     await sleep(6000);
 
@@ -1101,9 +1124,17 @@ async function catchUpBatteryPvHistory() {
       saveCloudPvTrend("day", start, pvRows);
     } catch (err) {
       console.warn(`[cloud-sync] PV backfill day ${start} failed: ${err.message}`);
+      completed = false;
       break;
     }
     await sleep(6000);
+  }
+  // Same re-arm as the meter backfill (2026-09-22 code review — the
+  // "next round" the break comment promised never existed until restart).
+  if (!completed) {
+    console.log("[cloud-sync] battery/PV backfill incomplete — retrying in 1 h");
+    setTimeout(() => catchUpBatteryPvHistory(), 3600 * 1000).unref();
+    return;
   }
   console.log("[cloud-sync] battery/PV history is up to date");
 }
@@ -1244,8 +1275,24 @@ function startBatteryMqtt() {
   batteryMqtt.start(); // never rejects — retries internally with backoff
 }
 
+let syncBatteryInFlight = false;
 async function syncBattery() {
   if (!anker.configured) return;
+  // In-flight guard (2026-09-22 code review): syncBatteryThrottled stamps
+  // its timestamp BEFORE awaiting, so one hung/slow scen_info call used to
+  // let both the 10 s baseline and the 1 s fast-path loop stack MORE
+  // overlapping calls onto the same rate-limited endpoint — exactly when
+  // Anker is already slow. Never stack.
+  if (syncBatteryInFlight) return;
+  syncBatteryInFlight = true;
+  try {
+    await syncBatteryInner();
+  } finally {
+    syncBatteryInFlight = false;
+  }
+}
+
+async function syncBatteryInner() {
   try {
     const info = await anker.getBatteryInfo();
     if (info) {

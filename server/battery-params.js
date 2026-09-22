@@ -230,55 +230,63 @@ export async function getBatteryLimits(anker, getLiveBattery) {
 
 export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
   app.get("/api/battery/params", async (req, res) => {
-    const b = getLiveBattery() ?? null;
-    const flow = b ? deriveBatteryFlow(b) : null;
-    const live = b
-      ? {
-          ts: b.ts ?? null,
-          name: b.name ?? "Solarbank",
-          sn: b.sn ?? null,
-          soc: b.soc ?? null,
-          outputW: b.outputW ?? 0,
-          chargeW: b.chargeW ?? 0,
-          // Actual battery discharge power — use this, not outputW, to
-          // decide "is the battery discharging" (see deriveBatteryFlow).
-          cellsW: flow.cellsW,
-          pvW: b.pvW ?? 0,
-          pv1W: b.pv1W ?? 0,
-          pv2W: b.pv2W ?? 0,
-          temperatureC: b.temperatureC ?? null,
-          toHomeW: b.toHomeW ?? null,
-          gridToHomeW: b.gridToHomeW ?? null,
-          pvToGridW: b.pvToGridW ?? null,
-          homeLoadW: b.homeLoadW ?? null,
-          heatingPower: b.heatingPower ?? null,
-          chargingStatus: b.chargingStatus ?? null,
-          errCode: b.errCode ?? null,
-          // Charging beyond what PV covers = grid-sourced (usually 0).
-          gridToBatteryW: flow.gridChargeW,
-          storedKwh: b.soc != null ? Math.round(((b.soc / 100) * CONSTANTS.capacityKwh) * 100) / 100 : null,
-        }
-      : null;
+    // try/catch REQUIRED on every async Express 4 handler (2026-09-22 code
+    // review): Express 4 doesn't forward rejected handler promises to its
+    // error middleware — a rejection here (e.g. from the config fetch)
+    // would be an UNHANDLED rejection and crash the process.
+    try {
+      const b = getLiveBattery() ?? null;
+      const flow = b ? deriveBatteryFlow(b) : null;
+      const live = b
+        ? {
+            ts: b.ts ?? null,
+            name: b.name ?? "Solarbank",
+            sn: b.sn ?? null,
+            soc: b.soc ?? null,
+            outputW: b.outputW ?? 0,
+            chargeW: b.chargeW ?? 0,
+            // Actual battery discharge power — use this, not outputW, to
+            // decide "is the battery discharging" (see deriveBatteryFlow).
+            cellsW: flow.cellsW,
+            pvW: b.pvW ?? 0,
+            pv1W: b.pv1W ?? 0,
+            pv2W: b.pv2W ?? 0,
+            temperatureC: b.temperatureC ?? null,
+            toHomeW: b.toHomeW ?? null,
+            gridToHomeW: b.gridToHomeW ?? null,
+            pvToGridW: b.pvToGridW ?? null,
+            homeLoadW: b.homeLoadW ?? null,
+            heatingPower: b.heatingPower ?? null,
+            chargingStatus: b.chargingStatus ?? null,
+            errCode: b.errCode ?? null,
+            // Charging beyond what PV covers = grid-sourced (usually 0).
+            gridToBatteryW: flow.gridChargeW,
+            storedKwh: b.soc != null ? Math.round(((b.soc / 100) * CONSTANTS.capacityKwh) * 100) / 100 : null,
+          }
+        : null;
 
-    const config = await resolveBatteryConfig(anker, getLiveBattery, {
-      forceRefresh: req.query.refresh === "1",
-    });
+      const config = await resolveBatteryConfig(anker, getLiveBattery, {
+        forceRefresh: req.query.refresh === "1",
+      });
 
-    const fs = b?.featureSwitch ?? null;
-    res.json({
-      ok: true,
-      data: {
-        live,
-        config,
-        features: {
-          raw: fs,
-          zeroExport: fs?.["0w_feed"] ?? null,
-          socEnable: fs?.soc_enable ?? null,
-          multiPv: fs?.multi_pv ?? null,
-          heating: fs?.heating ?? null,
+      const fs = b?.featureSwitch ?? null;
+      res.json({
+        ok: true,
+        data: {
+          live,
+          config,
+          features: {
+            raw: fs,
+            zeroExport: fs?.["0w_feed"] ?? null,
+            socEnable: fs?.soc_enable ?? null,
+            multiPv: fs?.multi_pv ?? null,
+            heating: fs?.heating ?? null,
+          },
+          constants: CONSTANTS,
         },
-        constants: CONSTANTS,
-      },
-    });
+      });
+    } catch (err) {
+      res.status(500).json({ ok: false, error: String(err.message ?? err) });
+    }
   });
 }
