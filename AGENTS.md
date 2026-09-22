@@ -151,54 +151,79 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.54, `main`, working tree clean, nothing pending.**
-Latest: Welcome "How today will end" savings is production-based again
-(€0.00-under-battery_priority bug — toHouseKwh=0 hid 4.28 kWh of real
-savings), "house" label clarified to "PV to house", and the Graph's Grid
-range envelope now only renders at ≤30 s buckets (1h/6h) — the brown
-min/max band no longer dominates 12h/24h. See the last log entries.
-Previously: the Home line on the Graph tab is the exact raw sum grid +
-batteryOut again — smoothHome() (added 2026-09-17 for the ~1 min
-cross-feed lag of that era) was damping real appliance spikes 15-25%
-next to the raw grid series, now that grid samples at 1 s and battery
-telemetry arrives every 3 s while watching. See the last log entry.
-Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
-margin (a mostly-0 W window with a legit 100-200 W value was being capped
-to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
-battery at 5% is the ACCOUNT's discharge lower limit having changed
-10%→5% (Anker-app side; our app has no write path for it) plus overnight
-standby draw — controller behaved correctly (stopped at floor+3%=8%,
-zero output all night).
-Previously: grid target lowered 100→25 W. A Dashboard "Lag losses" tile built
-on the new `/api/stats/overview` `gridTracking` block was REMOVED again
-the same evening at the user's request ("this is wrong — get rid of the
-new tile, leave it like this for now") — the backend `gridTracking`
-payload still ships in the overview response, unused, as the measurement
-foundation whenever the idea is revisited. See the last log entries.
-Last session's work (PRs #166-177, all merged, chronologically the tail end
-of the log below) in one line each:
-- Graph tab: y-axis no longer floors above zero at high zoom (#166/167),
-  round tick labels + fewer gridlines, each graph's span (1h/6h/.../30d)
-  now persists across tab switches (#168), a `from=NaN` live-tick loop
-  fixed, and a rare spike no longer flattens the normal range — robust
-  (p98) axis cap + an "off-scale" note (#175).
-- `/api/timeseries` PV now has real history past the 48h local-sample
-  window: first a `pv_daily` flat-average fallback (#171), then upgraded
-  to the actual cloud 20-min production curve already being collected but
-  unused (`cloud_pv_history`, #172) — see "PV history beyond 48h" below.
-- ROI BOM: real product photos (the eBay bundle's was a broken scrape),
-  fixed a `Cache-Control: immutable` bug that made a photo fix invisible
-  (#169), added two planned three-phase electrical-protection entries
-  (#170).
-- `house_priority` discharge-floor hysteresis + PV-passthrough-at-floor fix
-  (#174) — caught via a code walkthrough with the user BEFORE it caused a
-  real yoyo, mirroring the already-fixed `battery_priority` ceiling bug.
-- Battery UI: multi-battery-ready vertical card stack (#176), then actual
-  visual beautification — hero-sized SOC percentage, meter tinted
-  end-to-end by charge level (#177), applying the loaded `dataviz` skill's
-  own specs.
+**As of 2026-09-22 (end of day), v1.5.54, `main`, working tree clean,
+nothing pending. Saved-state checkpoint for the next session.**
+
+**Deployment status (check first):** last verified deployed on production
+(192.168.1.10:3001) was **v1.5.51**. v1.5.52–v1.5.54 (Home-line raw-sum
+consistency, gitignore WAL, Welcome endOfDay savings basis, graph
+envelope threshold) are merged but need a deploy:
+`git pull --ff-only && docker compose up -d --build` (user's own step —
+never deploy from here).
+
+**This session (Kimi, PRs #178–#200, all merged) in one line each:**
+- Power plan: grid target 100→25 W (#178); house_priority became the
+  device's NATIVE self-consumption mode (schedule mode_type=1) instead of
+  our preset loop (#183); export watchdog + settling guards for the
+  preset path (#182); battery_priority unchanged (never discharges).
+- Live UX moved to WebSocket push {type:"live", meter, flow} (#184),
+  meter poll 5 s→2 s→1 s (#185/#190), scen_info 3 s fast path while a
+  frontend watches (#191), shared useLiveStream hook also feeding the
+  Strategy-tab battery gauge (#187), stale tabs self-reload on version
+  change (#188) — which caused the **v1.5.42 Docker boot crash** (root
+  package.json missing in the runtime stage; HOTFIX #189: guarded read +
+  Dockerfile copies it; CI now smoke-tests the runtime layout, #197).
+- Grid display: ±20 W deadband ("balanced", #186), then 5 s rolling-mean
+  smoothing on the display path only (#192) — the meter's net value
+  jitters ±20-25 W and flips sign constantly at near-zero flow because
+  the single-phase inverter feeds L1 while loads sit on L3.
+- **The "battery at 5%" saga**: first believed an account change 10→5 %
+  (#193 corrected it: a September firmware update added a top-level
+  `discharge_lower_limit=5` field our parser preferred over the user's
+  selected profile, which was 10% all along — floor now read from the
+  SELECTED power_cutoff_data profile; config cache 6 h→1 h).
+- **Self-consumption incident (#194)**: device stayed in mode 1
+  discharging 521 W at 7% SOC under battery_priority because
+  cur==target==0 meant "within deadband" — preset path now re-reads the
+  schedule every 5 min and VOIDS lastWrittenPower when the device is in
+  mode 1.
+- **Four-area code review (#195/#196/#197)**: CRITICAL night-discharge
+  (battery_priority's probe fired with pvW==0 — pulsed 150 W drain all
+  night), probe correction exemption, tick re-entry guard, async-handler
+  crash guards, Anker fetch timeouts + in-flight guard, backfill re-arm,
+  native-switch backoff, gridTracking dead compute removed, MQTT-fresh
+  gate, chart memoization, WAL, engines, auth warning, docs sweep.
+- Graph: outlier cap needs ratio AND absolute margin (#181); Home line
+  is the exact raw sum again — smoothHome removed (#198); Grid range
+  envelope only at ≤30 s buckets (#200).
+- Welcome endOfDay savings production-based (#200); "house" → "PV to
+  house" label.
+
+**Watch item for next session (2026-09-23):** battery sits at ~5% (hard
+floor). With the corrected 10% floor (13% effective) now live, watch
+tomorrow's discharge: does the device stop at ~13% (our floor working)
+or drain toward 10%/5% (device honoring its own lower cutoff — the
+selected-profile-vs-top-level-field question, still unresolved at the
+hardware level)? Check `/api/battery/params` live.soc through the day.
+
+**Anker MQTT is STALLED again** (2026-09-22, same broker behavior as
+2026-09-11: connack/suback fine, zero messages routed; `/api/health`
+batteryMqtt shows connected:true, fresh:false, lastDataAt:null). The 3 s
+REST fast path covers live data; MQTT should self-heal whenever Anker's
+side recovers — no action needed unless it persists for days.
 
 **Open / not done:**
+- Grid display vs. the Anker app, UNRESOLVED (2026-09-22): the user
+  reports their app shows a small, always-positive, constantly-changing
+  grid import while both of our data paths (local meter register AND
+  Anker's own cloud channel) measured a small net export (mean ≈ −4/−5 W)
+  oscillating ±20 W at the same moments. We display the smoothed meter
+  value now; the remaining difference is inside Anker's own display logic
+  (conditioning/bias/different physical meaning). Needs ONE screenshot
+  pair (Anker app grid value + our Live tab at the same moment) to pin
+  down; a pragmatic alternative already offered to the user: display the
+  Anker cloud channel's grid value for the live tile instead of the
+  meter's (meter stays for graphs/stats/watchdog).
 - `docs/phone-*.png` (referenced by README.md) are stale — still show
   v0.22.14 and a tab labeled "Battery" (renamed to "Strategy" long ago),
   predating essentially everything in this file. Automated capture failed
@@ -214,8 +239,11 @@ of the log below) in one line each:
   shown elsewhere, e.g. Live tab's phase cards).
 - No automated tests anywhere in the repo (no `*.test.js`, no test runner
   in either `package.json`) — verification this whole session was manual
-  dry-run scripts against copies of the real db, or live-in-browser checks
-  via the Chrome automation tools, never a checked-in test suite.
+  dry-run scripts against copies of the real db, the standalone simulation
+  harness pattern (fake Date.now + stateful mock anker + real
+  PowerPlanController — see the sims described in the log entries for the
+  export watchdog, native transitions, and the mode-1 incident), or
+  live-in-browser checks, never a checked-in test suite.
 
 **Standing facts, still true:**
 - Meter SN syncs from the live Modbus reading (not hardcoded). Cloud sync
