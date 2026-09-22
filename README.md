@@ -32,11 +32,11 @@ and its own PV-aware power plan that drives the battery's output preset.
 - **Strategy** — choose how the power plan prioritizes PV/battery/grid (see
   below), plus the battery gauge and every battery parameter (limits,
   backup reserve, zero-export switch, per-string PV, temperature, error
-  codes — collapsed behind a details toggle; device config cached 6 h to
+  codes — collapsed behind a details toggle; device config cached 1 h to
   respect Anker rate limits).
 - **Graph** — three focused charts (Home Power Usage / Power Production /
   Battery), each with its own span buttons (1h/6h/12h/24h/7d/30d), pan/zoom,
-  resolution that follows zoom (raw 5 s samples where local data exists,
+  resolution that follows zoom (raw 1 s samples where local data exists,
   cloud 20-min anchors + interpolation for the past), and live updates.
 - **Dashboard** — consumption by source for today/week/month/year: house
   total split into grid / PV-direct / from-battery (cells only — no double
@@ -52,47 +52,56 @@ and its own PV-aware power plan that drives the battery's output preset.
 
 ## Power Plan (the controller)
 
-The app can take over the battery's output preset (Anker weekly schedule,
-write path verified) instead of relying on the static app schedule. Pick a
-**strategy** and a **discharge trigger** on the Strategy tab:
+The app can steer the battery instead of relying on the static Anker-app
+schedule. Pick a **strategy** and a **discharge trigger** on the Strategy
+tab:
 
-- **House priority** (default) — the battery continuously tops up the house,
-  leaving a small grid margin (`GRID_TARGET_W`, default 100 W) instead of
-  covering demand exactly, down to the discharge floor + a safety margin
-  (`DISCHARGE_TOLERANCE_PCT`, default 4 points).
+- **House priority** (default) — the device runs Anker's **native
+  Self-Consumption Mode** (the same mode the Anker app offers): it follows
+  the smart meter locally, sub-second, zero export, covering the house from
+  PV + battery down to the discharge cutoff configured in the Anker app.
+  This app just switches the mode on and monitors.
 - **Battery priority** — PV charges the battery first; the house draws from
-  the grid meanwhile. Once full (or PV stops), PV passes straight through to
-  the house — the battery is never discharged under this strategy. Better
-  suited if you get frequent grid outages and want more energy in reserve
-  (though a bare Solarbank 2 Plus has no dedicated off-grid output of its
-  own without a Power Dock accessory — verify in the Anker app).
+  the grid meanwhile. Once the battery is full, PV alone is ramped toward
+  the house's demand (leaving a small `GRID_TARGET_W` margin, default
+  25 W) — the battery is never discharged under this strategy, so a full
+  battery stays full. Better suited if you get frequent grid outages and
+  want more energy in reserve.
+- **Anker app** — this app writes nothing at all; the device runs whatever
+  you configured in the Anker mobile app (including Anker's own AI mode),
+  while monitoring stays active.
 - **Discharge trigger**: `auto` (the strategy above decides) or `manual` — a
   persisted Discharge/Don't-discharge toggle that **overrides whichever
-  strategy is selected**, for testing or a deliberate manual call.
+  strategy is selected**, for testing or a deliberate manual call. Manual
+  discharge uses the preset path: cover demand minus `GRID_TARGET_W`, down
+  to the Anker-app floor + a safety margin (`DISCHARGE_TOLERANCE_PCT`,
+  default 3 points).
 
-Zero export by construction — the preset is never set above house demand
-(the device's own 0 W feed-in switch stays untouched as the fast safety
-net). Writes only on meaningful changes (≥50 W, ≥30 s apart, up-steps held
-3 min). Enable (Live tab) saves the existing Anker schedule; disable
-restores it byte-for-byte.
+In preset mode (Battery priority / manual), the app drives the battery's
+output preset via the Anker weekly schedule (write path verified): writes
+only on meaningful changes (≥50 W, ≥30 s apart, up-steps held 90 s), and
+an export watchdog cuts the preset the moment the meter sees real export.
+Enable (Live tab) saves the existing Anker schedule; disable restores it
+byte-for-byte.
 
 Per instance (state file next to the DB) — run it on exactly ONE server.
 
 ## Architecture
 
 ```
-                ┌─────────────┐   Modbus TCP :502 (5 s)   ┌──────────────┐
-                │   Browser   │ ◄── WebSocket / REST ──── │  Node backend│
-                │  (React +   │                           │  (Express)   │
+                ┌─────────────┐   Modbus TCP :502 (1 s)   ┌──────────────┐
+                │   Browser   │ ◄── WebSocket push / REST │  Node backend│
+                │  (React +   │     (1-3 s live updates)  │  (Express)   │
                 │   ECharts)  │                           │  SQLite DB   │
                 └─────────────┘                           └──────┬───────┘
-                              Anker EU cloud: REST (10 s battery sync,
+                              Anker EU cloud: REST (3-10 s battery sync,
                               15 min history) + MQTT telemetry push ▲
 ```
 
-Local 5 s Modbus samples (48 h retention) + cached cloud history + battery
+Local 1 s Modbus samples (48 h retention) + cached cloud history + battery
 snapshots in SQLite (`node:sqlite`, no native deps); background-first: the
-server always pulls, clients just read.
+server always pulls and pushes live values over WebSocket, clients just
+read.
 
 ## Setup
 
@@ -137,6 +146,14 @@ docker compose up -d --build
 
 The dashboard is then on `http://<server>:3001`. SQLite + the power-plan
 state live in the `h0me-p0wer-data` volume and survive updates.
+
+> ⚠️ **No authentication — trusted LAN only.** Every endpoint is open to
+> any device that can reach port 3001, and some of them have real
+> consequences: `POST /api/power-plan/*` writes to the physical battery
+> schedule, `/api/cloud/*` proxies your Anker account (and burns its rate
+> budget), the welcome/ROI refresh endpoints spend AI credits. Run this
+> only on a network you trust, and **never port-forward 3001** to the
+> internet.
 
 ### Operational notes
 

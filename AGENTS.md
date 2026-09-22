@@ -151,12 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.50, `main`, working tree clean, nothing pending.**
-Latest: review backlog items 1-4 done — async route handlers wrapped
-(Express 4 crash class), Anker fetch timeouts + scen_info in-flight
-guard, backfill hourly re-arm after rate-limit breaks, native-switch
-exponential backoff, disable() persists the nulled belief. Remaining
-backlog in the review log entry below.
+**As of 2026-09-22, v1.5.51, `main`, working tree clean, nothing pending.**
+Latest: remaining review backlog cleared — gridTracking dead compute
+removed (1 s-cadence raw-row loads), REST fast path skips when MQTT is
+fresh, TodayMiniChart series memoized, WAL + batched upserts, .dockerignore
+hardened, engines >= 22.13, auth warning in README, CI now smoke-tests the
+Docker runtime layout, README de-staled. Review findings are now fully
+closed out; see the last log entries.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3610,3 +3611,48 @@ of the log below) in one line each:
 - Verified: syntax checks, all three sims (native transitions, export
   watchdog, mode-1 incident), full build + smoke (live/index/overview/
   flow/battery-params).
+
+## Review backlog — remaining items cleared (2026-09-22, same day)
+
+- **gridTracking removed from /api/stats/overview** (stats.js): the "Lag
+  losses" tile it fed was removed 2026-09-21, leaving two raw-sample
+  trapezoid integrations per overview call with NO consumer — and the
+  1 s meter cadence made that ~173k row loads ×2 per call. Removed
+  outright (function + response block + imports); git history has it if
+  the idea is ever revisited. This was also the worst of the "raw-row
+  window loads" finding — /api/timeseries' JS bucketing stays as-is by
+  conscious decision: the chart contract needs per-bucket avg/min/max
+  and JS-side bucketing (the node:sqlite REAL-division gotcha forbids
+  SQL bucketing), and its calls are debounced/bounded.
+- **REST fast path gated on MQTT freshness**: the 3 s scen_info loop
+  while a frontend watches now skips when batteryMqtt.isFresh() — it
+  exists to cover MQTT's stalls, not to double traffic (~20 req/min for
+  zero gain) when MQTT is healthy. 10 s baseline unchanged.
+- **TodayMiniChart re-init storm fixed**: LiveTab's five flip-side series
+  are now useMemo'd on todayProfile — previously rebuilt every 1-3 Hz
+  WS push, so all four charts did full echarts dispose+init per push.
+- **WAL + batched upserts** (db.js): PRAGMA journal_mode = WAL for the
+  1 s write cadence; saveCloudTrend/saveCloudPvTrend wrap their 72-row
+  upsert loops in one transaction each.
+- **.dockerignore**: + server/.power-plan-state.json (dev controller
+  state was being baked into the image), + server/data.db-wal/-shm,
+  + kimi-debug-session_* (the untracked debug archive in the repo root —
+  one `git add -A` from being committed).
+- **engines**: server/package.json declares node >= 22.13 (node:sqlite
+  requirement; docs said "Node 20+").
+- **Auth posture**: README deploy section now carries a prominent "No
+  authentication — trusted LAN only, never port-forward 3001" warning
+  (hardware-writing power-plan POSTs, /api/cloud proxy, AI-credit
+  endpoints are all open to the LAN).
+- **CI covers the Docker runtime layout**: ci.yml gains a second smoke
+  test that boots the server from a server/+web/dist+root-package.json-
+  only layout — the exact condition of the v1.5.42 boot crash the
+  repo-layout smoke can't see. Verified locally.
+- **README de-staled**: House priority is native self-consumption,
+  Battery priority's hold phase + 25 W grid target + 3-point tolerance,
+  anker_app strategy documented, 90 s step-up hold, export watchdog, 1 s
+  Modbus, WS push, 1 h config cache. AGENTS.md "reads the meter every
+  1 s" was already updated with the 1 s change.
+- Verified: node --check all server files, vite build, all sims, full
+  smoke incl. WAL pragma confirmed on the fresh DB and gridTracking
+  absent from the overview response.

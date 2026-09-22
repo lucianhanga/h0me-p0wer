@@ -41,3 +41,20 @@ jobs:
           curl -sf http://localhost:3100/ | grep -q "<title>h0me-p0wer</title>"
           curl -sf http://localhost:3100/api/stats/overview | grep -q '"ok":true'
           kill -INT $SERVER_PID
+
+      # Mirrors the Docker runtime stage's file layout (server/ + web/dist +
+      # root package.json, nothing else) — the v1.5.42 boot crash passed the
+      # repo-layout smoke above and only failed in the image. This layout is
+      # what must keep booting.
+      - name: Smoke test (Docker runtime layout)
+        run: |
+          rm -rf /tmp/rt-layout && mkdir -p /tmp/rt-layout/web
+          cp -r server /tmp/rt-layout/server
+          cp -r web/dist /tmp/rt-layout/web/dist
+          cp package.json /tmp/rt-layout/package.json
+          PORT=3101 DB_PATH=/tmp/rt-layout/data.db node /tmp/rt-layout/server/index.js &
+          SERVER_PID=$!
+          sleep 4
+          curl -sf http://localhost:3101/api/live | grep -q '"connected"'
+          curl -sf http://localhost:3101/ | grep -q "<title>h0me-p0wer</title>"
+          kill -INT $SERVER_PID
