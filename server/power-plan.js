@@ -24,19 +24,21 @@
 //                        whatever the device actually has, instead of
 //                        trusting a belief that predates the user's own
 //                        Anker-app edits.
-//   house_priority   -> (the default) battery tops up the house continuously,
-//                        down to dischargeFloorPct + DISCHARGE_TOLERANCE_PCT,
-//                        regardless of PV level — via dischargeToTarget().
-//                        This ABSORBED what was briefly a separate 3rd
-//                        strategy ("grid ≈ 100 W best-effort") — the same
-//                        day it was decided House Priority should just BE
-//                        that behavior, and the 3rd option was removed.
-//                        The floor is latched with
-//                        DISCHARGE_RESUME_HYSTERESIS_PCT, not a bare
-//                        threshold (mirrors battery_priority's ceiling
-//                        latch below) — once hit, stays in PV-passthrough-
-//                        only mode until SOC climbs back above the floor
-//                        by that many points, not just 1.
+//   house_priority   -> (the default) the device's NATIVE self-consumption
+//                        mode (schedule mode_type 1 = smartmeter,
+//                        community-verified SolarbankUsageMode: "AC output
+//                        based on measured smart meter power") — exactly the
+//                        Anker app's Self-Consumption Mode (2026-09-22, user
+//                        request: "behave exactly like the Anker app"). The
+//                        device follows house demand LOCALLY, sub-second,
+//                        zero export; this controller writes the mode once,
+//                        re-verifies it periodically, and otherwise only
+//                        monitors. GRID_TARGET_W / discharge floor margins /
+//                        the export watchdog don't apply in this mode — the
+//                        device's own Anker-app SOC cutoffs are enforced
+//                        locally. The MANUAL discharge trigger and
+//                        battery_priority still use the preset path below
+//                        (dischargeToTarget() etc.).
 //   battery_priority -> while soc < chargeCeilingPct AND pv > 0: target=0
 //                        (PV is deliberately withheld from the house so it
 //                        charges the battery instead; house demand comes
@@ -208,6 +210,16 @@ const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 2 * 60
 const EXPORT_CORRECT_MIN_W = Number(process.env.EXPORT_CORRECT_MIN_W ?? 20);
 const EXPORT_RECORRECT_MS = 60 * 1000;
 const EXPORT_WRITE_GAP_MS = 15 * 1000;
+// Solarbank 2 usage mode for native Self-Consumption (2026-09-22, user
+// request: "House priority should behave exactly like the Anker app's
+// Self-Consumption Mode — use the app's setting directly if there is one").
+// There is: community-verified SolarbankUsageMode — schedule mode_type 1
+// (smartmeter) = "AC output based on measured smart meter power". The
+// device then follows house demand LOCALLY against the Smart Meter,
+// sub-second, zero export — no cloud-preset loop can match that (~1 min
+// floor, see the export-watchdog entry). 3 = manual preset schedule (what
+// the preset path writes); 5/7/8 = TOU / AI-EMS / dynamic-tariff.
+const NATIVE_SELF_CONSUMPTION_MODE = 1;
 // How long reverse-direction changes are suppressed after a write — the
 // demand estimate is unreliable until the device+cloud have reflected the
 // new preset: INFLATED by cloud-lagged outputW after a down-write (would
@@ -245,6 +257,8 @@ export class PowerPlanController {
     this.holdingAtCeiling = false; // battery_priority charge/hold latch — see CHARGE_RESUME_HYSTERESIS_PCT
     this.holdingAtFloor = false; // house_priority discharge/hold latch — see DISCHARGE_RESUME_HYSTERESIS_PCT
     this.lastWriteDown = false; // last write direction — see SETTLE_AFTER_WRITE_MS
+    this.nativeMode = false; // device confirmed in native self-consumption (mode_type 1)
+    this.lastScheduleReadAt = 0; // last time the schedule was (re-)read from the cloud
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
@@ -372,6 +386,10 @@ export class PowerPlanController {
   // must reflect the DEVICE's truth after any restart/re-enable, not just
   // whatever we last remembered before an unknown gap.
   reconcileWrittenPower(parsed) {
+    // In native self-consumption (mode_type 1) the custom-rate-plan value is
+    // dormant — the device follows the smart meter, not the plan — so there
+    // is nothing to reconcile against (2026-09-22).
+    if (parsed?.mode_type === NATIVE_SELF_CONSUMPTION_MODE) return;
     const actual = parsed?.custom_rate_plan?.[0]?.ranges?.[0]?.power;
     if (typeof actual === "number" && actual !== this.lastWrittenPower) {
       console.log(
@@ -537,10 +555,78 @@ export class PowerPlanController {
       };
       return;
     }
+    // house_priority + auto trigger = the device's NATIVE self-consumption
+    // mode (schedule mode_type 1 — see the constant's comment above). The
+    // device regulates locally, so this branch only ensures the mode is set
+    // (written once, re-verified every REFRESH_MS in case it was changed in
+    // the Anker app) and then just monitors — no preset writes, no watchdog
+    // (zero export is enforced on-device), no GRID_TARGET_W / floor margin
+    // (the device's own Anker-app SOC cutoffs apply instead). The manual
+    // trigger is preset-based by nature and bypasses this branch entirely.
+    if (this.strategy === "house_priority" && this.trigger === "auto") {
+      try {
+        const now = Date.now();
+        if (!this.template || now - this.lastScheduleReadAt >= REFRESH_MS) {
+          const { parsed, raw } = await this.readSchedule();
+          this.template = parsed;
+          this.lastScheduleReadAt = now;
+          if (this.enabled && !this.originalRaw) {
+            this.originalRaw = raw;
+            this.saveState();
+          }
+        }
+        let wrote = false;
+        let reason = "native self-consumption — device follows the smart meter locally, no preset writes";
+        if (this.template?.mode_type !== NATIVE_SELF_CONSUMPTION_MODE) {
+          if (now - this.lastWriteAt >= MIN_WRITE_GAP_MS) {
+            await this.writeSchedule({ ...this.template, mode_type: NATIVE_SELF_CONSUMPTION_MODE });
+            this.lastWriteAt = now;
+            wrote = true;
+            this.template = null; // re-read next tick to confirm the mode landed
+            this.lastScheduleReadAt = 0;
+            reason = "switched the device to native self-consumption (mode_type=1)";
+            console.log("[power-plan] house_priority: wrote mode_type=1 (native self-consumption)");
+          } else {
+            reason = "switching to native self-consumption — waiting (min write gap)";
+          }
+        } else {
+          this.nativeMode = true;
+        }
+        this.lastError = null;
+        this.lastDecision = {
+          at: now,
+          pvW,
+          demandW,
+          soc,
+          cellsW,
+          exportW: info.gridSource === "meter" && info.gridW != null ? Math.min(0, info.gridW) : 0,
+          strategy: this.strategy,
+          trigger: this.trigger,
+          manualDischarge: this.manualDischarge,
+          nativeMode: true, // this decision came from the native path
+          wrote,
+          reason,
+        };
+        return;
+      } catch (err) {
+        this.lastError = err.message;
+        console.warn(`[power-plan] tick failed: ${err.message}`);
+        return;
+      }
+    }
     try {
+      if (this.nativeMode) {
+        // Leaving native self-consumption: force a fresh schedule read and an
+        // unconditional preset write — lastWrittenPower refers to a dormant
+        // custom-rate-plan value the device wasn't following while in mode 1.
+        this.nativeMode = false;
+        this.lastWrittenPower = null;
+        this.template = null;
+      }
       if (!this.template) {
         const { parsed, raw } = await this.readSchedule();
         this.template = parsed;
+        this.lastScheduleReadAt = Date.now();
         if (this.enabled && !this.originalRaw) {
           this.originalRaw = raw;
           this.saveState();
@@ -666,7 +752,14 @@ export class PowerPlanController {
       if (shouldWrite) {
         const writeGap = exportCorrection ? EXPORT_WRITE_GAP_MS : MIN_WRITE_GAP_MS;
         if (now - this.lastWriteAt >= writeGap) {
-          await this.writeSchedule(this.buildPresetSchedule(targetW));
+          const body = this.buildPresetSchedule(targetW);
+          await this.writeSchedule(body);
+          // Keep the cache truthful: the device now holds exactly this
+          // schedule (mode_type 3 included) — a stale cached template would
+          // mislead the native-mode check if the strategy flips back to
+          // house_priority before the next re-read (sim-verified 2026-09-22).
+          this.template = body;
+          this.lastScheduleReadAt = now;
           this.lastWriteDown = targetW < cur; // cur == null handled above (initial)
           this.lastWrittenPower = targetW;
           this.lastWriteAt = now;

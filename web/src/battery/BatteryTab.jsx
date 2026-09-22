@@ -72,9 +72,13 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   // as a safety margin (see power-plan.js; 3 points as of 2026-09-19, so
   // 13% on a 10% account floor). Shown as a second, distinct marker so
   // "why does it stop there, not at the account floor?" is answered on
-  // the gauge itself instead of only in server-side comments.
+  // the gauge itself instead of only in server-side comments. In native
+  // self-consumption mode StrategyTab passes 0 (the device enforces its own
+  // cutoff directly) — the second marker then equals the first and is
+  // suppressed below to avoid two overlapping ticks/labels.
   const effectiveFloorPct =
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
+  const showFloorTick = effectiveFloorPct != null && effectiveFloorPct !== minPct;
   const usableKwh =
     minPct != null && maxPct != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
@@ -108,7 +112,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
                 title={`account discharge floor ${minPct}%`}
               />
             )}
-            {effectiveFloorPct != null && (
+            {showFloorTick && (
               <div
                 className="batt-tick batt-tick-floor"
                 style={{ left: `${effectiveFloorPct}%` }}
@@ -133,7 +137,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               min {minPct}%
             </span>
           )}
-          {effectiveFloorPct != null && (
+          {showFloorTick && (
             <span className="batt-tick-label batt-tick-label-floor" style={{ left: `${effectiveFloorPct}%` }}>
               floor {effectiveFloorPct}%
             </span>
