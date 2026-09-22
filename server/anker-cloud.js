@@ -163,6 +163,10 @@ export class AnkerClient {
     const response = await fetch(`${API}/passport/login`, {
       method: "POST",
       headers: this.baseHeaders(),
+      // Every Anker fetch needs a timeout (2026-09-22 code review): a hung
+      // connection used to park for minutes (undici default), and the
+      // caller's loop would fire MORE overlapping requests meanwhile.
+      signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
         ab: this.country,
         client_secret_info: { public_key: clientPublicKey },
@@ -202,6 +206,7 @@ export class AnkerClient {
     const response = await fetch(`${API}/${endpoint}`, {
       method: "POST",
       headers: this.baseHeaders(),
+      signal: AbortSignal.timeout(30_000), // see the login call above
       body: JSON.stringify(body),
     });
 

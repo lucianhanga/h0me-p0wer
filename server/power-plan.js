@@ -260,6 +260,8 @@ export class PowerPlanController {
     this.nativeMode = false; // device confirmed in native self-consumption (mode_type 1)
     this.lastScheduleReadAt = 0; // last time the schedule was (re-)read from the cloud
     this.ticking = false; // re-entry guard — see tick()
+    this.nativeSwitchAttempts = 0; // consecutive unconfirmed native-mode writes — see tickInner
+    this.nextNativeSwitchAt = 0; // exponential backoff gate for the above
     this.holdProbeW = 0; // battery_priority hold-phase hill-climb state — see PROBE_STEP_W
     this.lastProbeUpAt = 0; // last time the hold-phase probe stepped up — see PROBE_MIN_INTERVAL_MS
     this.lastWrittenPower = null;
@@ -607,19 +609,38 @@ export class PowerPlanController {
         let wrote = false;
         let reason = "native self-consumption — device follows the smart meter locally, no preset writes";
         if (this.template?.mode_type !== NATIVE_SELF_CONSUMPTION_MODE) {
-          if (now - this.lastWriteAt >= MIN_WRITE_GAP_MS) {
+          if (now < this.nextNativeSwitchAt) {
+            // The previous mode-1 write didn't land (the confirmation
+            // re-read still shows another mode) — back off exponentially
+            // (30 s → 15 min cap) instead of hammering the rate-limited
+            // write endpoint every 30 s forever (2026-09-22 code review).
+            reason = `native switch retry backed off — next attempt in ${Math.round((this.nextNativeSwitchAt - now) / 1000)}s (attempt ${this.nativeSwitchAttempts})`;
+          } else if (now - this.lastWriteAt >= MIN_WRITE_GAP_MS) {
             await this.writeSchedule({ ...this.template, mode_type: NATIVE_SELF_CONSUMPTION_MODE });
             this.lastWriteAt = now;
+            this.nativeSwitchAttempts += 1;
+            this.nextNativeSwitchAt =
+              now + Math.min(15 * 60 * 1000, 30_000 * 2 ** (this.nativeSwitchAttempts - 1));
             wrote = true;
             this.template = null; // re-read next tick to confirm the mode landed
             this.lastScheduleReadAt = 0;
             reason = "switched the device to native self-consumption (mode_type=1)";
+            if (this.nativeSwitchAttempts > 1) {
+              reason = `native self-consumption switch — retry #${this.nativeSwitchAttempts} written`;
+            }
+            if (this.nativeSwitchAttempts >= 10) {
+              this.lastError =
+                "device hasn't accepted native self-consumption after 10 attempts";
+              reason += " — WARNING: 10 failed attempts, see lastError";
+            }
             console.log("[power-plan] house_priority: wrote mode_type=1 (native self-consumption)");
           } else {
             reason = "switching to native self-consumption — waiting (min write gap)";
           }
         } else {
           this.nativeMode = true;
+          this.nativeSwitchAttempts = 0;
+          this.nextNativeSwitchAt = 0;
         }
         this.lastError = null;
         this.lastDecision = {
@@ -900,7 +921,7 @@ export class PowerPlanController {
 
   async disable() {
     this.enabled = false;
-    this.saveState();
+    this.saveState(); // persist the off-switch immediately, before the restore attempt
     if (this.originalRaw && this.anker.siteId) {
       // Restore the exact schedule the device had before we took over.
       await this.anker.post(SET_EP, {
@@ -911,6 +932,11 @@ export class PowerPlanController {
       });
       this.template = null;
       this.lastWrittenPower = null;
+      // Persist AGAIN after nulling the belief (2026-09-22 code review):
+      // previously the only saveState() ran BEFORE this null, leaving a
+      // stale lastWrittenPower on disk — the same stale-belief class as
+      // the 2026-09-16 incident, waiting for a reconcile to matter.
+      this.saveState();
     }
   }
 
