@@ -151,10 +151,11 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.39, `main`, working tree clean, nothing pending.**
-Latest: meter poll cadence 5 s → 2 s — with the WS push already instant,
-the Modbus sample rate was the last bottleneck making the Live tab feel
-like "5 s updates" next to the Anker app. See the last log entry.
+**As of 2026-09-22, v1.5.40, `main`, working tree clean, nothing pending.**
+Latest: Live-tab grid display gets a ±20 W deadband ("balanced") — the
+meter's small zero-export regulation flicker (median −9 W, 24% of sunny
+buckets) no longer shows as constant "exporting" next to the Anker app's
+smoothed 0 W. Raw values untouched everywhere else. See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3263,3 +3264,30 @@ of the log below) in one line each:
   reads every 2 s is trivial for LAN Modbus TCP; snapshots table doubles
   to ~86k rows/48 h — nothing for SQLite). Env var still overrides; the
   MODBUS_TRANSIENT dev coexistence setup (20000 ms) is unaffected.
+
+## Grid display deadband on the Live tab (2026-09-22, user report)
+
+- User: "in my app it is almost always shown that we push power into the
+  grid, and on the Anker app it's the opposite." Investigated with data
+  before touching anything: live same-second comparison of our meter vs
+  the cloud channels the Anker app displays (grid import 0=0, home
+  310-314 vs 305-313 W, PV identical 846 W), today's totals (ours
+  2.45 kWh import / 0.02 export vs Anker's own cloud totals 2.44 / 0.00 —
+  within 0.4%), and a 24h negative-grid analysis: our meter reads
+  negative in 11% of the day, ALL of it daylight hours (24% of sunny
+  buckets), median just −9 W, worst −85 W, never at night; Anker's own
+  cloud trend shows the same class (−7…−11 W, 4% of 20-min points).
+  Conclusion: the small export is REAL physics (the Solarbank's
+  zero-export regulation oscillates a few watts around zero when PV ≈
+  demand), and the difference is PRESENTATION — Anker's app smooths that
+  band to "0 W", we lit a visible export arc for every flicker.
+- Fix (DISPLAY-ONLY, `web/src/live/LiveTab.jsx` +
+  `FlowDiagram.jsx`): `GRID_DISPLAY_DEADBAND_W = 20` — |grid| ≤ 20 W
+  shows as "Grid balanced · 0 W" on the tile and "0 W" with no export arc
+  in the flow diagram (FlowDiagram's label logic also gained a real "0 W"
+  case so a deadbanded zero never renders "−0 W"). Graphs, stats, the
+  flip-side mini chart, and the controller's export watchdog keep the RAW
+  signed value — real sustained export (> 20 W) still shows everywhere.
+- Verified in a browser on the dev stack: with the meter flickering
+  around zero at the time, the tile read "Grid balanced · 0 W" and the
+  diagram showed Grid 0 W — the Anker-style presentation.

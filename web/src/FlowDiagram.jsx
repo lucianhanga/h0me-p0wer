@@ -34,7 +34,9 @@ export default function FlowDiagram({ flow }) {
         grid.import != null
           ? grid.import > 0
             ? `${grid.import} W`
-            : `−${grid.export} W`
+            : grid.export > 0
+              ? `−${grid.export} W`
+              : "0 W" // deadbanded/balanced — never "−0 W"
           : "—",
       color: "#f7a44f",
     },
