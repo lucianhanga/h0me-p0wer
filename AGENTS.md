@@ -151,12 +151,12 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.45, `main`, working tree clean, nothing pending.**
-Latest: scen_info fast path — 3 s battery/PV sync whenever a frontend is
-watching (the Anker app's own live-view mechanism is REST polling, not
-MQTT; Anker's MQTT broker was stalled again, delivering zero messages —
-see the last log entry). /api/health now exposes batteryMqtt
-connected/fresh/lastDataAt.
+**As of 2026-09-22, v1.5.46, `main`, working tree clean, nothing pending.**
+Latest: grid display smoothing — raw 1 s meter samples jitter ±20-25 W
+and flip sign constantly near zero (inverter feeds L1, loads on L3), so
+/api/live + /api/flow + WS pushes now show a 5 s rolling mean, matching
+the Anker app's smoothed presentation. Raw 1 s series untouched in DB,
+stats, and the export watchdog. See the last log entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3419,3 +3419,30 @@ of the log below) in one line each:
   values changing); health reports batteryMqtt connected-but-not-fresh
   during the stall. Note MQTT may silently resume later (both channels
   write into the same latestBattery — harmless).
+
+## Grid display smoothing (2026-09-22, user report)
+
+- User: "PV, house, battery values are accurate now with under a second —
+  the only part that doesn't reflect the Anker app is the grid, not at
+  all!" Measured live: the meter was fresh (1 s poll ✓), and its TOTAL
+  was fine — but the phase data told the story: the single-phase Solarbank
+  inverter feeds L1 (constant ~-100 W export there) while the loads sit on
+  L3 (~+60 W import), so the NET total jitters ±20-25 W and flips sign
+  every second at near-zero flow. The Anker app shows a SMOOTHED value;
+  we showed the raw 1 s jitter — direction and magnitude visibly wrong
+  most seconds even though the mean was right. Also cross-checked the
+  cloud channel: local register vs scen_info grid disagreed on sign
+  constantly in the same ±25 W band.
+- Fix: `GRID_DISPLAY_SMOOTH_MS = 5000` rolling mean, applied ONLY on the
+  display path — `getLiveState()` (/api/live + WS `meter`) and
+  `computeFlowPayload()` (/api/flow + WS `flow`) smooth the meter-sourced
+  total + phases; the ring buffer feeds from poller.onSnapshot alongside
+  (never instead of) saveSnapshot. RAW 1 s samples stay untouched
+  everywhere else: DB snapshots, /api/timeseries, stats/gridTracking, and
+  getGridLive() — the power plan's export watchdog keeps the true
+  instantaneous value because fast correction needs it. Cloud-sourced
+  grid values are already smoothed device-side (untouched). The ±20 W
+  deadband still applies on top of the smoothed value.
+- Verified with the real observed flicker sequence (raw −23…+19 W):
+  smoothed output settles to a stable −3…−6 W — the steady ~−5 W the
+  Anker app was showing at the same moment.

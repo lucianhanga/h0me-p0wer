@@ -98,12 +98,58 @@ const anker = new AnkerClient(
 const app = express();
 app.use(express.json());
 
+// Display smoothing for the grid reading (2026-09-22, user report: "the
+// grid doesn't reflect the Anker app at all"). The raw 1 s meter samples
+// jitter ±20-25 W around zero and flip sign constantly — phase-shifted
+// flicker: the single-phase inverter feeds L1 (~-100 W export there) while
+// the loads sit on L3 (~+60 W import), so the net total swings wildly even
+// when physically steady. Verified: local register vs the cloud channel
+// disagreed on SIGN constantly at near-zero flow; the Anker app presents a
+// smoothed value, we showed raw 1 s jitter. A short rolling mean on the
+// DISPLAY path only (/api/live, /api/flow, WS pushes) matches Anker's
+// presentation. RAW samples stay untouched: the DB (graphs, stats,
+// gridTracking) keeps the true 1 s series, and getGridLive() — the power
+// plan's export watchdog input — stays raw because fast correction needs
+// the true instantaneous value.
+const GRID_DISPLAY_SMOOTH_MS = 5000;
+const recentGrid = []; // {ts, total, l1, l2, l3} ring buffer, ~1 s cadence
+function noteGridSample(snapshot) {
+  const p = snapshot?.primary;
+  if (!p || p.totalPower == null) return;
+  recentGrid.push({
+    ts: Date.now(),
+    total: p.totalPower,
+    l1: p.phases?.[0]?.power ?? null,
+    l2: p.phases?.[1]?.power ?? null,
+    l3: p.phases?.[2]?.power ?? null,
+  });
+  const cutoff = Date.now() - GRID_DISPLAY_SMOOTH_MS;
+  while (recentGrid.length && recentGrid[0].ts < cutoff) recentGrid.shift();
+}
+function getSmoothedGrid() {
+  if (!recentGrid.length) return null;
+  const mean = (key) => {
+    const vals = recentGrid.map((r) => r[key]).filter((v) => v != null);
+    return vals.length ? Math.round(vals.reduce((a, v) => a + v, 0) / vals.length) : null;
+  };
+  return { power: mean("total"), phases: [{ power: mean("l1") }, { power: mean("l2") }, { power: mean("l3") }] };
+}
+
 // Meter state for /api/live AND the WS live push — Modbus down: attach the
 // shared grid fallback so both show the SAME cloud value as /api/flow
 // (source: cloud-live → live scen_info, cloud → newest closed 20-min
-// interval).
+// interval). Meter-sourced values are display-smoothed (see above).
 function getLiveState() {
   const state = poller.getState();
+  if (state.snapshot) {
+    const sm = getSmoothedGrid();
+    if (sm) {
+      state.snapshot = {
+        ...state.snapshot,
+        primary: { ...state.snapshot.primary, totalPower: sm.power, phases: sm.phases },
+      };
+    }
+  }
   if (!state.snapshot) {
     const gl = getGridLive();
     if (gl.power != null) state.cloud = gl;
@@ -262,7 +308,14 @@ function getPvStringKwhToday() {
 // WS-pushed updates carry a Home value as fresh as the meter sample that
 // triggered them — the despike median-of-3 simply sees more samples.
 async function computeFlowPayload() {
-  const gl = getGridLive();
+  const glRaw = getGridLive();
+  // Display-smoothed for the meter source (see GRID_DISPLAY_SMOOTH_MS);
+  // cloud sources are already smoothed device-side. getGridLive() itself
+  // stays raw for the power plan.
+  const gl =
+    glRaw.source === "meter" && glRaw.power != null
+      ? { ...glRaw, power: getSmoothedGrid()?.power ?? glRaw.power }
+      : glRaw;
   const grid = gl.power;
   const gridTs = gl.ts;
   const gridSource = gl.source;
@@ -1133,6 +1186,7 @@ wss.on("connection", (ws) => {
 });
 poller.onSnapshot((state) => {
   if (state.snapshot) {
+    noteGridSample(state.snapshot); // display smoothing buffer (raw untouched in DB)
     try {
       saveSnapshot(state.snapshot);
     } catch (err) {
