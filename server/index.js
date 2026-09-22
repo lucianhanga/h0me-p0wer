@@ -57,9 +57,13 @@ export function localDate(d = new Date()) {
 }
 
 const poller = new MeterPoller(METER_IP, METER_PORT, {
-  // POLL_INTERVAL_MS: poll cadence (default 5000). MODBUS_TRANSIENT=true:
+  // POLL_INTERVAL_MS: poll cadence (default 2000 — lowered from 5000 on
+  // 2026-09-22, user request: live UI should update at the Anker app's
+  // cadence; the WS push (below) is instant, so the meter sample rate was
+  // the remaining bottleneck. The register updates ~1 s; 2 s over LAN
+  // Modbus TCP is trivial for both sides). MODBUS_TRANSIENT=true:
   // connect-read-disconnect per cycle so two instances can share the meter.
-  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 5000),
+  pollIntervalMs: Number(process.env.POLL_INTERVAL_MS ?? 2000),
   transient: process.env.MODBUS_TRANSIENT === "true",
 });
 // CLOUD_ENABLED=false runs meter-only: no Anker login attempts at all
