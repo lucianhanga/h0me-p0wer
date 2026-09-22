@@ -48,9 +48,19 @@ const PORT = Number(process.env.PORT ?? 3001);
 // instead of silently running the old code forever (2026-09-22, user
 // report: "the UI still updates at 5 s" — the server was already pushing
 // at 2 s; their tab simply predated the deploy).
-const APP_VERSION = JSON.parse(
-  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
-).version;
+// NEVER let this cosmetic lookup take the server down: the Docker runtime
+// stage only copies server/ + web/dist, so ../package.json may not exist
+// (2026-09-22 incident: v1.5.42 crashed on boot in Docker for exactly this
+// reason — production down; the Dockerfile now also copies it, but this
+// fallback must hold regardless).
+let APP_VERSION = "unknown";
+try {
+  APP_VERSION = JSON.parse(
+    readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+  ).version;
+} catch {
+  console.warn("[init] root package.json not found — WS pushes will report v=unknown");
+}
 const METER_IP = process.env.METER_IP ?? "192.168.1.102";
 const METER_PORT = Number(process.env.METER_PORT ?? 502);
 
