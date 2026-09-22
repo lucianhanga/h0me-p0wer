@@ -146,7 +146,18 @@ function getLiveState() {
     if (sm) {
       state.snapshot = {
         ...state.snapshot,
-        primary: { ...state.snapshot.primary, totalPower: sm.power, phases: sm.phases },
+        primary: {
+          ...state.snapshot.primary,
+          totalPower: sm.power,
+          // Spread the original phase objects (2026-09-22 code review: the
+          // smoothed phases carry only `power` — replacing the array whole
+          // stripped each phase's current/voltage and the Live tab's
+          // Details rendered "undefined A · undefined V").
+          phases: sm.phases.map((sp, i) => ({
+            ...state.snapshot.primary.phases?.[i],
+            power: sp.power,
+          })),
+        },
       };
     }
   }

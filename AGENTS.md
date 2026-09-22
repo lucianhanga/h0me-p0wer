@@ -151,13 +151,14 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22, v1.5.48, `main`, working tree clean, nothing pending.**
-HOTFIX: preset path now re-reads the schedule periodically and VOIDS a
-stale lastWrittenPower when the device is in self-consumption (mode 1) —
-live incident this evening: battery_priority selected but the device kept
-self-consuming 521 W at 7% SOC because cur==target==0 meant "within
-deadband" and mode 3 was never written. Before that: power_cutoff
-selected-profile parsing fix. See the last log entries.
+**As of 2026-09-22, v1.5.49, `main`, working tree clean, nothing pending.**
+Latest: full four-area code review (backend infra, power-plan controller,
+frontend, cross-cutting) — found and fixed the same evening: CRITICAL
+night-discharge under battery_priority (probe fired with pvW==0), probe
+correction delayed by the settling guard, tick() re-entry, stripped phase
+current/voltage in the smoothed live state, Dashboard error wedge, and
+the one-shot reload latch. Findings backlog documented in the last log
+entry.
 Latest: graph outlier-cap fixed to require BOTH a ratio AND an absolute
 margin (a mostly-0 W window with a legit 100-200 W value was being capped
 to 0) — see the last log entry. Also diagnosed 2026-09-22 morning: the
@@ -3510,3 +3511,73 @@ of the log below) in one line each:
   nothing forever; fixed code voids the belief and writes mode 3 preset 0
   on the first tick. Native-transition sim and export-watchdog sim both
   still pass unchanged.
+
+## Four-area code review + same-evening critical fixes (2026-09-22, user request)
+
+- User: "review the code in detail from all points of view — architecture,
+  best practices, full stack usage." Dispatched four parallel reviewers
+  (backend infra, power-plan controller correctness, frontend, cross-
+  cutting). All Critical/High findings were re-verified against the code
+  by hand before acting — and one subagent finding was refined during
+  verification (the cellsW exemption had to be strategy-scoped, see
+  below). Fixed the same evening:
+  - **CRITICAL: battery_priority discharged the battery all night** —
+    computeBatteryPriority()'s charging-phase fall-through ran the
+    hill-climb probe with pvW==0: the just-reset lastProbeUpAt=0 made
+    PROBE_MIN_INTERVAL_MS trivially true, so holdProbeW jumped to
+    PROBE_STEP_W (150) EVERY TICK, and the hold phase probed from cells
+    every 2 min — a pulsed ~150 W drain to the floor under the strategy
+    that must never discharge. Only soc<=floor masked it on the incident
+    night. Fix: night returns 0 in both phases; the probe is gated on
+    pvW>0 (it exists to discover available PV, never to spend cells).
+    Sim-verified: night charging/hold → 0; day withhold → 0; day hold
+    first probe → 150; cellsW correction → exact retreat.
+  - **Probe cellsW correction was delayed up to 120 s by the settling
+    guard** (its "corrected in one tick" safety property was broken,
+    worse since the 3 s scen_info fast path). Fix: a strategy-scoped
+    `probeCorrection` exemption (battery_priority + cellsW>0) —
+    deliberately NOT a blanket cellsW exemption, which the export sim
+    immediately showed would re-open the deflated-demandW oscillation
+    under manual/house_priority (discharge is the intent there).
+  - **tick() re-entry**: index.js fires ticks un-awaited every 10 s; one
+    tick can hold 3 cloud round-trips. Two overlapping ticks could both
+    pass the write-gap check (duplicate preset writes) or write after
+    disable() restored the user's schedule. Fix: `this.ticking` guard
+    (body renamed tickInner) + `enabled` re-checked right before writing.
+  - **Smoothed live state stripped phase current/voltage** — Details
+    showed "undefined A · undefined V" (getSmoothedGrid carried power
+    only). getLiveState now spreads the original phase objects.
+  - **Dashboard error wedge**: a single failed poll stuck the error
+    screen forever; success now clears it (the class usePolledResource
+    already fixed for RoiTab; Dashboard was the hand-rolled holdout).
+  - **Reload latch never re-armed**: the boolean sessionStorage flag
+    meant a second deploy in the same tab session never reloaded. Now
+    stores the version reloaded for — one reload per distinct version.
+- **Review findings backlog (not yet done, in rough priority order)**:
+  async route handlers without try/catch (/api/flow, /api/battery/params —
+  one rejection crashes Express 4); Anker cloud fetches have no timeout +
+  overlapping scen_info calls when one hangs (AbortSignal + in-flight
+  guard); startup backfills never retry after a rate-limit break (older
+  days stay missing until restart); failed native-mode switch rewrites
+  every 30 s forever (needs backoff); disable() persists stale
+  lastWrittenPower (saveState before nulling); raw-row window loads at
+  1 s cadence (~173k rows per stats/timeseries call — SQL aggregation);
+  REST fast path ignores MQTT freshness (~24 calls/min even when MQTT is
+  healthy); no auth on any route incl. hardware-writing power-plan POSTs
+  (LAN-trust model — needs at least a loud README note); CI doesn't cover
+  the Docker runtime layout (the v1.5.42 crash class); TodayMiniChart
+  dispose/init storm at 1-3 Hz push cadence (useMemo the series);
+  node:sqlite needs engines >= 22.13 in package.json; AGENTS.md/README
+  staleness sweep (several numbers now outdated); WAL pragma + batched
+  upserts; .dockerignore should exclude server/.power-plan-state.json and
+  kimi-debug-session_*; /api/timeseries's {ok, bucketMs, data} is the one
+  envelope exception; gridTracking in /api/stats/overview is computed but
+  has no consumer since the tile was removed.
+- **What the review confirmed is genuinely strong** (keep): modbus.js and
+  mqtt.js's loop/watchdog designs; anker-cloud.js's token lifecycle; the
+  belief-vs-truth grounding in the controller (every path re-reads and
+  reconciles/voids); shared derivations (deriveBatteryFlow, savedEur,
+  getTariff, refreshHomeConsumption, getLiveState/computeFlowPayload
+  shared REST↔WS); envelope standardization actually landed; Docker
+  hygiene (non-root, secrets excluded, no registry); comments that
+  explain WHY with incident dates.
