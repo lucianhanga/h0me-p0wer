@@ -151,13 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-23, v1.5.57, `main`, working tree clean, nothing pending.**
-Latest: the "Grid range" min/max envelope series was REMOVED from the
-Home Power Usage chart — after the single-sample trim (#202), the
-remaining needles were 2-3-sample inrush spikes (850→1461→809 W),
-unfixable by any simple trim; the envelope amplified them at every span.
-The mean line carries real sustained transients on its own. See the last
-log entry.
+**As of 2026-09-23, v1.5.58, `main`, working tree clean, nothing pending.**
+Latest: power_cutoff floor priority corrected AGAIN — the top-level
+discharge_lower_limit IS the live field on the current firmware (the
+device physically stopped at its 5% value overnight, AND the user's
+Anker-app change landed in it as 8% while the selected profile stayed
+10%). Parser now reads top-level first, selected profile as legacy
+fallback. See the last log entry.
 
 **Deployment status (check first):** last verified deployed on production
 (192.168.1.10:3001) was **v1.5.51**. v1.5.52–v1.5.54 (Home-line raw-sum
@@ -3803,3 +3803,27 @@ side recovers — no action needed unless it persists for days.
 - Verified: build green; dev-stack screenshot shows the chart rendering
   correctly with the 4 remaining series and no errors (dev data itself
   is sparse/garbage — unrelated).
+
+## power_cutoff: the TOP-LEVEL field is the live one after all (2026-09-23, user report)
+
+- User: "the battery SOC [floor] is not correctly read — I changed it in
+  the Anker app and our app still shows 10%, not sure from where." Forced
+  a fresh read: the payload's top-level `discharge_lower_limit` was **8**
+  (the user's change — they set 8%) while the selected profile stayed at
+  10. Our v1.5.47 parser preferred the profile → showed 10% forever.
+- This also settles the hardware question from the 2026-09-22 morning
+  incident: the device physically stopped at exactly 5% overnight — the
+  top-level field's value at the time. So on the current firmware: the
+  Anker app WRITES the top-level field (new SOC-limit system, cmd_type 1)
+  and the device ENFORCES it; the power_cutoff_data profiles are the
+  legacy SB1-era surface. Both of yesterday's competing hypotheses now
+  have hardware evidence on the same side.
+- Fix (battery-params.js): dischargeLowerLimitPct = top-level
+  `discharge_lower_limit` FIRST, selected profile's `output_cutoff_data`
+  as the legacy fallback (old firmware without the field). Verified
+  against today's real payload (→ 8, what the user set) and a
+  profile-only legacy payload (→ 10).
+- This REVERSES the priority flipped in #193 yesterday — the full
+  reasoning trail is in the code comment. The September behavior (floor
+  read as 10) was correct-by-accident: the field didn't exist yet, so the
+  profile fallback produced the then-correct 10%.

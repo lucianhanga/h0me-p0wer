@@ -133,19 +133,24 @@ async function fetchConfig(anker, getLiveBattery) {
   try {
     const cutoff = await readPowerCutoff(anker, siteId, deviceSn);
     if (cutoff) {
-      // The USER-VISIBLE discharge cutoff (what the Anker app displays and
-      // lets you change) lives in the SELECTED power_cutoff_data profile's
-      // output_cutoff_data — the community client derives its power_cutoff
-      // exactly this way. The top-level discharge_lower_limit is the NEW
-      // SOC-limit system's field (introduced by a 2026-09 firmware update,
-      // cmd_type 1, sitting at its 5% default unless the new system is
-      // explicitly used) — preferring it (the bug found 2026-09-22)
-      // silently moved our floor from the user's configured 10% to 5%
-      // after that firmware update, and app-side changes to the cutoff
-      // never showed up in our app.
-      const selected = (cutoff.power_cutoff_data ?? []).find((p) => Number(p?.is_selected) > 0);
-      if (selected && config.dischargeLowerLimitPct == null) {
-        config.dischargeLowerLimitPct = numOrNull(selected.output_cutoff_data);
+      // Priority corrected TWICE — the evidence trail: a 2026-09 firmware
+      // update introduced the top-level discharge_lower_limit field (the
+      // NEW SOC-limit system, cmd_type 1). Reading it first (original code)
+      // silently moved the floor 10%→5% after that update, so 2026-09-22
+      // flipped priority to the SELECTED power_cutoff_data profile (the
+      // community client's approach). WRONG, settled by two live facts on
+      // 2026-09-23: (1) the device physically stopped discharging at
+      // exactly the top-level value (5%) overnight; (2) the user changed
+      // the cutoff in the Anker app and the change landed in the TOP-LEVEL
+      // field (→ 8%) while the selected profile stayed at 10% — so the
+      // app writes the top-level field too. The top-level field is the
+      // live one on this firmware; the selected profile is the legacy
+      // fallback for older firmware that lacks the field entirely.
+      if (config.dischargeLowerLimitPct == null) {
+        const selected = (cutoff.power_cutoff_data ?? []).find((p) => Number(p?.is_selected) > 0);
+        config.dischargeLowerLimitPct =
+          numOrNull(cutoff.discharge_lower_limit) ??
+          numOrNull(selected?.output_cutoff_data);
       }
       applyLimits(cutoff);
       config.powerCutoffRaw = cutoff;
