@@ -151,8 +151,14 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-22 (end of day), v1.5.54, `main`, working tree clean,
-nothing pending. Saved-state checkpoint for the next session.**
+**As of 2026-09-23, v1.5.56, `main`, working tree clean, nothing pending.**
+Latest: single-sample spike trimming in /api/timeseries bucketing — the
+1 s meter poll catches 1-second compressor-inrush transients (measured:
+2951 W for exactly one sample), which drew tall needles on the 1h/6h
+charts. Bucket values are now trimmed means (drop 1 max + 1 min when ≥5
+samples) and the envelope uses the second-most-extreme sample. Real
+multi-second pulses (kettle) are preserved exactly. See the last log
+entry.
 
 **Deployment status (check first):** last verified deployed on production
 (192.168.1.10:3001) was **v1.5.51**. v1.5.52–v1.5.54 (Home-line raw-sum
@@ -3753,3 +3759,25 @@ side recovers — no action needed unless it persists for days.
   gridMax when envelopeOn is false — the band just disappears). Home and
   Grid stay raw (the consistency fix from earlier the same evening
   stands — the user's complaint was the envelope, not the raw lines).
+
+## Single-sample spike trimming in timeseries buckets (2026-09-23, user report)
+
+- User: "the spikes are still appearing in the graph for 1h and 6h"
+  (overnight screenshot: brown envelope needles to 1000-3000 W every
+  ~10-15 min over a calm ~270 W Home line). Measured the actual 1 s
+  samples inside a needle bucket: a compressor's inrush current is REAL
+  but lasts exactly ONE 1 s sample (2951 W with 257/406 W neighbors;
+  another at 1310 W with ~398 W neighbors). Since the 1 s poll, every
+  inrush lands in exactly one bucket and sets its min/max — the needles.
+- Fix (db.js getSnapshotBuckets): bucket value = trimmed mean (drop the
+  single highest and lowest sample once a bucket has ≥ 5 samples) and
+  envelope = SECOND-most-extreme sample per bucket — a spike must persist
+  ≥ 2 samples to shape the visible band. Verified against a synthetic
+  sequence built from the real captured values: the 2951 W needle
+  disappears from both mean and envelope at 5 s AND 27 s buckets, while
+  a 15 s kettle pulse is preserved exactly (2200 W mean and envelope at
+  5 s buckets; correct energy-weighted mean at 27 s). Energy/statistics
+  paths don't use this function (they integrate raw rows) — display only.
+- Note for future "why doesn't the spike show" questions: 1 s transients
+  are now intentionally invisible in the charts (they're ~0.3 Wh of
+  energy); the raw samples remain in the DB for anything that needs them.

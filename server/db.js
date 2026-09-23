@@ -438,7 +438,18 @@ const selectSnapshotRows = db.prepare(`
 `);
 
 export function getSnapshotBuckets(fromMs, toMs, bucketMs) {
-  const buckets = new Map(); // bt -> {grid:{s,c,min,max}, ...}
+  // Single-sample spike trimming (2026-09-23, user report): since the 1 s
+  // meter poll, one isolated 1 s sample of compressor inrush (measured
+  // real: 2951 W for exactly one sample, 257/406 W neighbors) inflated its
+  // bucket's max into a tall "needle" on the 1h/6h charts, and even the
+  // bucket MEAN noticeably (e.g. 260 → 510 W for one 5 s bucket). The
+  // Anker app's own chain smooths these away. So: bucket value = trimmed
+  // mean (drop the single highest and lowest sample once ≥ 5 samples —
+  // multi-sample pulses like a 15 s kettle burst are preserved, only
+  // isolated 1 s extremes are dropped), and the envelope uses the
+  // SECOND-most-extreme sample (a spike must persist ≥ 2 samples to shape
+  // the visible band). Energy math elsewhere uses raw rows, untouched.
+  const buckets = new Map(); // bt -> {grid:{vals:[]}, ...}
   for (const r of selectSnapshotRows.all(fromMs, toMs)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     let b = buckets.get(bt);
@@ -454,23 +465,37 @@ export function getSnapshotBuckets(fromMs, toMs, bucketMs) {
       ["solar", r.solar_total],
     ]) {
       if (value == null) continue;
-      const cell = (b[key] ??= { s: 0, c: 0, min: Infinity, max: -Infinity });
-      cell.s += value;
-      cell.c++;
-      if (value < cell.min) cell.min = value;
-      if (value > cell.max) cell.max = value;
+      const cell = (b[key] ??= { vals: [] });
+      cell.vals.push(value);
     }
   }
-  return [...buckets.entries()].map(([bt, b]) => ({
-    bt,
-    grid: b.grid ? b.grid.s / b.grid.c : null,
-    gridMin: b.grid ? b.grid.min : null,
-    gridMax: b.grid ? b.grid.max : null,
-    l1: b.l1 ? b.l1.s / b.l1.c : null,
-    l2: b.l2 ? b.l2.s / b.l2.c : null,
-    l3: b.l3 ? b.l3.s / b.l3.c : null,
-    solar: b.solar ? b.solar.s / b.solar.c : null,
-  }));
+  const trimmed = (vals) => {
+    if (!vals.length) return { mean: null, min: null, max: null };
+    if (vals.length < 5) {
+      const s = vals.reduce((a, v) => a + v, 0);
+      return { mean: s / vals.length, min: Math.min(...vals), max: Math.max(...vals) };
+    }
+    const sorted = [...vals].sort((a, b) => a - b);
+    const inner = sorted.slice(1, -1);
+    return {
+      mean: inner.reduce((a, v) => a + v, 0) / inner.length,
+      min: sorted[1], // second-lowest
+      max: sorted[sorted.length - 2], // second-highest
+    };
+  };
+  return [...buckets.entries()].map(([bt, b]) => {
+    const g = b.grid ? trimmed(b.grid.vals) : {};
+    return {
+      bt,
+      grid: g.mean ?? null,
+      gridMin: g.min ?? null,
+      gridMax: g.max ?? null,
+      l1: b.l1 ? trimmed(b.l1.vals).mean : null,
+      l2: b.l2 ? trimmed(b.l2.vals).mean : null,
+      l3: b.l3 ? trimmed(b.l3.vals).mean : null,
+      solar: b.solar ? trimmed(b.solar.vals).mean : null,
+    };
+  });
 }
 
 // Cloud 20-min power trend (grid total only), as absolute timestamps.
