@@ -6,6 +6,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { useLiveStream } from "../useLiveStream.js";
+import { useTweenedWatts } from "../useTweenedValue.js";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Live data arrives over the WebSocket
@@ -95,6 +96,16 @@ export default function LiveTab() {
     Math.abs((flow.grid.import ?? 0) - (flow.grid.export ?? 0)) <= GRID_DISPLAY_DEADBAND_W
       ? { ...flow, grid: { ...flow.grid, import: 0, export: 0 } }
       : flow;
+  // Tweened display values for the tiles (2026-09-23, user request — the
+  // Anker app animates number transitions; same cadence, now same glide).
+  const homeW = useTweenedWatts(flow?.home?.consumption ?? null);
+  const gridW = useTweenedWatts(gridDisplay);
+  const battW = useTweenedWatts(
+    battery ? ((battery.cells ?? 0) > 0 ? (battery.cells ?? 0) : (battery.charge ?? 0)) : null,
+  );
+  const pvW = useTweenedWatts(pv?.production ?? null);
+  const pvHomeW = useTweenedWatts(pv?.toHome ?? null);
+  const pvBattW = useTweenedWatts(pv?.toBattery ?? null);
   // Charge/discharge ETA (2026-09-18, user request) — same shared helper as
   // BatteryTab.jsx; maxPct/floorPct/capacityKwh come from /api/flow's
   // battery object (server-resolved account limits, see server/index.js).
@@ -182,7 +193,7 @@ export default function LiveTab() {
           <div className="card">
             <div className="card-label">House</div>
             <div className="card-value">
-              {flow?.home?.consumption != null ? `${flow.home.consumption} W` : "—"}
+              {homeW != null ? `${homeW} W` : "—"}
             </div>
             <div className="card-label">total consumption</div>
           </div>
@@ -195,7 +206,7 @@ export default function LiveTab() {
               Grid {gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "balanced") : ""}
             </div>
             <div className={`card-value ${gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "") : ""}`}>
-              {gridDisplay != null ? `${Math.abs(gridDisplay)} W` : "—"}
+              {gridW != null ? `${Math.abs(gridW)} W` : "—"}
             </div>
             <div className="card-label">
               {gridFromCloud ? "via cloud" : gridDisplay != null ? "meter direct" : "—"}
@@ -218,9 +229,9 @@ export default function LiveTab() {
             <div className="card-value" style={{ color: "#c084fc" }}>
               {battery
                 ? (battery.cells ?? 0) > 0
-                  ? `⏏ −${battery.cells} W`
+                  ? `⏏ −${battW ?? 0} W`
                   : battery.charge > 0
-                    ? `⚡ +${battery.charge} W`
+                    ? `⚡ +${battW ?? 0} W`
                     : "idle"
                 : "—"}
             </div>
@@ -244,12 +255,12 @@ export default function LiveTab() {
           <div className="card">
             <div className="card-label">Solar PV</div>
             <div className="card-value" style={{ color: "#5fce80" }}>
-              {pv ? `${pv.production} W` : "—"}
+              {pvW != null ? `${pvW} W` : "—"}
             </div>
             <div className="card-label">
               {pv && pv.production > 0
                 ? pv.toHome > 0 && pv.toBattery > 0
-                  ? `${pv.toHome} W house · ${pv.toBattery} W battery`
+                  ? `${pvHomeW ?? 0} W house · ${pvBattW ?? 0} W battery`
                   : pv.toBattery > 0
                     ? "charging the battery"
                     : "to the house"

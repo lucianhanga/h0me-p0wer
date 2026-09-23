@@ -151,13 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-23, v1.5.60, `main`, working tree clean, nothing pending.**
-Latest: grid export is now tracked and visible — meter-accurate per-second
-trapezoid for today, a new grid_daily rollup table (recomputed hourly for
-yesterday, kept forever) for history, a red "Grid export" sink series on
-the Home Power Usage chart, and a "To grid" row on every Dashboard period
-tile (+ /api/stats/period navigation). NOT on the Welcome tab (explicit
-user exclusion). See the last log entry.
+**As of 2026-09-23, v1.5.62, `main`, working tree clean, nothing pending.**
+Latest: Anker-style number tweening on the Live tab — new shared
+useTweenedValue/useTweenedWatts hook (ease-out cubic, ~800 ms, reduced-
+motion aware), applied to the FlowDiagram node/edge values and the four
+main tiles. The APK analysis (PR #207) proved the Anker app's speed feel
+is animated interpolation over the same 3-5 s telemetry — we now match
+it. Before that: grid export tracking (#206). See the last log entries.
 
 **Deployment status (check first):** last verified deployed on production
 (192.168.1.10:3001) was **v1.5.51** (evening 2026-09-22). v1.5.52–v1.5.60
@@ -3882,3 +3882,22 @@ side recovers — no action needed unless it persists for days.
   (0 / 0.02 / 0.08 / 0.08 on dev data), /api/stats/period carries
   exportKwh, Dashboard tiles render the new row, the graph renders the
   new legend entry without errors; full smoke green.
+
+## Anker-style number tweening on the Live tab (2026-09-23, user request)
+
+- Follow-up to the APK analysis (doc §19): the Anker app's "faster"
+  feel is animated interpolation over the same telemetry cadence —
+  matched here. New `web/src/useTweenedValue.js`: `useTweenedValue`
+  (ease-out cubic over ~800 ms via requestAnimationFrame, shorter than
+  the 1-3 s push cadence; snaps instantly for null/non-finite and under
+  prefers-reduced-motion) and `useTweenedWatts` (integer-rounded view).
+- Applied to: FlowDiagram node labels (PV/Grid/Home/Battery watts) and
+  every Edge's watt label (the hook lives inside the Edge component),
+  and LiveTab's four main tiles (House/Grid/Battery/PV incl. the PV
+  house/battery split sub-label). The battery gauge fill already had a
+  CSS `transition: width 1s ease` — untouched.
+- The grid node's label now derives from ONE tweened signed value
+  (import − export) instead of the raw import/export pair — same display
+  (the deadband in LiveTab already zeroes both within ±20 W).
+- Gotcha fixed during verification: FlowDiagram.jsx lives at src/ ROOT
+  (not src/live/) — the hook import is `./useTweenedValue.js` there.
