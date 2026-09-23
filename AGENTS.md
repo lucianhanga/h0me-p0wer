@@ -151,18 +151,20 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-23, v1.5.58, `main`, working tree clean, nothing pending.**
-Latest: power_cutoff floor priority corrected AGAIN — the top-level
-discharge_lower_limit IS the live field on the current firmware (the
-device physically stopped at its 5% value overnight, AND the user's
-Anker-app change landed in it as 8% while the selected profile stayed
-10%). Parser now reads top-level first, selected profile as legacy
-fallback. See the last log entry.
+**As of 2026-09-23, v1.5.60, `main`, working tree clean, nothing pending.**
+Latest: grid export is now tracked and visible — meter-accurate per-second
+trapezoid for today, a new grid_daily rollup table (recomputed hourly for
+yesterday, kept forever) for history, a red "Grid export" sink series on
+the Home Power Usage chart, and a "To grid" row on every Dashboard period
+tile (+ /api/stats/period navigation). NOT on the Welcome tab (explicit
+user exclusion). See the last log entry.
 
 **Deployment status (check first):** last verified deployed on production
-(192.168.1.10:3001) was **v1.5.51**. v1.5.52–v1.5.54 (Home-line raw-sum
-consistency, gitignore WAL, Welcome endOfDay savings basis, graph
-envelope threshold) are merged but need a deploy:
+(192.168.1.10:3001) was **v1.5.51** (evening 2026-09-22). v1.5.52–v1.5.60
+(Home-line raw-sum consistency, gitignore WAL, Welcome endOfDay savings
+basis, graph envelope threshold + single-sample trim + envelope removal,
+power_cutoff top-level field fix, native-mode margin decision note, grid
+export tracking) are merged but need a deploy:
 `git pull --ff-only && docker compose up -d --build` (user's own step —
 never deploy from here).
 
@@ -3847,3 +3849,36 @@ side recovers — no action needed unless it persists for days.
   dischargeToTarget() — i.e. the Manual discharge toggle only.
   battery_priority never discharges by design. The gauge already shows
   the right floor per mode (StrategyTab passes tolerance=0 in native).
+
+## Grid export tracking: DB rollup + graph sink + dashboard row (2026-09-23, user request)
+
+- User: "in House priority (and not only) a zero-send-to-grid policy is
+  enforced even when PV overproduces and the battery is full, but
+  absolute 0 can't be guaranteed — residual/small amounts still go to the
+  grid. Track this in the DB, the graph, and the dashboards — NOT the
+  Welcome tab."
+- **DB**: new `grid_daily` table (date PK, import_kwh, export_kwh) —
+  meter-accurate trapezoid over the raw signed 1 s samples, recomputed
+  hourly for YESTERDAY only (same always-inside-retention reasoning as
+  rollupPvDaily), kept forever. The cloud's export_energy under-reports
+  exactly the small residuals this is about (period_export read 0.00 on a
+  day the meter measured 0.02 kWh), so the meter is the source of truth.
+  index.js's rollupGridDaily() runs at startup + hourly next to
+  rollupPvDaily.
+- **API**: today's exportKwh = raw per-second integral of max(0,-grid)
+  computed in /api/stats/overview's EXISTING snapshot loop (the 30-min
+  profile bucket means dilute the flicker to ~0) — it also replaces the
+  profile-based figure in `today.exportKwh`/`flows.gridExportKwh` (import
+  stays profile-based — cloud anchors fill meter-down gaps). Past days:
+  grid_daily wins, cloud month rows' export_energy fills gaps. Surfaced
+  as byPeriod.*.exportKwh and /api/stats/period's exportKwh (day/week/
+  month/year navigation included).
+- **UI**: Home Power Usage chart gains a red "Grid export" sink series
+  below zero (NOT stacked — same pattern as the Battery chart's Charging
+  series); every Dashboard period tile gains a red "To grid" row (0.00 is
+  the goal; anything above is the honest remainder). Welcome tab
+  untouched per the user's explicit exclusion.
+- Verified: byPeriod today/week/month/year export figures flow correctly
+  (0 / 0.02 / 0.08 / 0.08 on dev data), /api/stats/period carries
+  exportKwh, Dashboard tiles render the new row, the graph renders the
+  new legend entry without errors; full smoke green.

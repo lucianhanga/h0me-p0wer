@@ -38,12 +38,17 @@ const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOu
 const GRAPHS = [
   {
     title: "Home Power Usage",
-    legend: ["Grid", "PV", "Battery out", "Home"],
+    legend: ["Grid", "PV", "Battery out", "Home", "Grid export"],
     series: [
       { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "u" },
       { key: "pvHome", name: "PV", color: "#5fce80", width: 1, stack: "u" },
       { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "u" },
       { key: "home", name: "Home", color: "#e8ecef", width: 2 },
+      // Residual grid export below zero (2026-09-23, user request) — with
+      // zero-export enforced, this is the honest small remainder that still
+      // slips through. NOT stacked — a sink below zero like the Battery
+      // chart's Charging series.
+      { key: "gridExp", name: "Grid export", color: "#e5544b", width: 1 },
     ],
   },
   {
@@ -119,6 +124,8 @@ function rowValue(key, r) {
       return battChgNetOf(r);
     case "home":
       return homeOf(r);
+    case "gridExp": // residual export below zero — negative part of grid
+      return r.grid != null ? Math.min(r.grid, 0) : null;
     default:
       return r[key];
   }
