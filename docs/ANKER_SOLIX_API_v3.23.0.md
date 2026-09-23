@@ -395,6 +395,25 @@ Solarbank real-time updates). Full client API in the 3.23.0 binary:
 *(Broker host/credentials are returned by `get_client_id`; topic scheme is device-specific —
 capture via mitmproxy or consult community MQTT implementations.)*
 
+**Confirmed by static analysis of the 3.23.0 APK splits (2026-09-23,
+`split_config.arm64_v8a.apk`'s `libapp.so` string dump):** the live view's
+data path is MQTT push, not REST polling. Present in the binary:
+`StationMqttMixin` (subscribe/publish + `station_mqtt_scene`,
+`station_mqtt_siteinfo_update` message names), `_listenRealTimeData`
+listeners, the topic suffixes `/param_info` (telemetry, community message
+0405) and `/state_info` (0428), the full `akiot.mqtt.*` client family
+above, and the app's own REST provisioning (`app/devicemanage/
+get_user_mqtt_info`). The live screen's widgets are named
+`real_time_chart_*` / `real_time_curve_*` — and `split_flutter_assets_pack.apk`
+ships Lottie animation files (`oc2*.json`, `tree_*.json`) for the animated
+flow diagrams. Conclusion: the app renders device telemetry at the
+device's own MQTT cadence (~3-5 s for Solarbank 2, ~5 s for Smart Meter
+Gen 2 per the community maps) and the SMOOTH/fast feel comes from
+animation/curve interpolation on top, not from faster data — the only
+polling timers in the binary belong to unrelated features (assistant
+proactive polling at 5 min, WiFi recovery). There is no faster channel
+than the MQTT stream.
+
 ---
 
 ## 20. Solarbank 2 E1600 — practical control recipes *(community-verified unless noted)*
