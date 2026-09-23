@@ -35,6 +35,8 @@ import {
   getStoredPvPeriodStarts,
   pruneBattery,
   savePvDaily,
+  saveGridDaily,
+  getSnapshotRows,
   saveCloudGridSnapshot,
   getCloudGridRows,
   pruneCloudGrid,
@@ -237,6 +239,34 @@ function rollupPvDaily() {
   if (dateStr >= today) return;
   const v = pvKwhForDay(dateStr);
   savePvDaily(dateStr, v.produced, v.toHome, v.toBatt);
+}
+
+// Same rollup for grid import/export energy (meter trapezoid over the raw
+// signed 1 s samples — see the grid_daily table comment in db.js for why
+// the cloud's export_energy can't be trusted for small residual exports).
+// Same yesterday-only policy as rollupPvDaily.
+function rollupGridDaily() {
+  const today = localDate();
+  const dateStr = localDate(new Date(Date.now() - 86400000));
+  if (dateStr >= today) return;
+  const dayStart = new Date(`${dateStr}T00:00:00`).getTime();
+  const rows = getSnapshotRows(dayStart, dayStart + 86400000);
+  const MAX_GAP_MS = 30 * 60 * 1000;
+  let imp = 0;
+  let exp = 0;
+  for (let i = 0; i + 1 < rows.length; i++) {
+    const a = rows[i];
+    const b = rows[i + 1];
+    if (a.grid_total == null || b.grid_total == null) continue;
+    const dt = b.ts - a.ts;
+    if (dt > MAX_GAP_MS) continue; // real outage — never guess across it
+    const avg = (a.grid_total + b.grid_total) / 2;
+    const wh = (avg * dt) / 3600000;
+    if (avg >= 0) imp += wh;
+    else exp += -wh;
+  }
+  const r2 = (v) => Math.round(v * 100) / 100;
+  saveGridDaily(dateStr, r2(imp / 1000), r2(exp / 1000));
 }
 
 // One shared grid source for /api/flow AND /api/live (they must agree —
@@ -1239,16 +1269,18 @@ poller.onSnapshot((state) => {
 });
 
 // Prune samples older than the retention window once an hour; also roll up
-// PV daily energy (raw battery samples age out after 48 h).
+// PV and grid daily energy (raw samples age out after 48 h).
 pruneOld();
 pruneBattery();
 pruneCloudGrid();
 rollupPvDaily();
+rollupGridDaily();
 setInterval(() => {
   pruneOld();
   pruneBattery();
   pruneCloudGrid();
   rollupPvDaily();
+  rollupGridDaily();
 }, 3600 * 1000).unref();
 
 // Battery (Solarbank) live data: MQTT push (~3-5 s, same channel as the Anker

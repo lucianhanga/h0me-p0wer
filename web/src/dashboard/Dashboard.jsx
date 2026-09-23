@@ -148,6 +148,10 @@ const SRC_ROWS = [
   { key: "battKwh", label: "From battery", color: "#c084fc" },
 ];
 const BATT_IN_ROW = { key: "battInKwh", label: "To battery", color: "#8b98a5", stored: true };
+// Residual grid export (2026-09-23, user request) — shown on every period
+// card; 0.00 is the goal, anything above it is the honest remainder that
+// slipped past zero-export.
+const EXPORT_ROW = { key: "exportKwh", label: "To grid", color: "#e5544b" };
 
 function SourceCard({ type, title, data, formatLabel }) {
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
@@ -179,7 +183,12 @@ function SourceCard({ type, title, data, formatLabel }) {
 
   const active = offset === 0 || !past ? data : past;
   // Today (offset 0) also reports PV→battery; past periods don't have it.
-  const rows = active.battInKwh != null ? [...SRC_ROWS, BATT_IN_ROW] : SRC_ROWS;
+  // Export is available on every period (overview + /api/stats/period).
+  const rows = [
+    ...SRC_ROWS,
+    ...(active.battInKwh != null ? [BATT_IN_ROW] : []),
+    ...(active.exportKwh != null ? [EXPORT_ROW] : []),
+  ];
   return (
     <div className="src-card">
       {/* Outside the FlipTile so ‹ › period nav stays usable on the flipped

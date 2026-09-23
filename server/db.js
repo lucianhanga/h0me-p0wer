@@ -405,6 +405,36 @@ db.exec(`
   )
 `);
 
+// --- Daily grid energy rollup (meter-accurate import + export per day) ---
+// Added 2026-09-23 (user request: the residual grid export must be visible
+// long-term). Raw snapshots live only 48 h and the cloud's export_energy
+// under-reports exactly the small residual exports this table is about
+// (its period_export read 0.00 kWh on a day the meter measured 0.02) — so
+// a meter trapezoid, recomputed for YESTERDAY only (always fully inside
+// the retention window — same reasoning as rollupPvDaily in index.js),
+// persisted here forever.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS grid_daily (
+    date TEXT PRIMARY KEY,
+    import_kwh REAL NOT NULL,
+    export_kwh REAL NOT NULL
+  )
+`);
+const upsertGridDaily = db.prepare(
+  `INSERT OR REPLACE INTO grid_daily (date, import_kwh, export_kwh) VALUES (?, ?, ?)`,
+);
+const selectGridDaily = db.prepare(
+  `SELECT * FROM grid_daily WHERE date >= ? AND date <= ? ORDER BY date ASC`,
+);
+
+export function saveGridDaily(date, importKwh, exportKwh) {
+  upsertGridDaily.run(date, importKwh, exportKwh);
+}
+
+export function getGridDaily(fromDate, toDate) {
+  return selectGridDaily.all(fromDate, toDate);
+}
+
 const upsertPvDaily = db.prepare(
   `INSERT OR REPLACE INTO pv_daily (date, produced, to_home, to_batt) VALUES (?, ?, ?, ?)`,
 );

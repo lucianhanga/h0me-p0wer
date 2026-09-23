@@ -11,6 +11,7 @@ import {
   getEarliestCloudDay,
   getCloudTrend,
   getLatestBattery,
+  getGridDaily,
 } from "./db.js";
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
@@ -90,6 +91,7 @@ export function registerStatsRoute(app, deps) {
     // trend elsewhere (anchors), interpolation between anchors. Same merge
     // spirit as /api/timeseries.
     const BUCKET = 30 * 60 * 1000;
+    const MAX_GAP_MS = 30 * 60 * 1000;
     const anchors = new Map(); // bt -> {s, c}
     const put = (bt, v) => {
       const cell = (anchors.get(bt) ?? anchors.set(bt, { s: 0, c: 0 }).get(bt));
@@ -98,8 +100,20 @@ export function registerStatsRoute(app, deps) {
     };
     let peak = null;
     let localCount = 0;
+    // Meter-accurate export energy for today (2026-09-23, user request:
+    // residual export visibility). The 30-min profile buckets dilute the
+    // small residual exports to ~0 — the per-second integral of
+    // max(0, -grid) is the truth for those. Tracked pairwise over the raw
+    // samples with the same >30 min gap-skip policy as everywhere else.
+    let rawExportWh = 0;
+    let prevGrid = null;
     for (const r of getSnapshotRows(dayStartMs, now)) {
       if (r.grid_total == null) continue;
+      if (prevGrid != null && r.ts - prevGrid.ts <= MAX_GAP_MS) {
+        const avgNeg = -Math.min(0, (prevGrid.w + r.grid_total) / 2);
+        rawExportWh += (avgNeg * (r.ts - prevGrid.ts)) / 3600000;
+      }
+      prevGrid = { ts: r.ts, w: r.grid_total };
       put(Math.floor(r.ts / BUCKET) * BUCKET, r.grid_total);
       localCount++;
       if (peak == null || r.grid_total > peak) peak = r.grid_total;
@@ -115,7 +129,6 @@ export function registerStatsRoute(app, deps) {
     }
     const sorted = [...anchors.entries()].sort(([a], [b]) => a - b);
     const profile = [];
-    const MAX_GAP_MS = 30 * 60 * 1000;
     for (let i = 0; i < sorted.length; i++) {
       const [bt, cell] = sorted[i];
       profile.push({ t: bt, power: Math.round(cell.s / cell.c) });
@@ -137,6 +150,14 @@ export function registerStatsRoute(app, deps) {
       if (p.power >= 0) importKwh += (p.power * 0.5) / 1000;
       else exportKwh += (-p.power * 0.5) / 1000;
     }
+    // Meter-accurate export integral for today (computed in the snapshot
+    // loop above) — kWh, rounded like everything else here.
+    const exportKwhRaw = Math.round(rawExportWh / 10) / 100;
+    // Export is REPLACED by the meter-accurate per-second integral from the
+    // snapshot loop above (2026-09-23): the 30-min bucket means dilute the
+    // small residual exports this is meant to show. Import stays
+    // profile-based (cloud anchors fill meter-down gaps there).
+    exportKwh = exportKwhRaw;
     const avgW = profile.length
       ? Math.round(profile.reduce((a, p) => a + p.power, 0) / profile.length)
       : null;
@@ -362,6 +383,16 @@ export function registerStatsRoute(app, deps) {
     // that energy counts when it comes back as cells discharge.
     const r2 = (v) => Math.round(v * 100) / 100;
     const todayDs = localDate();
+    // Per-day export history for the period tiles (2026-09-23, user request
+    // — residual export visibility): grid_daily (meter trapezoid, recomputed
+    // hourly for yesterday) wins for finished days; the cloud month rows'
+    // export_energy fills days without a local rollup; today = the raw
+    // per-second integral from the snapshot loop above.
+    const gridDailyByDate = new Map(getGridDaily("0000-01-01", "9999-12-31").map((r) => [r.date, r]));
+    const exportKwhDay = (dateStr, cloudFallback = 0) =>
+      dateStr === todayDs
+        ? exportKwhRaw
+        : (gridDailyByDate.get(dateStr)?.export_kwh ?? cloudFallback);
     // Deliberately battEnergy.dischargedKwh (LOCAL-ONLY), not the backfilled
     // `dischargedKwh` above — cells = discharge − PV-passthrough, and only
     // discharge got a cloud backfill (no matching pvToHomeKwh backfill
@@ -399,6 +430,8 @@ export function registerStatsRoute(app, deps) {
         pvProducedKwh: r2(pvKwh),
         // "Loaded into the battery" (from PV) — informational, no € attached.
         battInKwh: todayPvBattKwh,
+        // Residual grid export today (meter-accurate per-second integral).
+        exportKwh: exportKwhRaw,
         // % of today's elapsed time covered by continuous LOCAL telemetry OR
         // successfully backfilled from Anker's cloud (see integrateBatteryEnergy
         // + the battery block above) — pvProducedKwh/battKwh are already
@@ -412,12 +445,14 @@ export function registerStatsRoute(app, deps) {
         battKwh: r2(weekRows.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
         pvKwh: r2(weekRows.reduce((a, r) => a + pvDayKwh(r.label), 0)),
         pvProducedKwh: r2(weekRows.reduce((a, r) => a + pvProducedDayKwh(r.label), 0)),
+        exportKwh: r2(weekRows.reduce((a, r) => a + exportKwhDay(r.label, r.exportKwh ?? 0), 0)),
       },
       month: {
         gridKwh: r2(monthImport),
         battKwh: r2(monthRowsCur.reduce((a, r) => a + (r.disKwh ?? 0), 0)),
         pvKwh: r2(monthRowsCur.reduce((a, r) => a + pvDayKwh(r.label), 0)),
         pvProducedKwh: r2(monthRowsCur.reduce((a, r) => a + pvProducedDayKwh(r.label), 0)),
+        exportKwh: r2(monthRowsCur.reduce((a, r) => a + exportKwhDay(r.label, r.exportKwh ?? 0), 0)),
       },
       year: {
         gridKwh: r2(yearImport),
@@ -429,6 +464,12 @@ export function registerStatsRoute(app, deps) {
         pvProducedKwh: r2(
           pvStoredTotals(`${new Date(dayStartMs).getFullYear()}-01-01`, todayDs).produced +
             r2(pvKwh),
+        ),
+        exportKwh: r2(
+          yearRows.reduce(
+            (a, r) => a + r2(monthKwh(r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh ?? 0), 0)),
+            0,
+          ),
         ),
       },
     };
@@ -556,6 +597,12 @@ export function registerStatsRoute(app, deps) {
     const earliest = getEarliestCloudDay(sn);
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
+    // Residual grid export per period (2026-09-23, user request): grid_daily
+    // (meter trapezoid over raw samples) wins; the cloud month rows'
+    // export_energy fills days without a local rollup.
+    const gridDailyByDate = new Map(getGridDaily("0000-01-01", "9999-12-31").map((r) => [r.date, r]));
+    const exportKwhDay = (dateStr, cloudFallback = 0) =>
+      gridDailyByDate.get(dateStr)?.export_kwh ?? cloudFallback;
   
     // battKwh/pvKwhDay/pvProducedDay: see server/energy-day.js's dayBattery/
     // dayPv — this route used to keep its own copies of both lookups.
@@ -597,6 +644,7 @@ export function registerStatsRoute(app, deps) {
       return getCloudTrend(sn, "month", ym).rows.map((r) => ({
         label: r.time,
         importKwh: r.import_energy ?? 0,
+        exportKwh: r.export_energy ?? 0,
       }));
     }
     const dayBars = (rows) =>
@@ -607,6 +655,7 @@ export function registerStatsRoute(app, deps) {
     let battKwhSum = 0;
     let pvKwhSum = 0;
     let pvProducedKwhSum = 0;
+    let exportKwhSum = 0;
     let bars = [];
     let periodStart = null; // yyyy-MM-dd of the period's first day (for hasEarlier)
   
@@ -621,6 +670,9 @@ export function registerStatsRoute(app, deps) {
       battKwhSum = battKwh(dateStr);
       pvKwhSum = pvKwhDay(dateStr);
       pvProducedKwhSum = pvProducedDay(dateStr);
+      exportKwhSum = r2(
+        exportKwhDay(dateStr, monthRows(dateStr.slice(0, 7)).find((r) => r.label === dateStr)?.exportKwh ?? 0),
+      );
     } else if (type === "week") {
       // Calendar week (Monday..Sunday), offset whole weeks back from the
       // current one (2026-09-16 fix: this used to be a rolling 7-day window
@@ -637,13 +689,14 @@ export function registerStatsRoute(app, deps) {
         const ds = localDate(d);
         const ym = ds.slice(0, 7);
         const row = monthRows(ym).find((r) => r.label === ds);
-        rows.push({ label: ds, importKwh: row?.importKwh ?? 0 });
+        rows.push({ label: ds, importKwh: row?.importKwh ?? 0, exportKwh: row?.exportKwh ?? 0 });
       }
       gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
       bars = dayBars(rows);
       battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
       pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
       pvProducedKwhSum = r2(rows.reduce((a, r) => a + pvProducedDay(r.label), 0));
+      exportKwhSum = r2(rows.reduce((a, r) => a + exportKwhDay(r.label, r.exportKwh), 0));
     } else if (type === "month") {
       const d = new Date(dayStart.getFullYear(), dayStart.getMonth() - offset, 1);
       const ym = localDate(d).slice(0, 7);
@@ -655,6 +708,7 @@ export function registerStatsRoute(app, deps) {
       battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
       pvKwhSum = r2(bars.reduce((a, b) => a + b.pv, 0));
       pvProducedKwhSum = r2(rows.reduce((a, r) => a + pvProducedDay(r.label), 0));
+      exportKwhSum = r2(rows.reduce((a, r) => a + exportKwhDay(r.label, r.exportKwh), 0));
     } else {
       const year = dayStart.getFullYear() - offset;
       periodStart = `${year}-01-01`;
@@ -666,6 +720,12 @@ export function registerStatsRoute(app, deps) {
           }))
         : [];
       gridKwh = r2(yearRows.reduce((a, r) => a + r.importKwh, 0));
+      exportKwhSum = r2(
+        yearRows.reduce(
+          (a, r) => a + monthRows(r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh), 0),
+          0,
+        ),
+      );
       let producedYear = 0;
       bars = yearRows.map((r) => {
         const [y, m] = r.label.split("-").map(Number);
@@ -699,6 +759,7 @@ export function registerStatsRoute(app, deps) {
         gridEur: eur(gridKwh),
         battEur: eur(battKwhSum),
         pvEur: eur(pvKwhSum),
+        exportKwh: exportKwhSum,
         savedEur: savedEur(pvProducedKwhSum, tariff),
         bars,
       },
