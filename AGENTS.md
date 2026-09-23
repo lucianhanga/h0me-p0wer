@@ -3827,3 +3827,23 @@ side recovers — no action needed unless it persists for days.
   reasoning trail is in the code comment. The September behavior (floor
   read as 10) was correct-by-accident: the field didn't exist yet, so the
   profile fallback produced the then-correct 10%.
+
+## Decision: no discharge-margin watchdog for native self-consumption (2026-09-23, user question + recommendation accepted)
+
+- User asked: with House priority = native self-consumption, our +3%
+  discharge-floor margin (DISCHARGE_TOLERANCE_PCT) isn't observed —
+  should the app detect "PV can't cover the house and the battery is
+  nearing the floor" and flip the device from Self-Consumption to Custom
+  mode to stop discharge? Recommendation given: NO — keep it simple.
+  The margin exists to protect OUR preset path (our 10 s cloud-loop is
+  the controller there). In native mode the DEVICE enforces its own
+  Anker-app-configured cutoff locally, sub-second, with no cloud
+  round-trip — strictly better protection than any watchdog we could run,
+  and a mode-flipping watchdog would reintroduce the write-lag /
+  rate-limit / jojo problems native mode was chosen to escape. The floor
+  IS observed in native mode — at the user-set Anker-app value (correctly
+  read by our app since v1.5.58), which is the single honest knob for it.
+- Where the 3% margin still applies (unchanged): the preset path's
+  dischargeToTarget() — i.e. the Manual discharge toggle only.
+  battery_priority never discharges by design. The gauge already shows
+  the right floor per mode (StrategyTab passes tolerance=0 in native).
