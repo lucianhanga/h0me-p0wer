@@ -38,10 +38,8 @@ const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOu
 const GRAPHS = [
   {
     title: "Home Power Usage",
-    legend: ["Grid", "PV", "Battery out", "Home", "Grid range"],
+    legend: ["Grid", "PV", "Battery out", "Home"],
     series: [
-      { key: "gridMin", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
-      { key: "gridMax", name: "Grid range", color: "#f7a44f44", width: 1, silent: true },
       { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "u" },
       { key: "pvHome", name: "PV", color: "#5fce80", width: 1, stack: "u" },
       { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "u" },
@@ -109,7 +107,7 @@ function robustCap(values) {
   return isOutlier ? { cap, rawMax } : null;
 }
 
-function rowValue(key, r, envelopeOn) {
+function rowValue(key, r) {
   switch (key) {
     case "pvHome":
       return pvHomeOf(r);
@@ -121,9 +119,6 @@ function rowValue(key, r, envelopeOn) {
       return battChgNetOf(r);
     case "home":
       return homeOf(r);
-    case "gridMin":
-    case "gridMax":
-      return envelopeOn ? r[key] : r.grid;
     default:
       return r[key];
   }
@@ -269,16 +264,14 @@ export default function GraphTab() {
       let fetchSeq = 0;
 
       function applyRows(rows) {
-        // The min/max "Grid range" envelope only at fine buckets (2026-09-22,
-        // user report with screenshots at every span): at 1 s sampling a
-        // 1.8-min bucket holds ~108 samples, so every kettle pulse inflated
-        // the envelope of EVERY bucket it touched to 2 kW+ — the brown band
-        // dominated the 12h/24h charts. Show it only where it's genuinely
-        // informative (1h/6h views, near-real-time transients); coarser
-        // spans show the mean only. (A p95 server-side variant was tried
-        // and reverted: a 15 s pulse is >5% of a 108 s bucket, so p95
-        // still contains it — hiding at coarse buckets is the honest fix.)
-        const envelopeOn = rowsRef.bucketMs <= 30 * 1000;
+        // The "Grid range" min/max envelope series was REMOVED entirely
+        // (2026-09-23, third spike report): with 1 s sampling it amplified
+        // every compressor-inrush sample into a needle at every span, and
+        // neither threshold-hiding (12h/24h) nor second-extreme trimming
+        // (1-3-sample spikes survived) made it calm — the user wants the
+        // Anker app's presentation, which shows no sub-minute detail. The
+        // mean series already carries real sustained transients (kettle,
+        // appliances); gridMin/gridMax stay in the API payload.
         // Home is the RAW sum grid + batteryOut (2026-09-22, user report:
         // "house consumption is not consistent with the grid spikes").
         // smoothHome()'s 1-2-1 average (added 2026-09-17 for the ~1 min
@@ -288,7 +281,7 @@ export default function GraphTab() {
         // was built to hide is down to 1-2 buckets, far smaller than the
         // real transients it was eating. Exact sum = consistent by
         // construction.
-        const homeSeries = rows.map((r) => rowValue("home", r, envelopeOn));
+        const homeSeries = rows.map((r) => rowValue("home", r));
 
         // Robust axis scaling (see robustCap()) — per-graph "envelope": the
         // one series whose height actually determines how tall the chart
@@ -324,23 +317,19 @@ export default function GraphTab() {
             data:
               s.key === "home"
                 ? rows.map((r, i) => [r.t, homeSeries[i]])
-                : rows.map((r) => [r.t, rowValue(s.key, r, envelopeOn)]),
+                : rows.map((r) => [r.t, rowValue(s.key, r)]),
           })),
         });
       }
 
       function updateStats(rows, bucketMs) {
         const grids = rows.map((r) => r.grid).filter((v) => v != null);
-        const los = rows.map((r) => r.gridMin).filter((v) => v != null);
-        const his = rows.map((r) => r.gridMax).filter((v) => v != null);
         setStatsArr((arr) =>
           arr.map((s, i) =>
             i === gi
               ? grids.length
                 ? {
                     avg: Math.round(grids.reduce((a, b) => a + b, 0) / grids.length),
-                    min: Math.round(Math.min(...los)),
-                    max: Math.round(Math.max(...his)),
                     bucketMs,
                   }
                 : null
