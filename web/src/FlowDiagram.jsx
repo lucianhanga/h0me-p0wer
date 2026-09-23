@@ -1,46 +1,54 @@
+import { useTweenedValue, useTweenedWatts } from "./useTweenedValue.js";
+
 // Live power-flow diagram (HA energy-dashboard / Anker app pattern):
 // PV on top, Grid left, Home center, Battery right. Edges animate in the
 // direction of flow and are labeled with live watts; idle edges fade out.
 // Data comes as a prop from LiveTab so the diagram and the tiles below it
 // always show the SAME payload (no separate fetches drifting apart).
+// All displayed numbers TWEEN between pushed updates (2026-09-23, user
+// request — the Anker app's smooth feel is animated interpolation over
+// the same telemetry cadence; see useTweenedValue.js).
 export default function FlowDiagram({ flow }) {
+  // Hooks must run before the early return below.
+  const pvW = useTweenedWatts(flow?.pv?.production ?? null);
+  const gridSigned = useTweenedValue(
+    flow?.grid ? (flow.grid.import ?? 0) - (flow.grid.export ?? 0) : null,
+  );
+  const homeW = useTweenedWatts(flow?.home?.consumption ?? null);
+  const cells = flow?.battery?.cells ?? 0; // cells → house (Battery→Home arc)
+  const gridCharge = flow?.battery?.gridCharge ?? 0; // grid → cells (Home→Battery arc, rare)
+  const charging = ((flow?.pv?.toBattery ?? 0) + gridCharge) > 0;
+  const battW = useTweenedWatts(
+    flow?.battery ? (charging ? (flow.pv.toBattery ?? 0) + gridCharge : cells) : null,
+  );
   if (!flow) return <p className="muted">loading…</p>;
 
-  const { grid, battery, pv, home } = flow;
-  const cells = battery?.cells ?? 0; // cells → house (Battery→Home arc)
-  const gridCharge = battery?.gridCharge ?? 0; // grid → cells (Home→Battery arc, rare)
+  const { battery, pv } = flow;
   // ONE arc between house and battery: the dominant direction only (the two
   // can briefly both read > 0 while PV splits at the DC bus — overlapping
   // opposite arcs looked wrong, reported 2026-09-14).
   const battToHome = cells >= gridCharge ? cells : 0;
   const homeToBatt = gridCharge > cells ? gridCharge : 0;
-  const charging = (pv.toBattery ?? 0) + gridCharge > 0;
   const battState = battery
     ? charging
-      ? ` ⚡ ${Math.round((pv.toBattery ?? 0) + gridCharge)} W`
+      ? ` ⚡ ${battW ?? 0} W`
       : cells > 0
-        ? ` ⏏ ${Math.round(cells)} W`
+        ? ` ⏏ ${battW ?? 0} W`
         : ""
     : "";
+  const g = gridSigned == null ? null : Math.round(gridSigned);
 
   // Node positions (viewBox 440x260)
   const N = {
-    pv: { x: 220, y: 30, label: "PV", sub: `${pv.production} W`, color: "#5fce80" },
+    pv: { x: 220, y: 30, label: "PV", sub: pvW != null ? `${pvW} W` : "—", color: "#5fce80" },
     grid: {
       x: 55,
       y: 150,
       label: "Grid",
-      sub:
-        grid.import != null
-          ? grid.import > 0
-            ? `${grid.import} W`
-            : grid.export > 0
-              ? `−${grid.export} W`
-              : "0 W" // deadbanded/balanced — never "−0 W"
-          : "—",
+      sub: g != null ? (g > 0 ? `${g} W` : g < 0 ? `−${-g} W` : "0 W") : "—", // never "−0 W"
       color: "#f7a44f",
     },
-    home: { x: 220, y: 150, label: "Home", sub: home.consumption != null ? `${home.consumption} W` : "—", color: "#e8ecef" },
+    home: { x: 220, y: 150, label: "Home", sub: homeW != null ? `${homeW} W` : "—", color: "#e8ecef" },
     batt: {
       x: 385, y: 150,
       label: battery?.name ?? "Battery",
@@ -58,8 +66,8 @@ export default function FlowDiagram({ flow }) {
   const edges = [
     [N.pv, N.batt, pv.toBattery ?? 0, "#5fce80", "pv-batt"],
     [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home"],
-    [N.grid, N.home, grid.import ?? 0, "#f7a44f", "grid-home"],
-    [N.home, N.grid, grid.export ?? 0, "#f7a44f", "home-grid"],
+    [N.grid, N.home, g != null && g > 0 ? g : 0, "#f7a44f", "grid-home"],
+    [N.home, N.grid, g != null && g < 0 ? -g : 0, "#f7a44f", "home-grid"],
     [N.batt, N.home, battToHome, "#c084fc", "batt-home"],
     [N.home, N.batt, homeToBatt, "#c084fc", "home-batt"],
   ];
@@ -94,7 +102,8 @@ export default function FlowDiagram({ flow }) {
 }
 
 function Edge({ a, b, watts, color }) {
-  if (!watts) {
+  const w = useTweenedWatts(watts ?? 0); // arcs glide with the values too
+  if (!w) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
   const mx = (a.x + b.x) / 2;
@@ -120,7 +129,7 @@ function Edge({ a, b, watts, color }) {
         fontWeight="600"
         textAnchor={vertical ? "start" : "middle"}
       >
-        {Math.round(watts)} W
+        {w} W
       </text>
     </g>
   );
