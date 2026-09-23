@@ -151,14 +151,13 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-23, v1.5.56, `main`, working tree clean, nothing pending.**
-Latest: single-sample spike trimming in /api/timeseries bucketing — the
-1 s meter poll catches 1-second compressor-inrush transients (measured:
-2951 W for exactly one sample), which drew tall needles on the 1h/6h
-charts. Bucket values are now trimmed means (drop 1 max + 1 min when ≥5
-samples) and the envelope uses the second-most-extreme sample. Real
-multi-second pulses (kettle) are preserved exactly. See the last log
-entry.
+**As of 2026-09-23, v1.5.57, `main`, working tree clean, nothing pending.**
+Latest: the "Grid range" min/max envelope series was REMOVED from the
+Home Power Usage chart — after the single-sample trim (#202), the
+remaining needles were 2-3-sample inrush spikes (850→1461→809 W),
+unfixable by any simple trim; the envelope amplified them at every span.
+The mean line carries real sustained transients on its own. See the last
+log entry.
 
 **Deployment status (check first):** last verified deployed on production
 (192.168.1.10:3001) was **v1.5.51**. v1.5.52–v1.5.54 (Home-line raw-sum
@@ -3781,3 +3780,26 @@ side recovers — no action needed unless it persists for days.
 - Note for future "why doesn't the spike show" questions: 1 s transients
   are now intentionally invisible in the charts (they're ~0.3 Wh of
   energy); the raw samples remain in the DB for anything that needs them.
+
+## "Grid range" envelope series removed from the Home chart (2026-09-23, third spike report)
+
+- User after the single-sample trim (#202): "there are less but still are
+  for both 6h and 1h." Measured the next needle (06:05:34-36): the
+  compressor inrush spans 2-3 CONSECUTIVE 1 s samples (850 → 1461 → 809
+  W) — by design it survives a "drop the single extreme" trim (the second
+  extreme, 850 W, still shapes the envelope). After three rounds of
+  spike-complaints (Home smoothing inconsistency → envelope dominating
+  12h/24h → needles at 1h/6h), the decision: the envelope series is
+  REMOVED from the Home Power Usage chart entirely — at 1 s sampling it
+  is a noise amplifier, and the Anker app (the presentation the user
+  wants to match) shows no sub-minute detail at all. Real sustained
+  transients (kettle, appliances) remain clearly visible in the mean
+  series itself.
+- Removed cleanly: the two gridMin/gridMax series + legend entry,
+  rowValue's envelopeOn collapse parameter, and the stats line's
+  never-rendered min/max fields. gridMin/gridMax stay in the
+  /api/timeseries payload (no server change needed). The trimmed-mean
+  fix from #202 stays — it keeps 1-sample needles out of the line itself.
+- Verified: build green; dev-stack screenshot shows the chart rendering
+  correctly with the 4 remaining series and no errors (dev data itself
+  is sparse/garbage — unrelated).
