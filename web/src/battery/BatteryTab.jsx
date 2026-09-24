@@ -28,10 +28,11 @@ function ParamRow({ k, v }) {
 
 // One battery: animated SOC gauge (with the configured min/max markers right
 // on it) + every battery parameter. Split out of BatteryTab (2026-09-21,
-// user request) so a second physical battery — "it will soon come," not
-// installed yet — is a data change, not a redesign: BatteryTab already
-// maps over an array and stacks cards vertically (see its own comment for
-// why vertical, not side-by-side — battery UI/UX research below).
+// user request) so a second physical battery is a data change, not a
+// redesign: BatteryTab maps over an array and stacks cards vertically (see
+// its own comment for why vertical, not side-by-side). Since 2026-09-24 a
+// real second battery exists (Solarbank 4, live-only payload) — this card
+// tolerates null config/features/constants for it.
 //
 // Own/muted next to the state text, never color alone (2026-09-21,
 // applying that same research): the near-full/low SOC zones already had
@@ -81,7 +82,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
   const showFloorTick = effectiveFloorPct != null && effectiveFloorPct !== minPct;
   const usableKwh =
-    minPct != null && maxPct != null
+    minPct != null && maxPct != null && constants?.capacityKwh != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
       : null;
   const etaLabel = formatEta(
@@ -128,7 +129,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
                 {soc} %{zoneLabel && <span className={`batt-gauge-zone ${lvlClass}`}>{zoneLabel}</span>}
               </span>
               <span className="batt-gauge-kwh">
-                {live.storedKwh} kWh of {constants.capacityKwh} kWh
+                {live.storedKwh != null && constants?.capacityKwh != null
+                  ? `${live.storedKwh} kWh of ${constants.capacityKwh} kWh`
+                  : "capacity n/a"}
               </span>
             </div>
           </div>
@@ -177,10 +180,19 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
         </div>
       </div>
 
-      <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        Battery information <span className="chevron">{open ? "▾" : "▸"}</span>
-      </button>
-      {open && (
+      {config == null && features == null ? (
+        // Secondary battery (e.g. the Solarbank 4, 2026-09-24): monitored
+        // live-only — its config endpoints aren't verified for this hardware,
+        // so there is no Configuration/Status detail to expand.
+        <p className="muted" style={{ marginTop: 8 }}>
+          live monitoring only — not part of the house system, no control or history
+        </p>
+      ) : (
+        <>
+          <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+            Battery information <span className="chevron">{open ? "▾" : "▸"}</span>
+          </button>
+          {open && (
         <div className="param-cards">
           <div className="card">
             <div className="card-label">
@@ -237,6 +249,8 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             <ParamRow k="Home load" v={fmtW(live.homeLoadW)} />
           </div>
         </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -254,13 +268,14 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
 // not comparing two gauges side by side at a glance the way you would two
 // KPI numbers.
 //
-// The endpoint (GET /api/battery/params) only ever returns ONE battery's
-// {live, config, features, constants} today — there's no second physical
-// battery yet. Rather than wait for that to design around, this reads an
-// optional `data.batteries` array first and falls back to treating the
-// current single-battery payload as a one-item list — so the day the
-// backend actually adds a second device to the response, this component
-// needs no changes at all, just more items in the array.
+// The endpoint (GET /api/battery/params) returns a `batteries` array:
+// batteries[0] is the primary (house-system) battery with full
+// {live, config, features, constants}; batteries[1] (since 2026-09-24) is
+// the Solarbank 4 on the separate "h-power" site — live-only payload with
+// null config/features/constants, which BatteryCard handles by hiding the
+// details section (see its own comment). Single-battery deployments just
+// get a one-item array; the fallback to treating the bare payload as one
+// item stays for older servers.
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
 
@@ -300,7 +315,14 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
           },
         };
       };
-      if (Array.isArray(prev.batteries)) return { ...prev, batteries: prev.batteries.map(mergeLive) };
+      // The pushed flow.battery describes the PRIMARY battery only (2026-09-24:
+      // merging it into every entry would have shown the SB2's live numbers
+      // on the Solarbank 4's card too).
+      if (Array.isArray(prev.batteries))
+        return {
+          ...prev,
+          batteries: prev.batteries.map((entry, i) => (i === 0 ? mergeLive(entry) : entry)),
+        };
       return mergeLive(prev);
     });
   }, [streamMsg, setData]);
@@ -336,7 +358,10 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
             config={b.config}
             features={b.features}
             constants={b.constants}
-            dischargeTolerancePct={dischargeTolerancePct}
+            // The discharge tolerance is a power-plan concept — it applies
+            // only to the primary (controlled) battery, never to a
+            // monitored-only secondary one.
+            dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
             onRefresh={forceRefresh}
           />
         ))}

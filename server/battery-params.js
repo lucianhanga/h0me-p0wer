@@ -56,9 +56,10 @@ async function ensureSiteId(anker, getLiveBattery) {
     anker.siteId = live.siteId;
     return live.siteId;
   }
-  const sites = await anker.getSiteList();
-  anker.siteId = sites?.site_list?.[0]?.site_id ?? null;
-  return anker.siteId;
+  // 2026-09-24: was site_list[0], which silently flipped to the new SB4 site
+  // once the account gained a second site — resolveSiteId anchors on the
+  // local meter's SN (or SITE_ID env) instead.
+  return anker.resolveSiteId();
 }
 
 const CUTOFF_EP = "power_service/v1/app/compatible/get_power_cutoff";
@@ -233,7 +234,7 @@ export async function getBatteryLimits(anker, getLiveBattery) {
   };
 }
 
-export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
+export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSecondBattery }) {
   app.get("/api/battery/params", async (req, res) => {
     // try/catch REQUIRED on every async Express 4 handler (2026-09-22 code
     // review): Express 4 doesn't forward rejected handler promises to its
@@ -275,19 +276,53 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery }) {
       });
 
       const fs = b?.featureSwitch ?? null;
+      const primary = {
+        live,
+        config,
+        features: {
+          raw: fs,
+          zeroExport: fs?.["0w_feed"] ?? null,
+          socEnable: fs?.soc_enable ?? null,
+          multiPv: fs?.multi_pv ?? null,
+          heating: fs?.heating ?? null,
+        },
+        constants: CONSTANTS,
+      };
+
+      // Second battery (2026-09-24): the account gained a Solarbank 4 on a
+      // SEPARATE site — monitored read-only (REST scen_info, memory only, no
+      // control/config/history). Live-only payload; config/features/constants
+      // are null because none of those endpoints are verified for AE103.
+      const b2 = getSecondBattery?.() ?? null;
+      const flow2 = b2 ? deriveBatteryFlow(b2) : null;
+      const secondary = b2
+        ? {
+            live: {
+              ts: b2.ts ?? null,
+              name: b2.name ?? "Solarbank",
+              sn: b2.sn ?? null,
+              soc: b2.soc ?? null,
+              outputW: b2.outputW ?? 0,
+              chargeW: b2.chargeW ?? 0,
+              cellsW: flow2.cellsW,
+              pvW: b2.pvW ?? 0,
+              pv1W: b2.pv1W ?? 0,
+              pv2W: b2.pv2W ?? 0,
+              chargingStatus: b2.chargingStatus ?? null,
+              gridToBatteryW: flow2.gridChargeW,
+              storedKwh: null, // capacity unknown for this hardware
+            },
+            config: null,
+            features: null,
+            constants: null,
+          }
+        : null;
+
       res.json({
         ok: true,
         data: {
-          live,
-          config,
-          features: {
-            raw: fs,
-            zeroExport: fs?.["0w_feed"] ?? null,
-            socEnable: fs?.soc_enable ?? null,
-            multiPv: fs?.multi_pv ?? null,
-            heating: fs?.heating ?? null,
-          },
-          constants: CONSTANTS,
+          ...primary,
+          batteries: secondary ? [primary, secondary] : [primary],
         },
       });
     } catch (err) {
