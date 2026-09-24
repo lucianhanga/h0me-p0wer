@@ -294,7 +294,11 @@ side recovers — no action needed unless it persists for days.
   `batteries[1]`; remaining design work for REAL integration (power plan,
   history, DB persistence — `battery_snapshots` is keyed by bare `ts` and
   would need an SN column or a second table) is deferred until the SB4 is
-  wired into the house system.
+  wired into the house system. Tracked as epic #218 with stories
+  #210-#217 (SB4 control-surface verification, Power Dock flow-model
+  re-validation, SB2 Pro onboarding, second meter, multi-battery DB
+  schema, multi-site monitoring, switchover runbook, two-instances-vs-
+  merged-UI decision).
 
 ## Cost estimation (epic #33, done 2026-09-10)
 
