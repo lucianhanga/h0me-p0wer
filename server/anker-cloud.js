@@ -252,15 +252,45 @@ export class AnkerClient {
     return this.post("power_service/v1/app/get_relate_and_bind_devices", {});
   }
 
-  // Live battery (Solarbank) status from the site's scene info. The site id
-  // is looked up once and cached (rate limits are tight).
-  async getBatteryInfo() {
-    if (!this.siteId) {
-      const sites = await this.getSiteList();
-      this.siteId = sites?.site_list?.[0]?.site_id ?? null;
-      if (!this.siteId) return null;
+  // Resolve THE site this app belongs to, deterministically (2026-09-24):
+  // the account gained a second site ("h-power": Solarbank 4 + Power Dock +
+  // a second meter) and `site_list[0]` silently started returning THAT one —
+  // a restart would have flipped the whole app to the wrong battery. Order of
+  // precedence: explicit SITE_ID env pin → the site whose device list
+  // contains our local Modbus meter's SN → site_list[0] with a loud warning.
+  // Only the two DETERMINISTIC resolutions are cached: the fallback is
+  // returned uncached so a boot-time "meter SN unknown yet" can't lock the
+  // process onto the wrong site forever (it retries on the next call).
+  async resolveSiteId() {
+    if (this.siteId) return this.siteId;
+    if (process.env.SITE_ID) {
+      this.siteId = process.env.SITE_ID;
+      return this.siteId;
     }
-    const scene = await this.getSceneInfo(this.siteId);
+    const sites = await this.getSiteList();
+    const list = sites?.site_list ?? [];
+    const meterSn = this.getMeterSn?.() ?? null;
+    if (meterSn) {
+      const match = list.find((s) =>
+        (s.site_device_list ?? []).some((d) => d.device_sn === meterSn),
+      );
+      if (match) {
+        this.siteId = match.site_id;
+        return this.siteId;
+      }
+      console.warn(`[cloud] no site contains meter ${meterSn}; falling back to site_list[0]`);
+    } else {
+      console.warn("[cloud] meter SN unknown; falling back to site_list[0] (order is not stable!)");
+    }
+    return list[0]?.site_id ?? null;
+  }
+
+  // Live battery (Solarbank) status from the site's scene info. The site id
+  // is resolved once and cached (rate limits are tight) — see resolveSiteId.
+  async getBatteryInfo() {
+    const siteId = this.siteId ?? (await this.resolveSiteId());
+    if (!siteId) return null;
+    const scene = await this.getSceneInfo(siteId);
     const sb = scene?.solarbank_info?.solarbank_list?.[0];
     if (!sb) return null;
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
@@ -290,7 +320,7 @@ export class AnkerClient {
       chargingStatus: sb.charging_status ?? null,
       errCode: sb.err_code ?? null,
       heatingPower: num(sb.heating_power),
-      siteId: this.siteId,
+      siteId,
     };
   }
 

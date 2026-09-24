@@ -151,20 +151,23 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-23, v1.5.62, `main`, working tree clean, nothing pending.**
-Latest: Anker-style number tweening on the Live tab — new shared
-useTweenedValue/useTweenedWatts hook (ease-out cubic, ~800 ms, reduced-
-motion aware), applied to the FlowDiagram node/edge values and the four
-main tiles. The APK analysis (PR #207) proved the Anker app's speed feel
-is animated interpolation over the same 3-5 s telemetry — we now match
-it. Before that: grid export tracking (#206). See the last log entries.
+**As of 2026-09-24, v1.5.63, `main`, working tree clean, nothing pending.**
+Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
+AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
+to the site containing our local meter's SN (was `site_list[0]`, which
+silently flipped to the SB4 site — any restart would have switched the
+whole app to the wrong battery), and the SB4 is monitored READ-ONLY as
+`batteries[1]` on the Strategy tab. See the last log entry.
 
 **Deployment status (check first):** last verified deployed on production
-(192.168.1.10:3001) was **v1.5.51** (evening 2026-09-22). v1.5.52–v1.5.60
+(192.168.1.10:3001) was **v1.5.51** (evening 2026-09-22). v1.5.52–v1.5.62
 (Home-line raw-sum consistency, gitignore WAL, Welcome endOfDay savings
 basis, graph envelope threshold + single-sample trim + envelope removal,
 power_cutoff top-level field fix, native-mode margin decision note, grid
-export tracking) are merged but need a deploy:
+export tracking, Live-tab tweening) plus v1.5.63 are merged but need a
+deploy — **v1.5.63 matters more than most: production's cached siteId is
+the only thing keeping it on the SB2 right now; the next restart without
+this fix flips it to the SB4**:
 `git pull --ff-only && docker compose up -d --build` (user's own step —
 never deploy from here).
 
@@ -285,14 +288,13 @@ side recovers — no action needed unless it persists for days.
   dial to turn — no redesign required (discussed at length with the user
   2026-09-20/21, decided NOT to do a wipe-and-repopulate; see "PV history
   beyond 48h" below for why).
-- A second physical battery is expected "soon" per the user (2026-09-21)
-  — the Battery UI is already structured to take a `data.batteries` array
-  with zero frontend changes (see "Battery UI" entry below), but
-  `GET /api/battery/params` and everywhere else in the backend that
-  assumes exactly one battery device (`getBatterySn()`'s "the one
-  cloud_history device_sn that isn't the meter", `power-plan.js`,
-  `battery-params.js`) would need real design work once that hardware
-  actually exists — deliberately not built speculatively ahead of it.
+- A second physical battery ARRIVED 2026-09-24 (Solarbank 4 E5000 Pro,
+  AE103, on its own "h-power" site with its own meter + a Power Dock) —
+  see the log entry at the bottom. It's monitored read-only as
+  `batteries[1]`; remaining design work for REAL integration (power plan,
+  history, DB persistence — `battery_snapshots` is keyed by bare `ts` and
+  would need an SN column or a second table) is deferred until the SB4 is
+  wired into the house system.
 
 ## Cost estimation (epic #33, done 2026-09-10)
 
@@ -3901,3 +3903,65 @@ side recovers — no action needed unless it persists for days.
   (the deadband in LiveTab already zeroes both within ±20 W).
 - Gotcha fixed during verification: FlowDiagram.jsx lives at src/ ROOT
   (not src/live/) — the hook import is `./useTweenedValue.js` there.
+
+## Solarbank 4 joined the account — pinned site identity + read-only SB4 monitoring (2026-09-24)
+
+- User: "In the Anker app I added another battery which is not part of the
+  h-solar system yet — it's a Solarbank 4." Account probe (read-only
+  endpoints, 6 s-spaced) found the account now has TWO sites:
+  - `h-power` (f7c11cae-…): **AE103 Solarbank 4 E5000 Pro**
+    (SN AK7DN7M0G25700946, "h-solarbank-4", SOC 47%, idle), **AE100 SOLIX
+    Power Dock** (APCDKL51F48400072, init_status 0), and a SECOND Smart
+    Meter Gen 2 (6UWDNSM0G20602494).
+  - `h-solar` (e8991374-…): unchanged house system — A17C3 Solarbank 2
+    (APCN900E26200204) + our Modbus meter (6UWDNSM0G15604127).
+- **Time bomb found and defused**: `AnkerClient.getBatteryInfo()` and
+  `battery-params.js`'s `ensureSiteId()` both fell back to
+  `site_list[0]` — which silently became **h-power** the moment the second
+  site was created. Production kept working only because its siteId was
+  cached in memory from before the change; any restart/deploy would have
+  flipped the whole app (SOC, flow diagram, power plan's write target!) to
+  the SB4. New `AnkerClient.resolveSiteId()`: `SITE_ID` env pin → the site
+  whose `site_device_list` contains the local Modbus meter's SN (injected
+  as `anker.getMeterSn` in index.js) → `site_list[0]` WITH a loud warning.
+  Only the deterministic resolutions are CACHED — the fallback is returned
+  uncached so a boot-time "meter SN unknown yet" (empty DB + meter
+  unreachable) can't lock the process onto the wrong site until restart.
+  Side effect: in fallback mode `anker.siteId` stays unset, so the power
+  plan can't write to a guessed site at all — safer than before.
+- **SB4 monitoring, read-only**: `syncSecondBattery()` in index.js — 30 s
+  `scen_info` against the non-primary site (resolved once, cached;
+  single-site accounts skip entirely), in-memory `latestBattery2` only.
+  Deliberately no: power-plan control, MQTT (the AE103 telemetry field map
+  is unverified — ours is the SB2's `_A17C1_0405` community map),
+  `get_power_cutoff`, and NO DB persistence (`battery_snapshots`' PRIMARY
+  KEY is bare `ts` — two batteries would collide on the same second; the
+  SN-column-vs-second-table decision waits until the SB4 actually joins
+  the house system).
+- `/api/battery/params` gains `batteries`: `[0]` = the existing
+  `{live, config, features, constants}` payload (top-level fields kept for
+  backward compat), `[1]` = SB4 live-only with null config/features/
+  constants. The multi-battery-ready frontend from 2026-09-21
+  (`BatteryTab.jsx` maps `data.batteries`) took it with only null-guards:
+  gauge kWh subtitle and usable-window math tolerate null constants, the
+  details section is replaced by a "live monitoring only" note when
+  config/features are null, the WS live-merge applies to `batteries[0]`
+  ONLY (the pushed flow.battery is the SB2 — merging into every entry
+  would have shown the SB2's numbers on the SB4's card), and
+  `dischargeTolerancePct` (a power-plan concept) is passed to the primary
+  card only.
+- Verified: fresh dev process pinned h-solar via the meter SN from
+  cloud_history despite `site_list[0]` being h-power (exactly the
+  restart-time-bomb scenario), no fallback warnings in the log; Strategy
+  tab screenshot shows both cards (SB2 full: 33% charging 42 W, min 8% /
+  floor 11% / max 95% ticks; SB4: 47%, idle, capacity n/a); SB4 ts
+  refreshes on the 30 s cadence with zero `[battery2]` errors; Docker-
+  runtime-layout smoke passes (one-entry `batteries` with null live when
+  cloud is disabled + empty DB — no crash on the new path).
+- **Note for the user, not done**: ROI BOM's `SOLIX4E5000` entry is still
+  "Extended (not yet purchased)" although the device now physically
+  exists — flipping `excluded: false` changes `totalInvestedEur` by
+  €2,349, so it waits for the user to confirm price/date.
+- Also observed, unchanged: Anker MQTT stalled AGAIN (health:
+  connected:true, fresh:false — the recurring broker-side pattern); the
+  3 s REST fast path covers live data.

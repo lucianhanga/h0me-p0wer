@@ -96,6 +96,10 @@ const anker = new AnkerClient(
   cloudEnabled ? process.env.ANKER_PASSWORD : "",
   process.env.ANKER_COUNTRY ?? "DE",
 );
+// Identity anchor for site resolution (2026-09-24): with two sites on the
+// account, the app belongs to the site containing OUR meter — never a
+// positional guess (site_list[0] now returns the SB4's site).
+anker.getMeterSn = () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
 
 const app = express();
 app.use(express.json());
@@ -884,6 +888,7 @@ registerStatsRoute(app, {
 registerBatteryParamsRoute(app, {
   anker,
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
+  getSecondBattery: () => latestBattery2,
 });
 app.get(
   "/api/cloud/energy",
@@ -1361,6 +1366,62 @@ async function syncBatteryThrottled(minGapMs) {
 }
 setTimeout(syncBattery, 10 * 1000);
 setInterval(() => syncBatteryThrottled(10 * 1000), 10 * 1000).unref();
+
+// Second-battery live monitoring — READ-ONLY (2026-09-24): the account
+// gained a Solarbank 4 (AE103) on a SEPARATE site ("h-power", with its own
+// meter + a Power Dock). It's not part of the house system, so: no control,
+// no MQTT (the AE103 field map is unverified), no DB persistence (the
+// battery_snapshots PK is `ts` — two batteries would collide). Just a 30 s
+// scen_info against the non-primary site, kept in memory for
+// /api/battery/params' `batteries[1]`.
+let latestBattery2 = null;
+let secondarySiteId = null;
+let syncSecondBatteryInFlight = false;
+async function syncSecondBattery() {
+  if (!anker.configured || syncSecondBatteryInFlight) return;
+  syncSecondBatteryInFlight = true;
+  try {
+    if (!secondarySiteId) {
+      const primaryId = await anker.resolveSiteId();
+      if (!primaryId) return;
+      const sites = await anker.getSiteList();
+      const other = (sites?.site_list ?? []).find(
+        (s) =>
+          s.site_id !== primaryId &&
+          (s.site_device_list ?? []).some((d) => d.device_type === 3),
+      );
+      if (!other) return; // single-site account — nothing else to monitor
+      secondarySiteId = other.site_id;
+      console.log(
+        `[battery] second site "${other.site_name}" (${secondarySiteId}) — monitoring its solarbank read-only`,
+      );
+    }
+    const scene = await anker.getSceneInfo(secondarySiteId);
+    const sbInfo = scene?.solarbank_info;
+    const sb = sbInfo?.solarbank_list?.[0];
+    if (!sb) return;
+    const num = (v) => (v === "" || v == null ? 0 : Number(v));
+    latestBattery2 = {
+      ts: Date.now(),
+      sn: sb.device_sn,
+      name: sb.device_name,
+      soc: num(sb.battery_power),
+      outputW: num(sb.output_power),
+      chargeW: num(sb.bat_charge_power),
+      pvW: num(sb.photovoltaic_power),
+      pv1W: num(sbInfo?.solar_power_1),
+      pv2W: num(sbInfo?.solar_power_2),
+      chargingStatus: sb.charging_status ?? null,
+    };
+    lastCloudOkAt = Date.now();
+  } catch (err) {
+    console.warn(`[battery2] sync failed: ${err.message}`);
+  } finally {
+    syncSecondBatteryInFlight = false;
+  }
+}
+setTimeout(syncSecondBattery, 20 * 1000); // after the primary battery sync
+setInterval(syncSecondBattery, 30 * 1000).unref();
 
 // Fast path while a frontend is watching (2026-09-22, user report: "the
 // Anker app is much faster, our UI is delayed a few seconds, intermediate
