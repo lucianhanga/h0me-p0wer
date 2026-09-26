@@ -9,6 +9,15 @@
     "priceSnapshotDate": "2026-09-15"
   },
   {
+    "asin": "NAKA6PACK",
+    "name": "NAKA Solarmodul 500 W JAM60D41-500/LB Vollschwarz (6er-Angebot, 0% MwSt.)",
+    "desc": "Six more 500 W full-black glass-glass panels (3000 Wp) bought as a 6-piece offer — 1953×1134×30 mm, 27.3 kg each. Together with the original pair: 4000 Wp total, the generation side of the h-power system.",
+    "qty": 1,
+    "unitPriceEur": 609.99,
+    "url": "https://www.amazon.de/dp/B0DYF56BTN",
+    "priceSnapshotDate": "2026-09-26"
+  },
+  {
     "asin": "PVMOUNT",
     "name": "PV Flachdach-Halterung ohne Bohren, für 2 Module, Silber (Solamount)",
     "desc": "Ballasted flat-roof/ground mount for both 500 W panels — no drilling; tilted toward SSW as installed.",
@@ -25,6 +34,24 @@
     "unitPriceEur": 38.16,
     "url": "https://www.amazon.de/dp/B0F4QGJVXN",
     "priceSnapshotDate": "2026-09-15"
+  },
+  {
+    "asin": "B0F4QGJVXNB",
+    "name": "Anker SOLIX solar extension cable 10 m, 6 mm² (set of 2)",
+    "desc": "Second purchase of the same 10 m, 6 mm² MC4 extension cables — for the additional panels of the h-power system.",
+    "qty": 3,
+    "unitPriceEur": 44.90,
+    "url": "https://www.amazon.de/dp/B0F4QGJVXN",
+    "priceSnapshotDate": "2026-09-26"
+  },
+  {
+    "asin": "B0F4QH9F1Q",
+    "name": "Anker SOLIX Y cable for solar panels (pack of 2)",
+    "desc": "Y-splitter MC4 cable for parallel photovoltaic connection of two panels on one input (pack of 2).",
+    "qty": 2,
+    "unitPriceEur": 19.90,
+    "url": "https://www.amazon.de/dp/B0F4QH9F1Q",
+    "priceSnapshotDate": "2026-09-26"
   },
   {
     "asin": "SB2E1600PRO",
