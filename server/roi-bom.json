@@ -50,30 +50,24 @@
     "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
     "qty": 1,
     "unitPriceEur": 412.99,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.amazon.de/dp/B0H2HZWTX9",
     "priceSnapshotDate": "2026-09-15"
   },
   {
     "asin": "BP5000",
     "name": "Anker Solix BP5000 – 5 kWh Erweiterungsakku für Anker SOLIX 4 Pro",
-    "desc": "5 kWh plug-and-play expansion battery module for the Anker SOLIX 4 Pro line (LiFePO4, up to 30 kWh total). Note: built for the 4 Pro system, not the E1600 Plus installed here — tracked as a possible future upgrade path, not a confirmed-compatible add-on.",
+    "desc": "5 kWh plug-and-play expansion battery module for the Anker SOLIX 4 Pro line (LiFePO4, up to 30 kWh total). An additional standalone unit beyond the BP5000 included in the Solarbank 4 bundle below.",
     "qty": 1,
     "unitPriceEur": 1049.00,
-    "excluded": true,
-    "category": "extended",
     "url": "https://solago.de/products/anker-solix-bp5000-5kwh-erweiterungsakku-fur-anker-solix-4-pro",
     "priceSnapshotDate": "2026-09-19"
   },
   {
     "asin": "SOLIX4E5000",
     "name": "Anker SOLIX Solarbank 4 E5000 Pro + 1× BP5000 + Smart Meter Gen 2",
-    "desc": "Full next-gen bundle (5 kWh Solarbank 4 Pro + one BP5000 expansion + a second-generation Smart Meter) — a whole-system upgrade path, not an add-on to the installed E1600 Plus; would supersede rather than complement the standalone BP5000 entry above. Seller: atc_solarvolt / New Power GmbH, Aschauer Str. 32, 81549 München. eBay Artikelnr. 127918005920, Bestellnummer 03-15200-52914.",
+    "desc": "Full next-gen bundle (5 kWh Solarbank 4 Pro + one BP5000 expansion + a second-generation Smart Meter) — the h-power system that becomes the main installation at the switchover (epic #218). Seller: atc_solarvolt / New Power GmbH, Aschauer Str. 32, 81549 München. eBay Artikelnr. 127918005920, Bestellnummer 03-15200-52914.",
     "qty": 1,
     "unitPriceEur": 2299.00,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.ebay.de/itm/127918005920",
     "priceSnapshotDate": "2026-09-20"
   },
@@ -83,41 +77,33 @@
     "desc": "Aluminum-faced mineral wool insulation mat, 50 mm, 5×1 m roll. Brand on listing: 4home&work.",
     "qty": 1,
     "unitPriceEur": 75.00,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.amazon.de/s?k=Rockwool+KLIMAMAT+Steinwolle+Lamellenmatte+alukaschiert+50mm+5m+x+1m",
     "priceSnapshotDate": "2026-09-19"
   },
   {
     "asin": "SOLIXPOWERDOCK",
     "name": "Anker SOLIX Power Dock",
-    "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — a whole-system upgrade path, not an add-on to the installed E1600 Plus.",
+    "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — the hub of the h-power system.",
     "qty": 1,
     "unitPriceEur": 299.00,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.ankersolix.com/de/products/a17c5-multisystem?variant=58394961281373&ref=naviMenu_1_5_1_1_img&s_combine=BE100GZK&o_c=de&o_tab=1",
     "priceSnapshotDate": "2026-09-20"
   },
   {
     "asin": "B0DXVVDWTF",
     "name": "ABB S203-C32 Leitungsschutzschalter, 3-polig, C32A, 6kA",
-    "desc": "3-pole miniature circuit breaker (400V three-phase, 32A, 6kA breaking capacity), DIN-rail mount. Planned three-phase protection ahead of a Power Dock / Multisystem upgrade — not part of the installed single-phase E1600 Plus setup.",
+    "desc": "3-pole miniature circuit breaker (400V three-phase, 32A, 6kA breaking capacity), DIN-rail mount. Three-phase protection for the Power Dock / Multisystem installation.",
     "qty": 1,
     "unitPriceEur": 39.90,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.amazon.de/dp/B0DXVVDWTF",
     "priceSnapshotDate": "2026-09-20"
   },
   {
     "asin": "B003A6DLBQ",
     "name": "ABB F204 A-40/0.03-L FI-Schutzschalter, Typ A, 4-polig, 40A, 30mA",
-    "desc": "4-pole Type A residual current device (400V three-phase + neutral, 40A, 30mA trip), DIN-rail mount. Planned three-phase protection ahead of a Power Dock / Multisystem upgrade — not part of the installed single-phase E1600 Plus setup.",
+    "desc": "4-pole Type A residual current device (400V three-phase + neutral, 40A, 30mA trip), DIN-rail mount. Three-phase protection for the Power Dock / Multisystem installation.",
     "qty": 1,
     "unitPriceEur": 30.39,
-    "excluded": true,
-    "category": "extended",
     "url": "https://www.amazon.de/dp/B003A6DLBQ",
     "priceSnapshotDate": "2026-09-20"
   }
