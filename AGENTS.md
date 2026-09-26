@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.83, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.84, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4366,11 +4366,12 @@ side recovers — no action needed unless it persists for days.
   → 403, 0000 with env unset → 200; modal screenshot; production .env
   needs STRATEGY_PIN set by the user (default 0000 until then).
 - **Header**: language switcher uses flags 🇬🇧🇩🇪🇷🇴 instead of EN/DE/RO
-  (user request); header is now strictly ONE row (flex-wrap: nowrap,
+  (user request); header is ONE row on desktop (flex-wrap: nowrap,
   nav scrolls horizontally with hidden scrollbar, buttons/h1/lang-switch
-  flex-shrink: 0, app-version hidden ≤600px) — German tab titles had
-  wrapped it to two rows. Verified 60px header height at 390px + 1000px,
-  no page overflow.
+  flex-shrink: 0) — German tab titles had wrapped it to two rows — but
+  TWO rows on phones (title+mic+flags row, nav on its own full-width
+  row; user correction: tabs must not share the title row). Verified at
+  390px + 1000px.
 - **Graph tab: per-module tiles** (user: "visualization of the solarbank
   and attached battery temperatures + a tile with their load statuses"):
   new module_snapshots table (ts, module "main"/"expN", soc,
