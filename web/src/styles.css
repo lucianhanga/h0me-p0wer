@@ -19,8 +19,9 @@ header {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
-  /* One row, always (2026-09-27, user request — German tab titles wrapped
-     to a second row): the nav scrolls horizontally instead of wrapping. */
+  /* One row on DESKTOP (2026-09-27, user request — German tab titles
+     wrapped it to two rows): the nav scrolls horizontally instead of
+     wrapping. Phones override this below (their own two-row layout). */
   flex-wrap: nowrap;
   border-bottom: 1px solid #2a3238;
   margin-bottom: 1.5rem;
@@ -178,6 +179,20 @@ nav button.nav-active {
   /* Keep the header to one row on phones: the version is expendable. */
   .app-version {
     display: none;
+  }
+
+  /* Phone header = TWO rows (2026-09-27, user correction): title + mic +
+     language flags on the first row, the tab nav on its OWN full-width
+     second row (scrolling within itself if needed) — tabs must not share
+     the title row. Desktop keeps the single row (base rule). */
+  header {
+    flex-wrap: wrap;
+    row-gap: 0.4rem;
+  }
+
+  nav {
+    flex-basis: 100%;
+    order: 5;
   }
 
   header {
