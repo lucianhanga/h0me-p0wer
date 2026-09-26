@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-24, v1.5.63, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.65, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -3969,3 +3969,17 @@ side recovers — no action needed unless it persists for days.
 - Also observed, unchanged: Anker MQTT stalled AGAIN (health:
   connected:true, fresh:false — the recurring broker-side pattern); the
   3 s REST fast path covers live data.
+
+## ROI BOM: E1600 Plus returned, replaced by the E1600 Pro (2026-09-26, user request)
+
+- User returned the originally purchased Solarbank 2 E1600 Plus (€398.99,
+  Amazon B0D1XMRC56) and instead has the **Solarbank 2 E1600 Pro**
+  (€429.00, solago.de). BOM entry replaced (`SB2E1600PRO`, synthetic asin
+  like PVMOUNT/BP5000, thumbnail fetched from the Shopify CDN — a PNG
+  despite the .webp URL, converted to 400px JPEG with sips per the
+  established pattern); the stale Plus image was removed.
+  `totalInvestedEur` 904.34 → **934.35**, verified live via /api/roi.
+- Hardware note: the E1600 Pro is the A17C1 the user mentioned as "not
+  yet registered with the Anker account" — the A17C3 (Plus) still in the
+  account is the unit currently wired in; the swap happens with the
+  h-power switchover (epic #218).
