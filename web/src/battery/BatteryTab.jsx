@@ -30,9 +30,11 @@ function ParamRow({ k, v }) {
 // expansion packs), stacked like the real hardware — main unit at the
 // bottom, expansions on top; segment height ∝ capacity. Per-module SOC
 // comes from MQTT only (main unit via 0405 a3, packs via 040a) — REST has
-// no per-pack data, so modules show "—" until the broker delivers (a note
-// says so). Never falls back to the overall SOC: that average is NOT the
-// per-module value, and showing it as one would be fabrication.
+// no per-pack data. While MQTT hasn't delivered (broker stalls can last
+// days), each module instead shows the OVERALL charge as a clearly-marked
+// estimate ("≈", user request 2026-09-26: "show them how full they are
+// too") — exact per-module values replace the estimate automatically the
+// moment the first 040a arrives.
 function BatteryModules({ live, constants }) {
   const packs = constants?.expansionPacks ?? 0;
   if (!packs) return null;
@@ -60,29 +62,42 @@ function BatteryModules({ live, constants }) {
   const totalKwh = modules.reduce((a, m) => a + m.kwh, 0);
   const lvlOf = (soc) =>
     soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  const anyEstimate = modules.some((m) => m.soc == null) && live.soc != null;
   return (
     <div className="batt-modules">
       <div className="batt-seg" title="battery modules, stacked as installed">
-        {[...modules].reverse().map((m) => (
-          <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
-            <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
-            <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>
-          </div>
-        ))}
+        {[...modules].reverse().map((m) => {
+          const shown = m.soc ?? live.soc ?? null;
+          const est = m.soc == null && shown != null;
+          return (
+            <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
+              <div className={`batt-seg-fill ${lvlOf(shown) ?? ""}`} style={{ height: `${shown ?? 0}%` }} />
+              <span className="batt-seg-soc">
+                {shown != null ? `${est ? "≈" : ""}${shown} %` : "—"}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <div className="batt-modules-legend">
-        {modules.map((m) => (
-          <div key={m.key} className="batt-modules-row">
-            <span className="batt-modules-name">{m.name}</span>
-            <span className="batt-modules-detail">
-              {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
-              {m.soh != null && ` · SOH ${m.soh} %`}
-              {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
-            </span>
+        {modules.map((m) => {
+          const shown = m.soc ?? live.soc ?? null;
+          const est = m.soc == null && shown != null;
+          return (
+            <div key={m.key} className="batt-modules-row">
+              <span className="batt-modules-name">{m.name}</span>
+              <span className="batt-modules-detail">
+                {m.kwh} kWh · {shown != null ? `${est ? "≈" : ""}${shown} %` : "—"}
+                {m.soh != null && ` · SOH ${m.soh} %`}
+                {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
+              </span>
+            </div>
+          );
+        })}
+        {anyEstimate && (
+          <div className="batt-modules-note muted">
+            ≈ overall charge shown per module — exact per-module values arrive via MQTT
           </div>
-        ))}
-        {live.expansions == null && (
-          <div className="batt-modules-note muted">per-module SOC arrives via MQTT when the broker delivers</div>
         )}
       </div>
     </div>
@@ -421,7 +436,13 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   if (error && !data) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">loading…</p>;
 
-  const batteries = Array.isArray(data.batteries) ? data.batteries : [data];
+  // Only the PRIMARY system's batteries are shown here (2026-09-26, user
+  // request: "show only the batteries in the h-solar system") — batteries[0]
+  // is the house system by construction; batteries[1+] (the Solarbank 4 on
+  // the h-power site) stay tracked in the backend/API but are not rendered
+  // on this tab — they belong to the future multi-system view (epic #218).
+  const all = Array.isArray(data.batteries) ? data.batteries : [data];
+  const batteries = all.slice(0, 1);
   const latestTs = batteries.reduce((max, b) => Math.max(max, b.live?.ts ?? 0), 0) || null;
 
   return (
