@@ -244,7 +244,15 @@ export class AnkerMqtt {
       // NOTE: backoff is reset only when telemetry actually arrives (#onMessage),
       // not here — a connect that never delivers data must keep escalating.
       console.log(`[mqtt] connected to ${info.endpoint_addr}, subscribing to battery ${this.sn}`);
-      const topic = `dt/${info.app_name}/${this.pn}/${this.sn}/`;
+      // Subscribe with the # wildcard (2026-09-26 bug, found live): the
+      // A17C3 published telemetry on the BARE topic dt/.../sn/, but the
+      // A17C1 (Pro) publishes on SUBTOPICS (dt/.../sn/param_info,
+      // dt/.../sn/state_info) — a bare trailing-slash subscription matched
+      // none of them, so after the Plus→Pro swap we received ZERO messages
+      // while the broker was routing fine. Misdiagnosed for a day as the
+      // third "broker stall". `sn/#` also matches the bare topic itself
+      // (MQTT spec), so both device generations are covered.
+      const topic = `dt/${info.app_name}/${this.pn}/${this.sn}/#`;
       this.client.subscribe(topic, (err) => {
         if (err) console.warn(`[mqtt] subscribe failed: ${err.message}`);
         else this.#sendRealtimeTrigger();
