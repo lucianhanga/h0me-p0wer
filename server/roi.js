@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   getAnyDeviceSn,
-  getBatterySn,
+  getBatterySns,
   getPvDaily,
   getPvDailyDates,
   getStoredPeriodStarts,
@@ -56,15 +56,15 @@ function loadBom() {
 // the dashboard channel audit: cloud 0.41 ≈ local cells 0.34, NOT the
 // inverter output), so it never overlaps the PV channel — do NOT subtract
 // pvToHome here.
-function cellsKwhForDay(battSn, dateStr) {
-  const { dischargedKwh, hasRows } = dayBattery(battSn, dateStr);
+function cellsKwhForDay(battSns, dateStr) {
+  const { dischargedKwh, hasRows } = dayBattery(battSns, dateStr);
   return { cellsKwh: dischargedKwh, hasRows };
 }
 
 // Measured per-day savings from installDate to YESTERDAY (today is
 // unfinished and would drag the average down). Display-only since the
 // baseline took over the ROI math — kept as the "actual" comparison.
-function measuredSavings(battSn, installDate, tariff) {
+function measuredSavings(battSns, installDate, tariff) {
   const yesterday = localDate(new Date(Date.now() - DAY_MS));
   const pvByDate = new Map(getPvDaily(installDate, yesterday).map((r) => [r.date, r]));
   const series = [];
@@ -81,7 +81,7 @@ function measuredSavings(battSn, installDate, tariff) {
     // undercounts a day that mostly charged the battery for later).
     const pvToHomeKwh = row?.to_home ?? 0;
     const producedKwh = row?.produced ?? 0;
-    const { cellsKwh, hasRows } = cellsKwhForDay(battSn, date);
+    const { cellsKwh, hasRows } = cellsKwhForDay(battSns, date);
     if (pvByDate.has(date) || hasRows) measuredDays++;
     const dayEur = savedEur(producedKwh, tariff) ?? 0;
     savingsSoFar = r2(savingsSoFar + dayEur);
@@ -282,7 +282,10 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const tariff = getTariff();
 
   const meterSn = deps.getMeterSn?.() ?? getAnyDeviceSn();
-  const battSn = deps.getBatterySn?.() ?? getBatterySn(meterSn);
+  // All battery SNs (2026-09-26 swap: E1600 Plus → Pro) — pre-swap days
+  // live under the old SN; both must count toward measured savings AND
+  // the install-date detection, or ROI history resets to the swap day.
+  const battSns = deps.getBatterySns?.() ?? getBatterySns(meterSn);
 
   // installDate = first day with savings data (PV rollup or battery trend),
   // but NEVER before the panels went up: the actual return of THIS
@@ -291,13 +294,13 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   // decision 2026-09-15).
   const PANELS_INSTALL_DATE = "2026-09-13";
   const candidates = [...getPvDailyDates()];
-  if (battSn) candidates.push(...getStoredPeriodStarts(battSn, "day"));
+  for (const s of battSns) candidates.push(...getStoredPeriodStarts(s, "day"));
   const derived = candidates.length
     ? candidates.reduce((a, b) => (a < b ? a : b))
     : FALLBACK_INSTALL_DATE;
   const installDate = derived > PANELS_INSTALL_DATE ? derived : PANELS_INSTALL_DATE;
 
-  const measured = measuredSavings(battSn, installDate, tariff);
+  const measured = measuredSavings(battSns, installDate, tariff);
   const measuredHint = {
     measuredDays: measured.measuredDays,
     avgDailySavingsEur: measured.avgDailySavingsEur,

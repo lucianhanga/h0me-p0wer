@@ -16,21 +16,30 @@ import { getCloudTrend, getPvDaily } from "./db.js";
 // (computed, not assumed zero) in case that ever changes, but real
 // per-day charge amounts come from `dayPv()`'s `toBattery` instead (see
 // its own comment for why).
-export function dayBattery(battSn, dateStr) {
-  if (!battSn) return { dischargedKwh: 0, chargedKwh: 0, hasRows: false };
-  const rows = getCloudTrend(battSn, "day", dateStr).rows;
+export function dayBattery(battSns, dateStr) {
+  // battSns: one SN or an array. History spans the 2026-09-26 battery swap
+  // (E1600 Plus → Pro): pre-swap days live under the old SN, post-swap under
+  // the new one — they never overlap in time (physical swap), so summing
+  // both SNs' rows per day is physically correct.
+  const sns = (Array.isArray(battSns) ? battSns : [battSns]).filter(Boolean);
+  if (!sns.length) return { dischargedKwh: 0, chargedKwh: 0, hasRows: false };
   let dischargedKwh = 0;
   let chargedKwh = 0;
-  for (const r of rows) {
-    if (r.power == null) continue;
-    const kwh = (r.power * (20 / 60)) / 1000;
-    if (kwh >= 0) dischargedKwh += kwh;
-    else chargedKwh += -kwh;
+  let hasRows = false;
+  for (const sn of sns) {
+    const rows = getCloudTrend(sn, "day", dateStr).rows;
+    if (rows.length) hasRows = true;
+    for (const r of rows) {
+      if (r.power == null) continue;
+      const kwh = (r.power * (20 / 60)) / 1000;
+      if (kwh >= 0) dischargedKwh += kwh;
+      else chargedKwh += -kwh;
+    }
   }
   return {
     dischargedKwh: Math.round(dischargedKwh * 100) / 100,
     chargedKwh: Math.round(chargedKwh * 100) / 100,
-    hasRows: rows.length > 0,
+    hasRows,
   };
 }
 

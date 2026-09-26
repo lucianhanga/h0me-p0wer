@@ -300,6 +300,10 @@ export class AnkerClient {
       ts: Date.now(),
       sn: sb.device_sn,
       name: sb.device_name,
+      // Product number (A17C3 Plus / A17C1 Pro / AE103 Solarbank 4) — the
+      // MQTT topics are keyed by pn, and the 2026-09-26 Plus→Pro swap made
+      // the hardcoded A17C3 default wrong for the new unit.
+      pn: sb.device_pn ?? null,
       soc: num(sb.battery_power), // state of charge, percent
       outputW: num(sb.output_power), // discharging into home
       chargeW: num(sb.bat_charge_power), // charging

@@ -179,13 +179,28 @@ export function getEarliestCloudDay(sn) {
   return selectEarliestDay.get(sn ?? "")?.d ?? null;
 }
 
-// Battery SN = the cloud_history device SN that is not the meter.
+// Battery SNs = all cloud_history device SNs that aren't the meter. Since
+// the 2026-09-26 hardware swap (Solarbank 2 E1600 Plus → E1600 Pro) there
+// are TWO: history stays under the OLD SN forever while new rows land under
+// the new one. getBatterySn() = the CURRENT battery (freshest rows), for
+// live/config purposes; getBatterySns() = all of them, for history
+// aggregation across the swap (old and new never overlap in time — it was a
+// physical swap — so summing both per day is physically correct).
 const selectBatterySn = db.prepare(`
-  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE device_sn != ? LIMIT 1
+  SELECT device_sn AS sn FROM cloud_history WHERE device_sn != ?
+  GROUP BY device_sn ORDER BY MAX(period_start) DESC, MAX(fetched_at) DESC LIMIT 1
 `);
 
 export function getBatterySn(meterSn) {
   return selectBatterySn.get(meterSn ?? "")?.sn ?? null;
+}
+
+const selectBatterySns = db.prepare(`
+  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE device_sn != ? ORDER BY sn
+`);
+
+export function getBatterySns(meterSn) {
+  return selectBatterySns.all(meterSn ?? "").map((r) => r.sn);
 }
 
 // --- Battery (Solarbank) live snapshots ------------------------------------
@@ -550,8 +565,9 @@ export function getCloudDayPower(sn, fromDate, toDate) {
 // whether OUR poller was running, so a local outage (2026-09-16, see
 // AGENTS.md) doesn't have to mean permanently undercounted totals. Kept in
 // its own table rather than reusing cloud_history: that table's device_sn
-// column is used elsewhere (getBatterySn) to mean "the one non-meter SN
-// seen" — adding a synthetic PV key there would break that assumption.
+// column is used elsewhere (getBatterySn/getBatterySns) to mean "the
+// non-meter SNs seen" — adding a synthetic PV key there would break that
+// assumption.
 db.exec(`
   CREATE TABLE IF NOT EXISTS cloud_pv_history (
     period_type TEXT NOT NULL,

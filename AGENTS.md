@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.69, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.70, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4035,3 +4035,49 @@ side recovers — no action needed unless it persists for days.
   the ROI tab list and the PDF): PV panels → mounts → cabling →
   storage (SB2 Pro, SB4 bundle, BP5000) → Power Dock → metering →
   electrical protection (breaker, RCD) → housing/insulation.
+
+## Battery hardware swap: Solarbank 2 E1600 Plus → E1600 Pro (2026-09-26, user did the swap in the Anker app)
+
+- The user removed the A17C3 Plus (APCN900E26200204) and added the A17C1
+  Pro (AL3GQ80F27202185, "Solarbank 2 E1600 Pro") to h-solar — and Anker
+  RECREATED the h-solar site (e8991374-… → 1ffbe087-…). The meter SN is
+  unchanged, so the meter-anchored resolveSiteId() (v1.5.63) follows the
+  new site automatically on restart. Without a restart, a running process
+  keeps polling the DELETED site id — production needs a redeploy/
+  `docker compose restart` to pick the Pro up.
+- Code changes for the swap:
+  - mqtt.js's pn was hardcoded "A17C3" (MQTT topics are keyed by product
+    number). getBatteryInfo() now returns `pn` from scen_info, and
+    startBatteryMqtt() passes it AND rebinds (stop + re-create) when the
+    live battery's SN changes under a running process. The A17C1 is the
+    exact device the community _A17C1_0405 field map was built for, so
+    telemetry should decode natively (unverified — the broker was stalled
+    again at swap time; REST covers it).
+  - getBatterySn() (db.js) now picks the SN with the FRESHEST rows
+    (MAX(period_start), MAX(fetched_at)) — the old "any non-meter SN,
+    LIMIT 1" was arbitrary once two battery SNs existed. New
+    getBatterySns() returns ALL non-meter SNs.
+  - History continuity: dayBattery() (energy-day.js) accepts an SN ARRAY
+    and sums across them — old and new batteries never overlap in time
+    (physical swap), so per-day sums stay physically correct. stats.js
+    (overview/period/top-days incl. today's hourly bars) and roi.js
+    (measured savings + install-date detection — would otherwise have
+    reset to the swap day!) all pass the full SN list via a new
+    getBatterySns dep (index.js's batterySns() helper: live SN first,
+    then all DB SNs).
+  - Verified live: /api/battery/live shows the Pro (soc 40, pv 662,
+    out 800); ROI savingsSoFarEur/measuredDays/installDate IDENTICAL to
+    pre-swap (10.97 / 13 / 2026-09-13); pre-swap day battery figures
+    intact (09-23: 0.1 kWh); week battery total spans the swap; SB4
+    secondary card unaffected.
+- **New unit is at the FACTORY floor**: get_power_cutoff works on the
+  A17C1 (limitsSource power_cutoff) but reads discharge_lower_limit 5%
+  — the user's 8% setting lived on the old unit. If they want 8% again
+  it must be set in the Anker app for the Pro.
+- .power-plan-state.json's originalRaw is the OLD unit's schedule —
+  a disable-restore would write those stale bytes to the Pro's site.
+  Same device family so likely harmless, but stale; noted, not cleaned.
+- get_power_cutoff/site write surface on A17C1 assumed same-family as
+  A17C3 (both Solarbank 2) — ticket #210 covers verification before the
+  power plan ever targets h-power; h-solar's plan keeps working since
+  the schedule payload shape is shared across the SB2 family.
