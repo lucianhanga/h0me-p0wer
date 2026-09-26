@@ -87,7 +87,7 @@ export const en = {
     targetOutput: "Target output",
     presetValue: "preset {preset}",
     decisionInputs: "Decision inputs",
-    inputs: "PV {pv} W · house {house} W · SOC {soc}%",
+    inputs: "PV {pv} W · house {house} W · SOC {soc}%",
     presetWritten: "preset written ({reason})",
     lastWrite: "last write {time}",
     takeOver: "Take over output control",
@@ -142,7 +142,7 @@ export const en = {
     },
     liveNumbers: { title: "Live numbers (not being written)" },
     native: { title: "Native self-consumption active", modeWritten: "mode written ({reason})" },
-    liveLine: "PV {pv} W · house {house} W · SOC {soc}%",
+    liveLine: "PV {pv} W · house {house} W · SOC {soc}%",
     lastWrite: "last write {time}",
     decision: {
       targetTitle: "Target output",

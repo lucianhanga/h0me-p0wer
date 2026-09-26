@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.84, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.85, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4388,3 +4388,21 @@ side recovers — no action needed unless it persists for days.
 - Note: header/CI verification hit a real tooling fact — headless
   Chrome's remote-debugging port occasionally refuses the first
   connection; retrying with a fresh port/process works.
+
+## Strategy tab phone UX polish (2026-09-27, user screenshot: "does not look right")
+
+- Three fixes from the user's phone screenshot:
+  1. The single native-mode/live-numbers info card rendered HALF-WIDTH
+     (a lone card in the 2-col .cards grid) — now spans full width via
+     .cards-single.
+  2. The battery card header broke mid-word ("h-solarbank-/2") and the
+     "+1 ext" badge split in two — .batt-card-head now wraps as whole
+     groups (flex-wrap + children white-space: nowrap), so the SN drops
+     to its own line intact instead.
+  3. The big live line ("PV 0 W · house 438 W · SOC 5%") wrapped
+     BETWEEN number and unit — strategy.liveLine and powerplan.inputs
+     templates now use non-breaking spaces (U+00A0) between value and
+     unit in all three dictionaries (i18n-safe: the text stays one
+     translated template per language).
+- Verified at real 390px emulation: name on one line, badge intact,
+  legend stacked clean, single-card rule confirmed in markup.

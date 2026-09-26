@@ -279,6 +279,13 @@ section {
   margin: 1rem 0;
 }
 
+/* A lone info card (Strategy tab's native-mode / live-numbers card) spans
+   the full width — a single card in the two-column grid rendered at half
+   width ("just half a screen, not cool", 2026-09-27). */
+.cards-single {
+  grid-template-columns: 1fr;
+}
+
 /* Equal card heights across each row (the Solar PV sublabel can wrap to
    two lines, making its tile taller than the Battery tile on phones):
    stretch the FlipTile chain with the grid row. */
@@ -1576,6 +1583,13 @@ pre {
   gap: 0.5rem;
   margin-bottom: 0.35rem;
   font-weight: 600;
+  flex-wrap: wrap; /* wraps as whole groups, never mid-item (2026-09-27:
+                     the name broke "h-solarbank-/2" and the +ext badge in
+                     two on phones) */
+}
+
+.batt-card-head > * {
+  white-space: nowrap;
 }
 
 .batt-card-sn {
