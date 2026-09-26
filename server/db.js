@@ -594,8 +594,41 @@ export function getStoredPvPeriodStarts(type = "day") {
   return new Set(selectPvPeriodStarts.all(type).map((r) => r.period_start));
 }
 
+const selectCloudPvDaySum = db.prepare(`
+  SELECT COALESCE(SUM(power), 0) AS s FROM cloud_pv_history WHERE period_type = ? AND period_start = ?
+`);
+
+// Latest day BEFORE the given one that holds real (nonzero) PV production —
+// the reference shape for reconstructing zeroed days (see repair below).
+const selectLastNonzeroPvDay = db.prepare(`
+  SELECT period_start AS d FROM cloud_pv_history
+  WHERE period_type = 'day' AND period_start < ?
+  GROUP BY period_start HAVING SUM(power) > 0
+  ORDER BY period_start DESC LIMIT 1
+`);
+
+export function getLastNonzeroPvDayBefore(dateStr) {
+  return selectLastNonzeroPvDay.get(dateStr)?.d ?? null;
+}
+
+export function getCloudPvDaySum(type, start) {
+  return selectCloudPvDaySum.get(type, start)?.s ?? 0;
+}
+
 export function saveCloudPvTrend(type, start, dataTrend) {
   const now = Date.now();
+  // Zero-clobber guard (2026-09-26): the h-solar SITE was recreated during
+  // the Plus→Pro battery swap, and the recreated site returns all-ZERO
+  // solar_production trends for every pre-creation day — one backfill
+  // upserted those zeros over 12 days of real PV history (09-14..25), and
+  // the same hit production. Never let an all-zero incoming trend overwrite
+  // a day that already has real data. Legit all-zero days (pre-install,
+  // fully overcast) have no nonzero stored rows, so they're unaffected.
+  const incomingSum = dataTrend.reduce((a, t) => a + (num(t.power) ?? 0), 0);
+  if (incomingSum === 0 && getCloudPvDaySum(type, start) > 0) {
+    console.warn(`[db] refused to overwrite nonzero PV history for ${start} with an all-zero trend`);
+    return;
+  }
   db.exec("BEGIN"); // one transaction per trend — see saveCloudTrend
   try {
     for (const t of dataTrend) {

@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.78, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.79, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4248,7 +4248,7 @@ side recovers — no action needed unless it persists for days.
   correcting comment — BLE remains a valid independence option but the
   "the app needs BLE for this" premise was disproved.
 
-## Battery modules: physical stack order + phone legend (2026-09-27, user correction)
+## Battery modules: physical stack order + phone legend (2026-09-26, user correction)
 
 - User: "the battery stack is first the solarbank and then the battery —
   this is how it's done in practice." The segmented view had it INVERTED
@@ -4263,3 +4263,31 @@ side recovers — no action needed unless it persists for days.
   Emulation.setDeviceMetricsOverride (mobile: true) — that reported
   scrollW == 390, no overflow, and the earlier "clipping" was purely the
   artifact.
+
+## PV cloud history destroyed by the site recreation — guard + split + self-repair (2026-09-26, user: "I still don't see the green in the flipped daily tiles")
+
+- Root cause, three parts: (1) the Plus→Pro swap RECREATED the h-solar
+  site, and the recreated site returns all-ZERO solar_production trends
+  for every pre-creation day; (2) catchUpBatteryPvHistory's missing-day
+  test was "!storedBatt OR !storedPv" — the NEW battery SN had no
+  history, so ALL 31 days counted as missing and every one got a
+  site-level PV refetch; (3) saveCloudPvTrend upserted those zeros over
+  12 real days (09-14..25, verified in the db: 34 days × 73 rows, all
+  0.0). pv_daily (local rollup) survived, which is why the totals still
+  showed PV while the flipped bar charts lost all green.
+- Fixes: saveCloudPvTrend now REFUSES an all-zero incoming trend over a
+  nonzero stored day (zero-clobber guard); the backfill computes
+  missing-battery and missing-PV days independently (a fresh battery SN
+  can never again trigger a site-wide PV refetch); and a ONE-TIME
+  startup repair (kv flag pv_shape_repair_v1) rebuilds each zeroed day
+  from pv_daily's real produced total distributed over the most recent
+  real day-shape (totals exact — verified 2.91/5.39/…/5.08 kWh match
+  pv_daily to the decimal; the shape is approximate — today's shape
+  counts as complete only from hour ≥ 20, otherwise the repair waits
+  for the next restart). Production self-repairs on the next deploy.
+- Verified: 10 days repaired on dev; flipped day tile for 09-24 shows
+  green hours summing 0.47 ≈ pvKwh 0.48; /api/timeseries for 09-25
+  shows a real curve (peak 713 W) integrating exactly 5.08 kWh.
+- Note: 09-19/09-20 stay zero — pv_daily has no rows for them, so
+  there's nothing real to reconstruct from (their totals were only ever
+  in the destroyed cloud rows).
