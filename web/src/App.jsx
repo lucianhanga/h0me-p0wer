@@ -6,17 +6,21 @@ import Dashboard from "./dashboard/Dashboard.jsx";
 import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
+import { LanguageProvider, useLanguage, useT } from "./i18n/LanguageProvider.jsx";
+import { LANGUAGES } from "./i18n/translate.js";
 
 const PAGES = [
-  { key: "welcome", label: "Welcome" },
-  { key: "live", label: "Live" },
-  { key: "strategy", label: "Strategy" },
-  { key: "graph", label: "Graph" },
-  { key: "dashboard", label: "Dashboard" },
-  { key: "roi", label: "ROI" },
+  { key: "welcome", labelKey: "nav.welcome" },
+  { key: "live", labelKey: "nav.live" },
+  { key: "strategy", labelKey: "nav.strategy" },
+  { key: "graph", labelKey: "nav.graph" },
+  { key: "dashboard", labelKey: "nav.dashboard" },
+  { key: "roi", labelKey: "nav.roi" },
 ];
 
-export default function App() {
+function Shell() {
+  const t = useT();
+  const { language, setLanguage } = useLanguage();
   const [page, setPage] = useState(() =>
     PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
   );
@@ -74,6 +78,17 @@ export default function App() {
       <header>
         <h1>h0me-p0wer</h1>
         <AskButton />
+        <div className="lang-switch" title={t("header.languageTip")} role="group" aria-label={t("header.language")}>
+          {LANGUAGES.map((l) => (
+            <button
+              key={l}
+              className={language === l ? "nav-active" : ""}
+              onClick={() => setLanguage(l)}
+            >
+              {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
         <nav>
           {PAGES.map((p) => (
             <button
@@ -81,7 +96,7 @@ export default function App() {
               className={page === p.key ? "nav-active" : ""}
               onClick={() => switchPage(p.key)}
             >
-              {p.label}
+              {t(p.labelKey)}
             </button>
           ))}
         </nav>
@@ -103,5 +118,13 @@ export default function App() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <LanguageProvider>
+      <Shell />
+    </LanguageProvider>
   );
 }

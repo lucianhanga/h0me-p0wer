@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -10,12 +11,12 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 // Span buttons and zoom/pan are PER GRAPH (independent windows). No range
 // sliders for now.
 const SHORTCUTS = [
-  { label: "1h", ms: 3600 * 1000 },
-  { label: "6h", ms: 6 * 3600 * 1000 },
-  { label: "12h", ms: 12 * 3600 * 1000 },
-  { label: "24h", ms: 24 * 3600 * 1000 },
-  { label: "7d", ms: 7 * 24 * 3600 * 1000 },
-  { label: "30d", ms: 30 * 24 * 3600 * 1000 },
+  { labelKey: "graph.span.1h", ms: 3600 * 1000 },
+  { labelKey: "graph.span.6h", ms: 6 * 3600 * 1000 },
+  { labelKey: "graph.span.12h", ms: 12 * 3600 * 1000 },
+  { labelKey: "graph.span.24h", ms: 24 * 3600 * 1000 },
+  { labelKey: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
+  { labelKey: "graph.span.30d", ms: 30 * 24 * 3600 * 1000 },
 ];
 
 const LIVE_EDGE_MS = 2 * 60 * 1000; // consider "live" when right edge within 2 min of now
@@ -34,39 +35,46 @@ const battChgNetOf = (r) => Math.min(0, cellsNetOf(r)); // charging cells (neg)
 const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0));
 
 // Series per graph. `key` is either a raw row field or one of the derived
-// names above; negated series render as sinks below zero.
+// names above; negated series render as sinks below zero. titleKey/nameKey/
+// legendKeys are resolved through t() at render time.
 const GRAPHS = [
   {
-    title: "Home Power Usage",
-    legend: ["Grid", "PV", "Battery out", "Home", "Grid export"],
+    titleKey: "graph.title.home",
+    legendKeys: [
+      "graph.series.grid",
+      "graph.series.pv",
+      "graph.series.battOut",
+      "graph.series.home",
+      "graph.series.gridExport",
+    ],
     series: [
-      { key: "grid", name: "Grid", color: "#f7a44f", width: 1, stack: "u" },
-      { key: "pvHome", name: "PV", color: "#5fce80", width: 1, stack: "u" },
-      { key: "battCells", name: "Battery out", color: "#c084fc", width: 1, stack: "u" },
-      { key: "home", name: "Home", color: "#e8ecef", width: 2 },
+      { key: "grid", nameKey: "graph.series.grid", color: "#f7a44f", width: 1, stack: "u" },
+      { key: "pvHome", nameKey: "graph.series.pv", color: "#5fce80", width: 1, stack: "u" },
+      { key: "battCells", nameKey: "graph.series.battOut", color: "#c084fc", width: 1, stack: "u" },
+      { key: "home", nameKey: "graph.series.home", color: "#e8ecef", width: 2 },
       // Residual grid export below zero (2026-09-23, user request) — with
       // zero-export enforced, this is the honest small remainder that still
       // slips through. NOT stacked — a sink below zero like the Battery
       // chart's Charging series.
-      { key: "gridExp", name: "Grid export", color: "#e5544b", width: 1 },
+      { key: "gridExp", nameKey: "graph.series.gridExport", color: "#e5544b", width: 1 },
     ],
   },
   {
-    title: "Power Production",
-    legend: ["PV production", "PV to battery", "PV to home"],
+    titleKey: "graph.title.production",
+    legendKeys: ["graph.series.pvProduction", "graph.series.pvToBattery", "graph.series.pvToHome"],
     series: [
-      { key: "pvBatt", name: "PV to battery", color: "#3da568", width: 1, stack: "p" },
-      { key: "pvHome", name: "PV to home", color: "#8ee3a8", width: 1, stack: "p" },
-      { key: "pv", name: "PV production", color: "#5fce80", width: 2 },
+      { key: "pvBatt", nameKey: "graph.series.pvToBattery", color: "#3da568", width: 1, stack: "p" },
+      { key: "pvHome", nameKey: "graph.series.pvToHome", color: "#8ee3a8", width: 1, stack: "p" },
+      { key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", width: 2 },
     ],
   },
   {
-    title: "Battery",
-    legend: ["Discharging", "Charging"],
+    titleKey: "graph.title.battery",
+    legendKeys: ["graph.series.discharging", "graph.series.charging"],
     series: [
       // Cells-net like G1: only one side can be nonzero (never both).
-      { key: "battCells", name: "Discharging", color: "#c084fc", width: 1, area: true },
-      { key: "battChgNeg", name: "Charging", color: "#8a63d2", width: 1, area: true },
+      { key: "battCells", nameKey: "graph.series.discharging", color: "#c084fc", width: 1, area: true },
+      { key: "battChgNeg", nameKey: "graph.series.charging", color: "#8a63d2", width: 1, area: true },
     ],
   },
 ];
@@ -132,15 +140,28 @@ function rowValue(key, r) {
 }
 
 export default function GraphTab() {
-  const containerRefs = GRAPHS.map(() => useRef(null));
-  const apiRefs = useRef(GRAPHS.map(() => null)); // per-graph { setSpan(ms) }
+  const t = useT();
+  // Resolved (translated) graph definitions — re-resolved on language change,
+  // which also re-inits the charts below so legend/series names follow.
+  const graphs = useMemo(
+    () =>
+      GRAPHS.map((def) => ({
+        ...def,
+        title: t(def.titleKey),
+        legend: def.legendKeys.map((k) => t(k)),
+        series: def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
+      })),
+    [t],
+  );
+  const containerRefs = graphs.map(() => useRef(null));
+  const apiRefs = useRef(graphs.map(() => null)); // per-graph { setSpan(ms) }
   // Per-graph UI state: stats line + which span preset is highlighted.
-  const [statsArr, setStatsArr] = useState(GRAPHS.map(() => null));
+  const [statsArr, setStatsArr] = useState(graphs.map(() => null));
   // Per-graph "an outlier is being clipped off the top/bottom of this
   // view" note — see robustCap().
-  const [clippedArr, setClippedArr] = useState(GRAPHS.map(() => null));
+  const [clippedArr, setClippedArr] = useState(graphs.map(() => null));
   const [activeArr, setActiveArr] = useState(() =>
-    GRAPHS.map((_, i) => savedSpanMs[i] ?? 24 * 3600 * 1000),
+    graphs.map((_, i) => savedSpanMs[i] ?? 24 * 3600 * 1000),
   );
   const [lastLiveAt, setLastLiveAt] = useState(null); // last successful live tick
 
@@ -152,7 +173,7 @@ export default function GraphTab() {
 
     // Each graph is a self-contained unit: its own chart, rows, window,
     // fetch/load cycle and live tick. Nothing is shared between graphs.
-    const units = GRAPHS.map((def, gi) => {
+    const units = graphs.map((def, gi) => {
       const chart = echarts.init(containerRefs[gi].current, null, { renderer: "canvas" });
       chart.setOption({
         animation: false,
@@ -463,61 +484,63 @@ export default function GraphTab() {
 
     return () => {
       for (const u of units) u.dispose();
-      apiRefs.current = GRAPHS.map(() => null);
+      apiRefs.current = graphs.map(() => null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [graphs]);
 
   return (
     <div>
       <UpdatedStamp at={lastLiveAt} />
-      {GRAPHS.map((def, i) => (
-        <section key={def.title}>
+      {graphs.map((def, i) => (
+        <section key={def.titleKey}>
           <h4>{def.title}</h4>
           <div className="controls">
             {SHORTCUTS.map((s) => (
               <button
-                key={s.label}
+                key={s.labelKey}
                 className={activeArr[i] === s.ms ? "span-active" : ""}
                 onClick={() => apiRefs.current[i]?.setSpan(s.ms)}
               >
-                {s.label}
+                {t(s.labelKey)}
               </button>
             ))}
             <button
               onClick={() => apiRefs.current[i]?.setSpan(24 * 3600 * 1000)}
-              title="Back to the last 24 hours"
+              title={t("graph.resetTitle")}
             >
-              Reset
+              {t("graph.reset")}
             </button>
             {statsArr[i] && (
               <span className="muted" style={{ marginLeft: "auto" }}>
-                avg {statsArr[i].avg} W ·{" "}
-                {statsArr[i].bucketMs < 60000
-                  ? `${statsArr[i].bucketMs / 1000}s`
-                  : `${(statsArr[i].bucketMs / 60000).toFixed(1)}min`}{" "}
-                res
+                {t("graph.avgRes", {
+                  avg: statsArr[i].avg,
+                  res:
+                    statsArr[i].bucketMs < 60000
+                      ? `${statsArr[i].bucketMs / 1000}s`
+                      : `${(statsArr[i].bucketMs / 60000).toFixed(1)}min`,
+                })}
               </span>
             )}
             {clippedArr[i] && (
               <span
                 className="muted"
                 style={{ marginLeft: statsArr[i] ? 8 : "auto" }}
-                title="A brief spike is taller than this view's scale — the line is clipped at the top/bottom so normal variation stays readable."
+                title={t("graph.offScaleTitle")}
               >
-                · peak{" "}
-                {[clippedArr[i].high, clippedArr[i].low]
-                  .filter((v) => v != null)
-                  .map((v) => `${v} W`)
-                  .join(" / ")}{" "}
-                (off-scale)
+                {t("graph.offScalePeak", {
+                  peaks: [clippedArr[i].high, clippedArr[i].low]
+                    .filter((v) => v != null)
+                    .map((v) => `${v} W`)
+                    .join(" / "),
+                })}
               </span>
             )}
           </div>
           <div ref={containerRefs[i]} className="chart-box-sm" />
         </section>
       ))}
-      <p className="muted">drag to pan · scroll to zoom — each graph has its own window</p>
+      <p className="muted">{t("graph.hint")}</p>
     </div>
   );
 }

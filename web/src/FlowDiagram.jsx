@@ -1,4 +1,5 @@
 import { useTweenedValue, useTweenedWatts } from "./useTweenedValue.js";
+import { useT } from "./i18n/LanguageProvider.jsx";
 
 // Live power-flow diagram (HA energy-dashboard / Anker app pattern):
 // PV on top, Grid left, Home center, Battery right. Edges animate in the
@@ -10,6 +11,7 @@ import { useTweenedValue, useTweenedWatts } from "./useTweenedValue.js";
 // the same telemetry cadence; see useTweenedValue.js).
 export default function FlowDiagram({ flow }) {
   // Hooks must run before the early return below.
+  const t = useT();
   const pvW = useTweenedWatts(flow?.pv?.production ?? null);
   const gridSigned = useTweenedValue(
     flow?.grid ? (flow.grid.import ?? 0) - (flow.grid.export ?? 0) : null,
@@ -21,7 +23,7 @@ export default function FlowDiagram({ flow }) {
   const battW = useTweenedWatts(
     flow?.battery ? (charging ? (flow.pv.toBattery ?? 0) + gridCharge : cells) : null,
   );
-  if (!flow) return <p className="muted">loading…</p>;
+  if (!flow) return <p className="muted">{t("common.loading")}</p>;
 
   const { battery, pv } = flow;
   // ONE arc between house and battery: the dominant direction only (the two
@@ -40,18 +42,18 @@ export default function FlowDiagram({ flow }) {
 
   // Node positions (viewBox 440x260)
   const N = {
-    pv: { x: 220, y: 30, label: "PV", sub: pvW != null ? `${pvW} W` : "—", color: "#5fce80" },
+    pv: { x: 220, y: 30, label: t("flow.pv"), sub: pvW != null ? `${pvW} W` : "—", color: "#5fce80" },
     grid: {
       x: 55,
       y: 150,
-      label: "Grid",
+      label: t("flow.grid"),
       sub: g != null ? (g > 0 ? `${g} W` : g < 0 ? `−${-g} W` : "0 W") : "—", // never "−0 W"
       color: "#f7a44f",
     },
-    home: { x: 220, y: 150, label: "Home", sub: homeW != null ? `${homeW} W` : "—", color: "#e8ecef" },
+    home: { x: 220, y: 150, label: t("flow.home"), sub: homeW != null ? `${homeW} W` : "—", color: "#e8ecef" },
     batt: {
       x: 385, y: 150,
-      label: battery?.name ?? "Battery",
+      label: battery?.name ?? t("flow.battery"),
       sub: battery ? `${battery.soc}%${battState}` : "—",
       color: "#c084fc",
     },
@@ -73,7 +75,7 @@ export default function FlowDiagram({ flow }) {
   ];
 
   return (
-    <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label="power flow">
+    <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label={t("flow.ariaLabel")}>
       {edges.map(([a, b, w, color, id]) => (
         <Edge key={id} a={a} b={b} watts={w} color={color} />
       ))}

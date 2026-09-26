@@ -7,6 +7,7 @@ import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { useLiveStream } from "../useLiveStream.js";
 import { useTweenedWatts } from "../useTweenedValue.js";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Live tab: connection badges, power-flow diagram, main tiles, and the
 // grid/PV detail breakdown. Live data arrives over the WebSocket
@@ -28,6 +29,7 @@ import { useTweenedWatts } from "../useTweenedValue.js";
 const GRID_DISPLAY_DEADBAND_W = 20;
 
 export default function LiveTab() {
+  const t = useT();
   const [live, setLive] = useState(null); // meter state (WS meter / /api/live)
   const [flow, setFlow] = useState(null); // flow payload (WS flow / /api/flow)
   const [health, setHealth] = useState(null); // /api/health
@@ -174,28 +176,31 @@ export default function LiveTab() {
     <div>
       <UpdatedStamp at={flow?.obtainedAt ?? flow?.ts}>
         {flow
-          ? `grid: ${flow.grid.source === "meter" ? "meter direct" : "online"} · battery: online`
+          ? t("live.sources", {
+              grid: flow.grid.source === "meter" ? t("live.meterDirect") : t("live.online"),
+              battery: t("live.online"),
+            })
           : ""}
       </UpdatedStamp>
       <p>
         <Badge ok={cloudFresh} warn={!health?.cloud?.enabled}>
-          meter online
+          {t("live.badges.meterOnline")}
         </Badge>{" "}
-        <Badge ok={batteryFresh}>battery online</Badge>{" "}
-        <Badge ok={meterDirect}>meter direct</Badge>
+        <Badge ok={batteryFresh}>{t("live.badges.batteryOnline")}</Badge>{" "}
+        <Badge ok={meterDirect}>{t("live.meterDirect")}</Badge>
       </p>
 
-      <h3>Power Flow</h3>
+      <h3>{t("live.powerFlow")}</h3>
       <FlowDiagram flow={flowDisplay} />
 
       <div className="cards">
         <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
           <div className="card">
-            <div className="card-label">House</div>
+            <div className="card-label">{t("live.tiles.house")}</div>
             <div className="card-value">
               {homeW != null ? `${homeW} W` : "—"}
             </div>
-            <div className="card-label">total consumption</div>
+            <div className="card-label">{t("live.tiles.totalConsumption")}</div>
           </div>
         </FlipTile>
         <FlipTile
@@ -203,13 +208,13 @@ export default function LiveTab() {
         >
           <div className="card">
             <div className="card-label">
-              Grid {gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "balanced") : ""}
+              {t("live.tiles.grid")} {gridDisplay != null ? (gridDisplay > 0 ? t("live.grid.import") : gridDisplay < 0 ? t("live.grid.export") : t("live.grid.balanced")) : ""}
             </div>
             <div className={`card-value ${gridDisplay != null ? (gridDisplay > 0 ? "import" : gridDisplay < 0 ? "export" : "") : ""}`}>
               {gridW != null ? `${Math.abs(gridW)} W` : "—"}
             </div>
             <div className="card-label">
-              {gridFromCloud ? "via cloud" : gridDisplay != null ? "meter direct" : "—"}
+              {gridFromCloud ? t("live.viaCloud") : gridDisplay != null ? t("live.meterDirect") : "—"}
             </div>
           </div>
         </FlipTile>
@@ -217,54 +222,56 @@ export default function LiveTab() {
           back={
             <TodayMiniChart
               lines={[
-                { data: battDischargeSeries, color: "#c084fc", name: "Discharging" },
-                { data: battChargeSeries, color: "#8b98a5", name: "Charging" },
+                { data: battDischargeSeries, color: "#c084fc", name: t("live.battery.discharging") },
+                { data: battChargeSeries, color: "#8b98a5", name: t("live.battery.charging") },
               ]}
               zeroLine
             />
           }
         >
           <div className="card">
-            <div className="card-label">Battery</div>
+            <div className="card-label">{t("live.tiles.battery")}</div>
             <div className="card-value" style={{ color: "#c084fc" }}>
               {battery
                 ? (battery.cells ?? 0) > 0
                   ? `⏏ −${battW ?? 0} W`
                   : battery.charge > 0
                     ? `⚡ +${battW ?? 0} W`
-                    : "idle"
+                    : t("live.battery.idle")
                 : "—"}
             </div>
             <div className="card-label">
               {battery
                 ? (battery.cells ?? 0) > 0
-                  ? `discharging · ${battery.soc}%`
+                  ? t("live.battery.dischargingSoc", { soc: battery.soc })
                   : battery.charge > 0
-                    ? `charging · ${battery.soc}%`
-                    : `idle · ${battery.soc}%`
-                : "offline"}
+                    ? t("live.battery.chargingSoc", { soc: battery.soc })
+                    : t("live.battery.idleSoc", { soc: battery.soc })
+                : t("live.battery.offline")}
             </div>
             {battEta && (
               <div className="card-label">
-                {battMode === "discharging" ? `empty in ≈ ${battEta}` : `full in ≈ ${battEta}`}
+                {battMode === "discharging"
+                  ? t("live.battery.emptyIn", { eta: battEta })
+                  : t("live.battery.fullIn", { eta: battEta })}
               </div>
             )}
           </div>
         </FlipTile>
         <FlipTile back={<TodayMiniChart lines={[{ data: pvSeries, color: "#5fce80" }]} />}>
           <div className="card">
-            <div className="card-label">Solar PV</div>
+            <div className="card-label">{t("live.tiles.solarPv")}</div>
             <div className="card-value" style={{ color: "#5fce80" }}>
               {pvW != null ? `${pvW} W` : "—"}
             </div>
             <div className="card-label">
               {pv && pv.production > 0
                 ? pv.toHome > 0 && pv.toBattery > 0
-                  ? `${pvHomeW ?? 0} W house · ${pvBattW ?? 0} W battery`
+                  ? t("live.pv.split", { home: pvHomeW ?? 0, battery: pvBattW ?? 0 })
                   : pv.toBattery > 0
-                    ? "charging the battery"
-                    : "to the house"
-                : "no production"}
+                    ? t("live.pv.chargingBattery")
+                    : t("live.pv.toHouse")
+                : t("live.pv.noProduction")}
             </div>
           </div>
         </FlipTile>
@@ -277,11 +284,11 @@ export default function LiveTab() {
         onClick={() => setDetailsOpen((o) => !o)}
         aria-expanded={detailsOpen}
       >
-        Details <span className="chevron">{detailsOpen ? "▾" : "▸"}</span>
+        {t("live.details")} <span className="chevron">{detailsOpen ? "▾" : "▸"}</span>
       </button>
       {detailsOpen && (
         <>
-          <h4>Grid</h4>
+          <h4>{t("live.tiles.grid")}</h4>
           <div className="phase-cards">
             {(phases ?? [null, null, null]).map((p, i) => (
               <FlipTile key={i}>
@@ -293,11 +300,11 @@ export default function LiveTab() {
               </FlipTile>
             ))}
           </div>
-          <h4>Solar PV</h4>
+          <h4>{t("live.tiles.solarPv")}</h4>
           <div className="phase-cards">
             <FlipTile>
               <div className="phase-card">
-                <span className="phase-name">PV total</span>
+                <span className="phase-name">{t("live.pvTotal")}</span>
                 <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
               </div>
             </FlipTile>
@@ -306,7 +313,7 @@ export default function LiveTab() {
                 <span className="phase-name">PV1</span>
                 <span className="phase-power">{battery?.pv1W != null ? `${battery.pv1W} W` : "—"}</span>
                 <span className="phase-detail">
-                  {pv?.pv1KwhToday != null ? `${pv.pv1KwhToday} kWh today` : ""}
+                  {pv?.pv1KwhToday != null ? t("live.kwhToday", { kwh: pv.pv1KwhToday }) : ""}
                 </span>
               </div>
             </FlipTile>
@@ -315,15 +322,19 @@ export default function LiveTab() {
                 <span className="phase-name">PV2</span>
                 <span className="phase-power">{battery?.pv2W != null ? `${battery.pv2W} W` : "—"}</span>
                 <span className="phase-detail">
-                  {pv?.pv2KwhToday != null ? `${pv.pv2KwhToday} kWh today` : ""}
+                  {pv?.pv2KwhToday != null ? t("live.kwhToday", { kwh: pv.pv2KwhToday }) : ""}
                 </span>
               </div>
             </FlipTile>
           </div>
           {snapshot && (
             <p className="muted">
-              {snapshot.meter.model} · {snapshot.meter.type} · SW {snapshot.meter.swVersion} · last
-              update {new Date(snapshot.timestamp).toLocaleTimeString()}
+              {t("live.meterInfo", {
+                model: snapshot.meter.model,
+                type: snapshot.meter.type,
+                sw: snapshot.meter.swVersion,
+                time: new Date(snapshot.timestamp).toLocaleTimeString(),
+              })}
             </p>
           )}
         </>

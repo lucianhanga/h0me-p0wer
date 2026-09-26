@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import SpeakButton from "../components/SpeakButton.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { usePolledResource } from "../usePolledResource.js";
+import { useLanguage, useSpeechLang, useT } from "../i18n/LanguageProvider.jsx";
 
 const ICONS = {
   sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0-15v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4",
@@ -80,26 +81,34 @@ function SunArc({ sunrise, sunset }) {
 // so the whole-tab read-aloud summary can include it too (2026-09-19,
 // user request).
 function YesterdayCard({ y }) {
+  const t = useT();
   if (!y) return null;
   return (
     <section className="card">
       <SpeakButton
         id="yesterday"
         className="speak-corner"
-        text={`Yesterday: ${y.homeKwh} kilowatt-hours used, ${y.pvProducedKwh} produced by the panels, ${y.gridKwh} from the grid, ${y.battKwh} from the battery. Spent ${y.gridEur} euros, saved ${y.savedEur}.`}
+        text={t("welcome.speak.yesterday", {
+          home: y.homeKwh,
+          produced: y.pvProducedKwh,
+          grid: y.gridKwh,
+          battery: y.battKwh,
+          spent: y.gridEur,
+          saved: y.savedEur,
+        })}
       />
-      <h3>Yesterday</h3>
+      <h3>{t("welcome.yesterday.title")}</h3>
       <p className="wx-big">
-        {fmt1(y.homeKwh)} kWh <span className="muted">used</span>
+        {fmt1(y.homeKwh)} kWh <span className="muted">{t("welcome.used")}</span>
       </p>
       <p className="muted">
-        grid <span className="wx-c-grid">{fmt1(y.gridKwh)} kWh</span> · battery{" "}
-        <span className="wx-c-batt">{fmt1(y.battKwh)} kWh</span> · PV{" "}
-        <span className="wx-c-pv">{fmt1(y.pvKwh)} kWh</span> direct
+        {t("welcome.grid")} <span className="wx-c-grid">{fmt1(y.gridKwh)} kWh</span> · {t("welcome.battery")}{" "}
+        <span className="wx-c-batt">{fmt1(y.battKwh)} kWh</span> · {t("welcome.pv")}{" "}
+        <span className="wx-c-pv">{fmt1(y.pvKwh)} kWh</span> {t("welcome.direct")}
       </p>
       <p className="muted">
-        ☀ <span className="wx-c-pv">{fmt1(y.pvProducedKwh)} kWh</span> produced · spent{" "}
-        <span className="wx-c-grid">€{fmtEur(y.gridEur)}</span> · saved <span className="wx-c-pv">€{fmtEur(y.savedEur)}</span>
+        ☀ <span className="wx-c-pv">{fmt1(y.pvProducedKwh)} kWh</span> {t("welcome.produced")} · {t("welcome.spent")}{" "}
+        <span className="wx-c-grid">€{fmtEur(y.gridEur)}</span> · {t("welcome.saved")} <span className="wx-c-pv">€{fmtEur(y.savedEur)}</span>
       </p>
     </section>
   );
@@ -113,37 +122,48 @@ function YesterdayCard({ y }) {
 // so the totals are already correctly "so far," not inflated. Data comes
 // from the parent (WelcomeTab), same reasoning as YesterdayCard.
 function ThisWeekSoFarCard({ w }) {
+  const t = useT();
   if (!w) return null;
   return (
     <section className="card">
       <SpeakButton
         id="weekSoFar"
         className="speak-corner"
-        text={`This week so far: ${w.homeKwh} kilowatt-hours used, ${w.pvProducedKwh} produced by the panels, ${w.gridKwh} from the grid, ${w.battKwh} from the battery. Spent ${w.gridEur} euros, saved ${w.savedEur}.`}
+        text={t("welcome.speak.weekSoFar", {
+          home: w.homeKwh,
+          produced: w.pvProducedKwh,
+          grid: w.gridKwh,
+          battery: w.battKwh,
+          spent: w.gridEur,
+          saved: w.savedEur,
+        })}
       />
-      <h3>This week so far</h3>
+      <h3>{t("welcome.weekSoFar.title")}</h3>
       <p className="wx-big">
-        {fmt1(w.homeKwh)} kWh <span className="muted">used</span>
+        {fmt1(w.homeKwh)} kWh <span className="muted">{t("welcome.used")}</span>
       </p>
       <p className="muted">
-        grid <span className="wx-c-grid">{fmt1(w.gridKwh)} kWh</span> · battery{" "}
-        <span className="wx-c-batt">{fmt1(w.battKwh)} kWh</span> · PV{" "}
-        <span className="wx-c-pv">{fmt1(w.pvKwh)} kWh</span> direct
+        {t("welcome.grid")} <span className="wx-c-grid">{fmt1(w.gridKwh)} kWh</span> · {t("welcome.battery")}{" "}
+        <span className="wx-c-batt">{fmt1(w.battKwh)} kWh</span> · {t("welcome.pv")}{" "}
+        <span className="wx-c-pv">{fmt1(w.pvKwh)} kWh</span> {t("welcome.direct")}
       </p>
       <p className="muted">
-        ☀ <span className="wx-c-pv">{fmt1(w.pvProducedKwh)} kWh</span> produced · spent{" "}
-        <span className="wx-c-grid">€{fmtEur(w.gridEur)}</span> · saved <span className="wx-c-pv">€{fmtEur(w.savedEur)}</span>
+        ☀ <span className="wx-c-pv">{fmt1(w.pvProducedKwh)} kWh</span> {t("welcome.produced")} · {t("welcome.spent")}{" "}
+        <span className="wx-c-grid">€{fmtEur(w.gridEur)}</span> · {t("welcome.saved")} <span className="wx-c-pv">€{fmtEur(w.savedEur)}</span>
       </p>
     </section>
   );
 }
 
 export default function WelcomeTab() {
+  const t = useT();
+  const { language } = useLanguage();
+  const speechLang = useSpeechLang();
   // keepLastGoodOnError: once a real briefing has loaded, a failed 5-min
   // poll is ignored rather than blanking the tab — this page renders
   // `error` before `data`, so without it a single transient failure would
   // hide an otherwise-fine briefing.
-  const { data, error, setData } = usePolledResource("/api/welcome", {
+  const { data, error, setData } = usePolledResource(`/api/welcome?lang=${language}`, {
     intervalMs: 5 * 60 * 1000,
     keepLastGoodOnError: true,
   });
@@ -183,7 +203,7 @@ export default function WelcomeTab() {
   async function refresh() {
     setRefreshing(true);
     try {
-      const j = await fetch("/api/welcome/refresh", { method: "POST" }).then((r) => r.json());
+      const j = await fetch(`/api/welcome/refresh?lang=${language}`, { method: "POST" }).then((r) => r.json());
       if (j.ok) setData(j.data);
     } catch {
       // keep last good
@@ -192,9 +212,12 @@ export default function WelcomeTab() {
     }
   }
 
-  if (error) return <p className="muted">Welcome — {error}</p>;
-  if (!data) return <p className="muted">Preparing your briefing…</p>;
+  if (error) return <p className="muted">{t("welcome.loadError", { error })}</p>;
+  if (!data) return <p className="muted">{t("welcome.preparing")}</p>;
   const gt = data.groundTruth ?? {};
+  // Month name in the APP's language (speechLang is the BCP-47 tag for the
+  // selected language), not the browser's locale.
+  const monthName = new Date().toLocaleString(speechLang, { month: "long" });
 
   // Whole-tab read-aloud summary (2026-09-19, user request: the hero's
   // speak button should read the WHOLE tab, not just the greeting) —
@@ -203,19 +226,52 @@ export default function WelcomeTab() {
   // state (see the effect above) so they can be included here too.
   const wholeTabText = [
     data.greeting,
-    `Weather: ${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun${gt.radiationSumKwhM2Today != null ? `, ${gt.radiationSumKwhM2Today} kilowatt-hours per square meter of radiation` : ""}.`,
-    `How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, ${data.startOfDay.gridImportKwhUntilSunrise} kilowatt-hours from the grid and ${data.startOfDay.battDischargeKwhUntilSunrise} from the battery until sunrise.`,
-    `Right now: ${data.today.statusQuo} ${data.production.todayKwh} kilowatt-hours produced today, ${data.production.weekKwh} this week so far, ${data.production.monthKwh} this month so far.`,
-    `How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours of solar direct to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved.`,
+    t("welcome.speak.weather", {
+      summary: data.today.summary,
+      min: gt.tempMin,
+      max: gt.tempMax,
+      hours: gt.sunHoursToday,
+      radiation:
+        gt.radiationSumKwhM2Today != null
+          ? t("welcome.speak.radiation", { value: gt.radiationSumKwhM2Today })
+          : "",
+    }),
+    t("welcome.speak.startOfDay", {
+      sunrise: data.startOfDay.sunrise,
+      soc: data.startOfDay.batterySoc ?? t("welcome.unknown"),
+      grid: data.startOfDay.gridImportKwhUntilSunrise,
+      battery: data.startOfDay.battDischargeKwhUntilSunrise,
+    }),
+    t("welcome.speak.rightNow", {
+      statusQuo: data.today.statusQuo,
+      today: data.production.todayKwh,
+      week: data.production.weekKwh,
+      month: data.production.monthKwh,
+    }),
+    t("welcome.speak.endOfDay", {
+      soc: data.endOfDay.batterySocEstimate,
+      toHouse: data.endOfDay.toHouseKwh,
+      savings: data.endOfDay.estimatedSavingsEur,
+    }),
     yesterday
-      ? `Yesterday: ${yesterday.homeKwh} kilowatt-hours used, ${yesterday.pvProducedKwh} produced by the panels, spent ${yesterday.gridEur} euros, saved ${yesterday.savedEur}.`
+      ? t("welcome.speak.yesterdayShort", {
+          home: yesterday.homeKwh,
+          produced: yesterday.pvProducedKwh,
+          spent: yesterday.gridEur,
+          saved: yesterday.savedEur,
+        })
       : null,
     weekSoFar
-      ? `This week so far: ${weekSoFar.homeKwh} kilowatt-hours used, ${weekSoFar.pvProducedKwh} produced by the panels, spent ${weekSoFar.gridEur} euros, saved ${weekSoFar.savedEur}.`
+      ? t("welcome.speak.weekSoFarShort", {
+          home: weekSoFar.homeKwh,
+          produced: weekSoFar.pvProducedKwh,
+          spent: weekSoFar.gridEur,
+          saved: weekSoFar.savedEur,
+        })
       : null,
-    `What's coming this week: ${data.week.upcoming}`,
-    `How this week should end: ${data.week.estimate}`,
-    `${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`,
+    t("welcome.speak.weekUpcoming", { text: data.week.upcoming }),
+    t("welcome.speak.weekEstimate", { text: data.week.estimate }),
+    `${monthName}: ${data.month.statement}`,
   ]
     .filter(Boolean)
     .join(" ");
@@ -223,19 +279,19 @@ export default function WelcomeTab() {
   return (
     <div className="welcome">
       <UpdatedStamp at={data.generatedAt}>
-        {`${data.aiPowered ? "AI briefing" : "offline estimate"}${data.stale ? " · cached" : ""}`}
+        {`${data.aiPowered ? t("welcome.aiBriefing") : t("welcome.offlineEstimate")}${data.stale ? ` · ${t("welcome.cached")}` : ""}`}
       </UpdatedStamp>
       <div className="wx-hero">
         <p className="wx-greeting">{data.greeting}</p>
         <p className="muted wx-meta">
-          {data.aiPowered ? "AI briefing" : "offline estimate"}
-          {data.stale ? " · cached (refresh failed)" : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          {data.aiPowered ? t("welcome.aiBriefing") : t("welcome.offlineEstimate")}
+          {data.stale ? ` · ${t("welcome.cachedRefreshFailed")}` : ""} · {new Date(data.generatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
           <button
             className={`wx-refresh${refreshing ? " spinning" : ""}`}
             onClick={refresh}
             disabled={refreshing}
-            title="Refresh briefing (new AI call)"
-            aria-label="Refresh briefing"
+            title={t("welcome.refreshTitle")}
+            aria-label={t("welcome.refresh")}
           >
             ↻
           </button>
@@ -247,16 +303,23 @@ export default function WelcomeTab() {
         <SpeakButton
           id="today"
           className="speak-corner"
-          text={`${data.today.summary} Temperatures between ${gt.tempMin} and ${gt.tempMax} degrees, ${gt.sunHoursToday} hours of sun. Sunrise at ${gt.sunrise}, sunset at ${gt.sunset}.`}
+          text={t("welcome.speak.today", {
+            summary: data.today.summary,
+            min: gt.tempMin,
+            max: gt.tempMax,
+            hours: gt.sunHoursToday,
+            sunrise: gt.sunrise,
+            sunset: gt.sunset,
+          })}
         />
         <WeatherIcon name={data.today.icon} />
         <div>
           <p>{data.today.summary}</p>
           <p className="muted">
-            {fmt1(gt.tempMin)}°–{fmt1(gt.tempMax)}°C · {fmt1(gt.sunHoursToday)} h sun
+            {fmt1(gt.tempMin)}°–{fmt1(gt.tempMax)}°C · {t("welcome.weather.sun", { hours: fmt1(gt.sunHoursToday) })}
           </p>
           {gt.radiationSumKwhM2Today != null && (
-            <p className="muted">☀ {fmt1(gt.radiationSumKwhM2Today)} kWh/m² radiation today</p>
+            <p className="muted">{t("welcome.weather.radiation", { kwh: fmt1(gt.radiationSumKwhM2Today) })}</p>
           )}
         </div>
         <SunArc sunrise={gt.sunrise} sunset={gt.sunset} />
@@ -267,12 +330,17 @@ export default function WelcomeTab() {
           <SpeakButton
             id="startOfDay"
             className="speak-corner"
-            text={`How the day started: sunrise at ${data.startOfDay.sunrise}, battery at ${data.startOfDay.batterySoc ?? "unknown"} percent, ${data.startOfDay.gridImportKwhUntilSunrise} kilowatt-hours from the grid and ${data.startOfDay.battDischargeKwhUntilSunrise} from the battery until sunrise.`}
+            text={t("welcome.speak.startOfDay", {
+              sunrise: data.startOfDay.sunrise,
+              soc: data.startOfDay.batterySoc ?? t("welcome.unknown"),
+              grid: data.startOfDay.gridImportKwhUntilSunrise,
+              battery: data.startOfDay.battDischargeKwhUntilSunrise,
+            })}
           />
-          <h3>How the day started</h3>
-          <p>Sunrise {data.startOfDay.sunrise} · battery {data.startOfDay.batterySoc ?? "—"}%</p>
+          <h3>{t("welcome.startOfDay.title")}</h3>
+          <p>{t("welcome.startOfDay.line", { sunrise: data.startOfDay.sunrise, soc: data.startOfDay.batterySoc ?? "—" })}</p>
           <p className="muted">
-            until sunrise: grid <span className="wx-c-grid">{fmt1(data.startOfDay.gridImportKwhUntilSunrise)} kWh</span> · battery{" "}
+            {t("welcome.startOfDay.untilSunrise")}: {t("welcome.grid")} <span className="wx-c-grid">{fmt1(data.startOfDay.gridImportKwhUntilSunrise)} kWh</span> · {t("welcome.battery")}{" "}
             <span className="wx-c-batt">{fmt1(data.startOfDay.battDischargeKwhUntilSunrise)} kWh</span>
           </p>
         </section>
@@ -281,27 +349,32 @@ export default function WelcomeTab() {
           <SpeakButton
             id="statusQuo"
             className="speak-corner"
-            text={`${data.today.statusQuo} ${data.production.todayKwh} kilowatt-hours produced so far today. ${data.production.reasoning}`}
+            text={t("welcome.speak.statusQuo", {
+              statusQuo: data.today.statusQuo,
+              today: data.production.todayKwh,
+              reasoning: data.production.reasoning,
+            })}
           />
           <h3>
             <span className="wx-live-dot" aria-hidden="true" />
-            Right now
+            {t("welcome.rightNow.title")}
           </h3>
           <p>{data.today.statusQuo}</p>
           <p className="wx-big">
-            <span className="wx-c-pv">{fmt1(data.production.todayKwh)} kWh</span> <span className="muted">produced today</span>
+            <span className="wx-c-pv">{fmt1(data.production.todayKwh)} kWh</span> <span className="muted">{t("welcome.rightNow.producedToday")}</span>
           </p>
           <p className="muted">
-            week so far ≈ <span className="wx-c-pv">{fmt1(data.production.weekKwh)} kWh</span> · month so far ≈{" "}
+            {t("welcome.rightNow.weekSoFar")} <span className="wx-c-pv">{fmt1(data.production.weekKwh)} kWh</span> · {t("welcome.rightNow.monthSoFar")}{" "}
             <span className="wx-c-pv">{fmt1(data.production.monthKwh)} kWh</span>
           </p>
-          <p className="muted">measured · {data.production.reasoning}</p>
+          <p className="muted">{t("welcome.measured")} · {data.production.reasoning}</p>
           {data.today.statusQuoUpdatedAt && (
             <p className="muted wx-status-quo-stamp">
-              refreshed{" "}
-              {new Date(data.today.statusQuoUpdatedAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
+              {t("welcome.rightNow.refreshed", {
+                time: new Date(data.today.statusQuoUpdatedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                }),
               })}
             </p>
           )}
@@ -311,16 +384,21 @@ export default function WelcomeTab() {
           <SpeakButton
             id="endOfDay"
             className="speak-corner"
-            text={`How today will end: battery about ${data.endOfDay.batterySocEstimate} percent, ${data.endOfDay.toHouseKwh} kilowatt-hours of solar direct to the house, about ${data.endOfDay.estimatedSavingsEur} euros saved. ${data.endOfDay.note}`}
+            text={t("welcome.speak.endOfDayCard", {
+              soc: data.endOfDay.batterySocEstimate,
+              toHouse: data.endOfDay.toHouseKwh,
+              savings: data.endOfDay.estimatedSavingsEur,
+              note: data.endOfDay.note,
+            })}
           />
-          <h3>How today will end</h3>
-          <p>battery ≈ {fmtPct(data.endOfDay.batterySocEstimate)}% · PV to house ≈ {fmt1(data.endOfDay.toHouseKwh)} kWh</p>
+          <h3>{t("welcome.endOfDay.title")}</h3>
+          <p>{t("welcome.endOfDay.line", { pct: fmtPct(data.endOfDay.batterySocEstimate), kwh: fmt1(data.endOfDay.toHouseKwh) })}</p>
           <p className="muted">
-            to battery ≈ {fmt1(data.endOfDay.toBatteryKwh)} kWh · export ≈{" "}
+            {t("welcome.endOfDay.toBattery", { kwh: fmt1(data.endOfDay.toBatteryKwh) })} · {t("welcome.endOfDay.exportApprox")}{" "}
             <span className="wx-c-grid">{fmt1(data.endOfDay.gridExportKwh)} kWh</span>
           </p>
           <p className="wx-big small">
-            ≈ <span className="wx-c-pv">€{fmtEur(data.endOfDay.estimatedSavingsEur)}</span> <span className="muted">saved today</span>
+            ≈ <span className="wx-c-pv">€{fmtEur(data.endOfDay.estimatedSavingsEur)}</span> <span className="muted">{t("welcome.endOfDay.savedToday")}</span>
           </p>
           <p className="muted">{data.endOfDay.note}</p>
         </section>
@@ -330,8 +408,8 @@ export default function WelcomeTab() {
         <ThisWeekSoFarCard w={weekSoFar} />
 
         <section className="card">
-          <SpeakButton id="weekUpcoming" className="speak-corner" text={`What's coming this week: ${data.week.upcoming}`} />
-          <h3>What's coming this week</h3>
+          <SpeakButton id="weekUpcoming" className="speak-corner" text={t("welcome.speak.weekUpcoming", { text: data.week.upcoming })} />
+          <h3>{t("welcome.weekUpcoming.title")}</h3>
           <p>{data.week.upcoming}</p>
         </section>
 
@@ -339,18 +417,22 @@ export default function WelcomeTab() {
           <SpeakButton
             id="weekEstimate"
             className="speak-corner"
-            text={`How this week should end: ${data.week.estimate} About ${data.week.estimateKwh} kilowatt-hours, ${data.week.estimateEur} euros saved.`}
+            text={t("welcome.speak.weekEstimateCard", {
+              estimate: data.week.estimate,
+              kwh: data.week.estimateKwh,
+              eur: data.week.estimateEur,
+            })}
           />
-          <h3>How this week should end</h3>
+          <h3>{t("welcome.weekEstimate.title")}</h3>
           <p>{data.week.estimate}</p>
           <p className="muted">
-            ≈ <span className="wx-c-pv">{fmt1(data.week.estimateKwh)} kWh</span> · <span className="wx-c-pv">€{fmtEur(data.week.estimateEur)}</span> saved
+            ≈ <span className="wx-c-pv">{fmt1(data.week.estimateKwh)} kWh</span> · <span className="wx-c-pv">€{fmtEur(data.week.estimateEur)}</span> {t("welcome.saved")}
           </p>
         </section>
 
         <section className="card">
-          <SpeakButton id="month" className="speak-corner" text={`${new Date().toLocaleString([], { month: "long" })}: ${data.month.statement}`} />
-          <h3>{new Date().toLocaleString([], { month: "long" })}</h3>
+          <SpeakButton id="month" className="speak-corner" text={`${monthName}: ${data.month.statement}`} />
+          <h3>{monthName}</h3>
           <p>{data.month.statement}</p>
         </section>
       </div>

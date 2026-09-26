@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import SpeakButton, { speakText, stopSpeech, speechSupported } from "./SpeakButton.jsx";
+import SpeakButton from "./SpeakButton.jsx";
+import { speakText, stopSpeech, speechSupported } from "../speech.js";
+import { useSpeechLang } from "../i18n/LanguageProvider.jsx";
 
 // Answer text written AS it is spoken: words appear one by one at the voice's
 // pace (SpeechSynthesis onboundary), the current word highlighted; the full
@@ -8,6 +10,7 @@ import SpeakButton, { speakText, stopSpeech, speechSupported } from "./SpeakButt
 export default function SyncedSpeech({ id, text, autoPlay = false, className = "", onSpeechEnd = null }) {
   const [char, setChar] = useState(null); // boundary charIndex while speaking
   const [finished, setFinished] = useState(!speechSupported);
+  const speechLang = useSpeechLang();
 
   const words = useMemo(() => {
     const out = [];
@@ -28,7 +31,7 @@ export default function SyncedSpeech({ id, text, autoPlay = false, className = "
         setChar(c);
       }
     }
-    if (autoPlay && text) speakText(id, text, { onWord });
+    if (autoPlay && text) speakText(id, text, { onWord, lang: speechLang });
     return () => stopSpeech(); // panel closed / answer replaced mid-speech
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, text, autoPlay]);
