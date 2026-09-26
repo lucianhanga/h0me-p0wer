@@ -102,7 +102,7 @@ export const de = {
     targetOutput: "Ziel-Ausgabeleistung",
     presetValue: "Vorgabe {preset}",
     decisionInputs: "Entscheidungsgrundlagen",
-    inputs: "PV {pv} W · Haus {house} W · SOC {soc}%",
+    inputs: "PV {pv} W · Haus {house} W · SOC {soc}%",
     presetWritten: "Vorgabe geschrieben ({reason})",
     lastWrite: "letzter Schreibvorgang {time}",
     takeOver: "Ausgabesteuerung übernehmen",
@@ -157,7 +157,7 @@ export const de = {
     },
     liveNumbers: { title: "Live-Werte (werden nicht geschrieben)" },
     native: { title: "Nativer Eigenverbrauch aktiv", modeWritten: "Modus geschrieben ({reason})" },
-    liveLine: "PV {pv} W · Haus {house} W · SOC {soc}%",
+    liveLine: "PV {pv} W · Haus {house} W · SOC {soc}%",
     lastWrite: "letzter Schreibvorgang {time}",
     decision: {
       targetTitle: "Ziel-Ausgabeleistung",

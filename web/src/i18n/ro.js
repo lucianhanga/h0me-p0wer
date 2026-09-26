@@ -98,7 +98,7 @@ export const ro = {
     targetOutput: "Ieșire țintă",
     presetValue: "preset {preset}",
     decisionInputs: "Date de decizie",
-    inputs: "PV {pv} W · casă {house} W · SOC {soc}%",
+    inputs: "PV {pv} W · casă {house} W · SOC {soc}%",
     presetWritten: "preset scris ({reason})",
     lastWrite: "ultima scriere {time}",
     takeOver: "Preia controlul ieșirii",
@@ -153,7 +153,7 @@ export const ro = {
     },
     liveNumbers: { title: "Valori live (nu sunt scrise)" },
     native: { title: "Autoconsum nativ activ", modeWritten: "mod scris ({reason})" },
-    liveLine: "PV {pv} W · casă {house} W · SOC {soc}%",
+    liveLine: "PV {pv} W · casă {house} W · SOC {soc}%",
     lastWrite: "ultima scriere {time}",
     decision: {
       targetTitle: "Ieșire țintă",

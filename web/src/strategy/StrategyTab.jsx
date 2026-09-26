@@ -266,7 +266,7 @@ export default function StrategyTab() {
       )}
 
       {d && (isAnkerApp || isNative) && (
-        <div className="cards">
+        <div className="cards cards-single">
           <div className="card">
             <div className="card-label">
               {isAnkerApp ? t("strategy.liveNumbers.title") : t("strategy.native.title")}
