@@ -1,7 +1,7 @@
 {
   "name": "h0me-p0wer-server",
   "private": true,
-  "version": "1.5.69",
+  "version": "1.5.70",
   "type": "module",
   "main": "index.js",
   "engines": {

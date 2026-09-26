@@ -26,7 +26,7 @@ import {
   getSnapshotBuckets,
   getCloudDayPower,
   getAnyDeviceSn,
-  getBatterySn,
+  getBatterySns,
   saveBatterySnapshot,
   getLatestBattery,
   getBatteryHistory,
@@ -100,6 +100,14 @@ const anker = new AnkerClient(
 // account, the app belongs to the site containing OUR meter — never a
 // positional guess (site_list[0] now returns the SB4's site).
 anker.getMeterSn = () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+
+// All battery SNs ever seen (live one first): history aggregation spans the
+// 2026-09-26 Plus→Pro swap — pre-swap days live under the old SN, so stats
+// and ROI must query both.
+function batterySns() {
+  const meterSn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
+  return [...new Set([latestBattery?.sn, ...getBatterySns(meterSn)].filter(Boolean))];
+}
 
 const app = express();
 app.use(express.json());
@@ -870,7 +878,9 @@ registerWelcomeRoute(app, {
 // ROI tab: payback of the BOM investment from measured savings, DB only.
 registerRoiRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
-  getBatterySn: () => latestBattery?.sn ?? getBatterySn(poller.snapshot?.meter?.sn ?? getAnyDeviceSn()),
+  // ALL battery SNs (live one first) — history spans the 2026-09-26
+  // Plus→Pro swap; pre-swap days live under the old SN.
+  getBatterySns: () => batterySns(),
 });
 
 // Dashboard/top-days: same deps shape as registerRoiRoute just above, plus
@@ -879,7 +889,7 @@ registerRoiRoute(app, {
 // battery-params.js already use for that.
 registerStatsRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
-  getBatterySn: () => latestBattery?.sn ?? getBatterySn(poller.snapshot?.meter?.sn ?? getAnyDeviceSn()),
+  getBatterySns: () => batterySns(),
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
 });
 
@@ -1296,8 +1306,17 @@ let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
 let batteryMqtt = null;
 
 function startBatteryMqtt() {
-  if (batteryMqtt || !latestBattery?.sn) return;
-  batteryMqtt = new AnkerMqtt(anker, latestBattery.sn);
+  if (!latestBattery?.sn) return;
+  // Battery hardware swap (happened 2026-09-26, Plus → Pro): the SN — and
+  // possibly the pn — changed under a running process. Rebind instead of
+  // watchdog-looping against the old device forever.
+  if (batteryMqtt && batteryMqtt.sn !== latestBattery.sn) {
+    console.log(`[mqtt] battery changed ${batteryMqtt.sn} -> ${latestBattery.sn}, rebinding`);
+    batteryMqtt.stop();
+    batteryMqtt = null;
+  }
+  if (batteryMqtt) return;
+  batteryMqtt = new AnkerMqtt(anker, latestBattery.sn, latestBattery.pn ?? "A17C3");
   batteryMqtt.onData = (d) => {
     // Same shape as the REST sync payload, preserving name/siteId.
     latestBattery = { ...latestBattery, ...d };

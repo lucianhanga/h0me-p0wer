@@ -7,7 +7,7 @@ import {
   integrateBatteryEnergy,
   getPvDaily,
   getAnyDeviceSn,
-  getBatterySn,
+  getBatterySns,
   getEarliestCloudDay,
   getCloudTrend,
   getLatestBattery,
@@ -76,7 +76,7 @@ function pvStoredTotals(fromDate, toDate) {
   return { produced: r2(produced), toHome: r2(toHome), toBatt: r2(toBatt) };
 }
 
-// deps: getMeterSn(), getBatterySn(), getLiveBattery() — same shape/names
+// deps: getMeterSn(), getBatterySns(), getLiveBattery() — same shape/names
 // as roi.js and welcome.js/battery-params.js's deps, so the index.js call
 // site can reuse the identical closures already passed to those.
 export function registerStatsRoute(app, deps) {
@@ -166,7 +166,7 @@ export function registerStatsRoute(app, deps) {
   
     // --- Battery profile for today: 30-s live snapshots as anchors, cloud
     // battery day-trend as fallback, interpolated (same pattern as grid).
-    const battSn = deps.getBatterySn?.() ?? getBatterySn(sn);
+    const battSns = deps.getBatterySns?.() ?? getBatterySns(sn);
     const battAnchors = new Map(); // bt -> {s, c} signed battery flow (out − charge)
     const cellsAnchors = new Map(); // bt -> {s, c} cells-only output (excl. PV pass-through)
     const pvAnchors = new Map(); // bt -> {s, c} PV direct-to-home
@@ -189,9 +189,12 @@ export function registerStatsRoute(app, deps) {
       putInto(pvAnchors, bt, pvHome);
       putInto(chargeAnchors, bt, Math.max(0, r.charge_w ?? 0));
     }
-    if (battSn) {
+    if (battSns.length) {
       const todayStr = localDate(new Date(dayStartMs));
-      for (const r of getCloudDayPower(battSn, todayStr, todayStr)) {
+      // All battery SNs (post-2026-09-26 swap there are two; the old one only
+      // matters if today IS the swap day) — same-bucket rows don't collide in
+      // practice, and putInto's has() guard keeps the first value either way.
+      for (const r of battSns.flatMap((s) => getCloudDayPower(s, todayStr, todayStr))) {
         if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
         if (r.ts + 20 * 60 * 1000 > now) continue;
         const bt = Math.floor(r.ts / BUCKET) * BUCKET;
@@ -256,7 +259,7 @@ export function registerStatsRoute(app, deps) {
     const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
     // Attach per-day battery kWh (from the battery's cloud day trends).
     for (const r of monthRows) {
-      const b = dayBattery(battSn, r.label);
+      const b = dayBattery(battSns, r.label);
       r.disKwh = b.dischargedKwh;
       r.chgKwh = b.chargedKwh;
     }
@@ -311,8 +314,8 @@ export function registerStatsRoute(app, deps) {
       if (cloudPvRows.some((r) => battEnergy.gaps.some((g) => r.ts >= g.startMs && r.ts < g.endMs))) {
         recoveredMs += battEnergy.gaps.reduce((a, g) => a + (g.endMs - g.startMs), 0);
       }
-      if (battSn) {
-        const cloudBattRows = getCloudDayPower(battSn, todayDateStr, todayDateStr);
+      if (battSns.length) {
+        const cloudBattRows = battSns.flatMap((s) => getCloudDayPower(s, todayDateStr, todayDateStr));
         let gapDis = 0;
         let gapChg = 0;
         for (const r of cloudBattRows) {
@@ -413,7 +416,7 @@ export function registerStatsRoute(app, deps) {
       const d = new Date(dayStartMs);
       for (let date = new Date(d.getFullYear(), 0, 1); date <= d; date.setDate(date.getDate() + 1)) {
         const ds = localDate(date);
-        sum += ds === todayDs ? todayCellsKwh : dayBattery(battSn, ds).dischargedKwh;
+        sum += ds === todayDs ? todayCellsKwh : dayBattery(battSns, ds).dischargedKwh;
       }
       return r2(sum);
     })();
@@ -554,7 +557,7 @@ export function registerStatsRoute(app, deps) {
       const lastDay = m === d.getMonth() + 1 ? d.getDate() : new Date(y, m, 0).getDate();
       for (let day = 1; day <= lastDay; day++) {
         const ds = `${y}-${String(m).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-        batt += ds === todayDs ? todayCellsKwh : dayBattery(battSn, ds).dischargedKwh;
+        batt += ds === todayDs ? todayCellsKwh : dayBattery(battSns, ds).dischargedKwh;
         pv += pvDayKwh(ds);
       }
       return { label: r.label, grid: r.importKwh, batt: r2(batt), pv: r2(pv) };
@@ -590,7 +593,7 @@ export function registerStatsRoute(app, deps) {
     const type = ["day", "week", "month", "year"].includes(req.query.type) ? req.query.type : "day";
     const offset = Math.max(1, Math.min(Number(req.query.offset ?? 1) || 1, 400));
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
-    const battSn = deps.getBatterySn?.() ?? getBatterySn(sn);
+    const battSns = deps.getBatterySns?.() ?? getBatterySns(sn);
     const tariff = getTariff();
     const r2 = (v) => Math.round(v * 100) / 100;
     const eur = (kwh) => r2(kwh * tariff);
@@ -606,7 +609,7 @@ export function registerStatsRoute(app, deps) {
   
     // battKwh/pvKwhDay/pvProducedDay: see server/energy-day.js's dayBattery/
     // dayPv — this route used to keep its own copies of both lookups.
-    const battKwh = (dateStr) => dayBattery(battSn, dateStr).dischargedKwh;
+    const battKwh = (dateStr) => dayBattery(battSns, dateStr).dischargedKwh;
     const pvKwhDay = (dateStr) => dayPv(dateStr).toHome;
     const pvProducedDay = (dateStr) => dayPv(dateStr).produced;
     // Grid import kWh + 24 hourly bars for one finished date (meter/battery/PV
@@ -623,7 +626,7 @@ export function registerStatsRoute(app, deps) {
     // whatever charged the battery that day).
     function dayGrid(dateStr) {
       const gridH = hourlyKwhFromRows(getCloudDayPower(sn, dateStr, dateStr));
-      const battH = battSn ? hourlyKwhFromRows(getCloudDayPower(battSn, dateStr, dateStr)) : new Array(24).fill(0);
+      const battH = battSns.length ? hourlyKwhFromRows(battSns.flatMap((s) => getCloudDayPower(s, dateStr, dateStr))) : new Array(24).fill(0);
       const pvProdH = hourlyKwhFromRows(getCloudPvDayPower(dateStr, dateStr));
       const pvProdTotal = pvProdH.reduce((a, v) => a + v, 0);
       const pvHomeTotal = pvKwhDay(dateStr);
@@ -779,14 +782,14 @@ export function registerStatsRoute(app, deps) {
   // see welcome-ai.js's pvKwhForDay) is used for battInKwh below instead.
   app.get("/api/stats/top-days", (req, res) => {
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
-    const battSn = deps.getBatterySn?.() ?? getBatterySn(sn);
+    const battSns = deps.getBatterySns?.() ?? getBatterySns(sn);
     const r2 = (v) => Math.round(v * 100) / 100;
     const todayDs = localDate();
     const days = getPvDaily("2000-01-01", todayDs)
       .filter((r) => r.date < todayDs && r.produced > 0)
       .map((r) => {
         const gridKwh = r2(dayGridImportKwh(sn, r.date));
-        const battKwh = r2(dayBattery(battSn, r.date).dischargedKwh);
+        const battKwh = r2(dayBattery(battSns, r.date).dischargedKwh);
         const pvKwh = r2(r.to_home);
         return {
           date: r.date,
