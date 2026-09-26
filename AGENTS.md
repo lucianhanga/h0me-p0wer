@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.76, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.77, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4214,3 +4214,36 @@ side recovers — no action needed unless it persists for days.
   Solarbank (same philosophy as the meter's local Modbus) — our binary
   parser is already written (mqtt.js works unchanged over BLE); open
   questions are host Bluetooth hardware/range and the BLE stack choice.
+
+## NOT a broker stall: MQTT subscription missed the A17C1's subtopics (2026-09-26 evening, the day's "3rd stall" entries are hereby CORRECTED)
+
+- The user disproved the BLE theory ("I disabled bluetooth and see the
+  same thing"), prompting a real test: a raw MQTT session trying the
+  realtime trigger AND status-request variants got **46× 0405 + 33× 040a
+  + 1× 0500 messages** — the broker was routing fine ALL DAY. Root
+  cause: mqtt.js subscribed to `dt/{app}/{pn}/{sn}/` (bare, trailing
+  slash). The A17C3 published telemetry on the BARE topic, so this
+  worked for two weeks; the **A17C1 publishes on SUBTOPICS**
+  (`…/param_info`, `…/state_info`), which a bare subscription never
+  matches — so since the Plus→Pro swap we received nothing and it
+  masqueraded as the third broker stall. My "diagnostic" even confirmed
+  connect/subscribe/trigger all working and still concluded broker-side
+  — the lesson: verify the SUBSCRIPTION matches where messages actually
+  land before blaming the broker.
+- Fix: subscribe `dt/{app}/{pn}/{sn}/#` (the # wildcard also matches the
+  bare topic itself per MQTT spec — both generations covered).
+- **First real per-module data, and it's dramatic**: main unit 59-60 %
+  (mainSoc, 0405 a3 + 040a a3), BP5000 expansion **5 %** (SOH 100 %,
+  25 °C, SN ASKDMVS0G29100325, status 2). The overall 19 % is exactly
+  the capacity-weighted blend ((0.60×1.6 + 0.05×5.0)/6.6 ≈ 0.19 ✓) —
+  the modules are severely imbalanced, which also retroactively proves
+  the ≈-estimate idea (v1.5.73) was nonsense for real data. The
+  Strategy tab now shows the two segments at their true, very different
+  levels (screenshot verified: 5 % red expansion segment, 59 % green
+  main segment, temps + SOH in the legend).
+- The earlier entries "MQTT stall diagnosed live (3rd recurrence)" and
+  "How the Anker app shows per-module data during a broker stall: BLE"
+  are therefore WRONG for 2026-09-26 (the 09-11/09-22 stalls with the
+  A17C3 may still have been real); issue #231 (BLE channel) got a
+  correcting comment — BLE remains a valid independence option but the
+  "the app needs BLE for this" premise was disproved.
