@@ -70,6 +70,13 @@ export default function StrategyTab() {
   const [busy, setBusy] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showHelp, setShowHelp] = useState(false);
+  // PIN gate for strategy changes (2026-09-27, user request — the PIN lives
+  // server-side in .env STRATEGY_PIN, default 0000): first change per tab
+  // session asks for the PIN, then it's kept in sessionStorage. A 403 (e.g.
+  // the PIN changed server-side) re-asks with an error.
+  const [pendingPatch, setPendingPatch] = useState(null);
+  const [pinValue, setPinValue] = useState("");
+  const [pinError, setPinError] = useState(false);
 
   // Ticks once a second so the step-up hold bar below counts down smoothly
   // between the 10s /api/power-plan polls, instead of jumping in 10s steps.
@@ -78,17 +85,57 @@ export default function StrategyTab() {
     return () => clearInterval(t);
   }, []);
 
+  async function postStrategy(patch, pin) {
+    const r = await fetch("/api/power-plan/strategy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...patch, pin }),
+    });
+    const s = await r.json();
+    if (r.status === 403) return { pinRejected: true };
+    if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
+    return { data: s.data };
+  }
+
+  function askPin(patch, withError) {
+    setPendingPatch(patch);
+    setPinError(withError);
+    setPinValue("");
+  }
+
   async function setStrategy(patch) {
+    const pin = sessionStorage.getItem("strategyPin");
+    if (pin == null) return askPin(patch, false);
     setBusy(true);
     try {
-      const r = await fetch("/api/power-plan/strategy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
-      });
-      const s = await r.json();
-      if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
-      setState(s.data);
+      const res = await postStrategy(patch, pin);
+      if (res.pinRejected) {
+        sessionStorage.removeItem("strategyPin");
+        return askPin(patch, true);
+      }
+      setState(res.data);
+    } catch (err) {
+      alert(t("strategy.updateFailed", { error: err.message }));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitPin() {
+    const pin = pinValue.trim();
+    if (!pin || !pendingPatch) return;
+    setBusy(true);
+    try {
+      const res = await postStrategy(pendingPatch, pin);
+      if (res.pinRejected) {
+        setPinError(true);
+        setPinValue("");
+        return;
+      }
+      sessionStorage.setItem("strategyPin", pin);
+      setPendingPatch(null);
+      setPinError(false);
+      setState(res.data);
     } catch (err) {
       alert(t("strategy.updateFailed", { error: err.message }));
     } finally {
@@ -282,6 +329,43 @@ export default function StrategyTab() {
             : state.dischargeTolerancePct
         }
       />
+
+      {pendingPatch && (
+        <div className="ask-backdrop" onClick={() => setPendingPatch(null)}>
+          <div className="ask-panel" onClick={(e) => e.stopPropagation()}>
+            <button className="ask-close" onClick={() => setPendingPatch(null)} aria-label={t("ask.close")}>
+              ×
+            </button>
+            <h4>{t("pin.title")}</h4>
+            <p className="muted">{t("pin.body")}</p>
+            {pinError && <p className="pin-error">{t("pin.wrong")}</p>}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitPin();
+              }}
+            >
+              <input
+                className="pin-input"
+                type="password"
+                inputMode="numeric"
+                autoComplete="off"
+                autoFocus
+                value={pinValue}
+                onChange={(e) => setPinValue(e.target.value)}
+              />
+              <div className="controls">
+                <button type="submit" disabled={busy || !pinValue.trim()}>
+                  {t("pin.submit")}
+                </button>
+                <button type="button" onClick={() => setPendingPatch(null)}>
+                  {t("pin.cancel")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

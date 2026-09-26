@@ -18,8 +18,10 @@ body {
 header {
   display: flex;
   align-items: baseline;
-  gap: 1rem;
-  flex-wrap: wrap;
+  gap: 0.75rem;
+  /* One row, always (2026-09-27, user request — German tab titles wrapped
+     to a second row): the nav scrolls horizontally instead of wrapping. */
+  flex-wrap: nowrap;
   border-bottom: 1px solid #2a3238;
   margin-bottom: 1.5rem;
   /* Sticky, app-like top bar (mobile best practice). */
@@ -33,7 +35,13 @@ header {
 nav {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none; /* one row, invisible scroll (see header) */
+}
+
+nav::-webkit-scrollbar {
+  display: none;
 }
 
 /* Voice Q&A: mic button in the header + modal overlay with the answer. */
@@ -117,11 +125,16 @@ nav {
   display: flex;
   gap: 0.25rem;
   align-self: center;
+  flex-shrink: 0;
 }
 
 .lang-switch button {
   padding: 0.2rem 0.45rem;
   font-size: 0.75rem;
+}
+
+nav button {
+  flex-shrink: 0; /* never compress tabs to fit — scroll instead (one row) */
 }
 
 .lang-switch button.nav-active {
@@ -162,6 +175,11 @@ nav button.nav-active {
     font-size: 1.2rem;
   }
 
+  /* Keep the header to one row on phones: the version is expendable. */
+  .app-version {
+    display: none;
+  }
+
   header {
     gap: 0.5rem;
     margin-bottom: 1rem;
@@ -186,6 +204,8 @@ nav button.nav-active {
 h1 {
   font-size: 1.4rem;
   margin: 0.5rem 0;
+  white-space: nowrap; /* one header row — the title must never wrap */
+  flex-shrink: 0;
 }
 
 .subtitle {
@@ -2068,4 +2088,29 @@ pre {
   .batt-modules-detail {
     text-align: left;
   }
+}
+
+/* Strategy PIN modal (reuses the .ask-* overlay chrome). */
+.pin-input {
+  width: 100%;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.3rem;
+  text-align: center;
+  letter-spacing: 0.4em;
+  background: #101418;
+  color: inherit;
+  border: 1px solid #2a3441;
+  border-radius: 8px;
+}
+
+.pin-input:focus {
+  outline: none;
+  border-color: #f7a44f;
+}
+
+.pin-error {
+  color: #e05c5c;
+  font-size: 0.85rem;
+  margin: 0.25rem 0;
 }

@@ -396,6 +396,41 @@ export function getPvStringKwhForDay(dateStr) {
 
 export function pruneBattery() {
   db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
+  db.prepare(`DELETE FROM module_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
+}
+
+// --- Per-module battery data (MQTT 0405 main unit / 040a expansions) ------
+// SOC + temperature per PHYSICAL module (main unit + each expansion pack) —
+// the only place this exists (no REST/cloud-history equivalent); feeds the
+// Graph tab's module charts (2026-09-27). Same 48h retention as
+// battery_snapshots (pruned in pruneBattery above).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS module_snapshots (
+    ts INTEGER NOT NULL,
+    module TEXT NOT NULL,
+    soc REAL,
+    temperature_c REAL,
+    PRIMARY KEY (ts, module)
+  )
+`);
+
+const upsertModuleRow = db.prepare(`
+  INSERT OR REPLACE INTO module_snapshots (ts, module, soc, temperature_c)
+  VALUES (?, ?, ?, ?)
+`);
+
+// module: "main" | "exp1" | "exp2" | … (matching the 040a pack order).
+export function saveModuleSnapshot(ts, module, soc, temperatureC) {
+  upsertModuleRow.run(ts, module, soc ?? null, temperatureC ?? null);
+}
+
+const selectModuleRows = db.prepare(`
+  SELECT ts, module, soc, temperature_c FROM module_snapshots
+  WHERE ts >= ? AND ts <= ? ORDER BY ts ASC
+`);
+
+export function getModuleHistory(fromMs, toMs) {
+  return selectModuleRows.all(fromMs, toMs);
 }
 
 // --- Cloud-live grid samples (scen_info grid_info every 10 s) --------------

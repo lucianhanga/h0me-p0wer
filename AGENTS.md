@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.81, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.83, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4351,3 +4351,39 @@ side recovers — no action needed unless it persists for days.
 - Verified: vite build; Strategy tab screenshots in DE and RO (switcher,
   translated chrome, gauge, modules, legends); German AI briefing
   generated end-to-end.
+
+## Strategy PIN + header flags/one-row + Graph module tiles (2026-09-27, user requests, one PR)
+
+- **Strategy PIN**: POST /api/power-plan/strategy now requires `pin` in
+  the body, matched at REQUEST time against `STRATEGY_PIN` from .env
+  (default 0000 — request-time read, immune to the dotenv-hoisting
+  class). 403 {ok:false,error:"invalid PIN"} otherwise. Only that
+  endpoint (enable/disable stays ungated on purpose). StrategyTab: the
+  first change per tab session opens a PIN modal (reuses the .ask-*
+  chrome, .pin-input style, numeric keyboard on phones); the PIN is
+  kept in sessionStorage; a 403 re-asks with "wrong PIN" and the
+  selection is never applied client-side-first. Verified: no/wrong pin
+  → 403, 0000 with env unset → 200; modal screenshot; production .env
+  needs STRATEGY_PIN set by the user (default 0000 until then).
+- **Header**: language switcher uses flags 🇬🇧🇩🇪🇷🇴 instead of EN/DE/RO
+  (user request); header is now strictly ONE row (flex-wrap: nowrap,
+  nav scrolls horizontally with hidden scrollbar, buttons/h1/lang-switch
+  flex-shrink: 0, app-version hidden ≤600px) — German tab titles had
+  wrapped it to two rows. Verified 60px header height at 390px + 1000px,
+  no page overflow.
+- **Graph tab: per-module tiles** (user: "visualization of the solarbank
+  and attached battery temperatures + a tile with their load statuses"):
+  new module_snapshots table (ts, module "main"/"expN", soc,
+  temperature_c; 48h retention, pruned with battery_snapshots),
+  persisted from MQTT 0405 (main) + 040a (expansions) in index.js;
+  /api/timeseries Source 1d exposes socMain/socExp1/tempMain/tempExp1
+  (per-bucket mean; NO cloud fallback — 040a is realtime-only, history
+  exists from 2026-09-26 on). GraphTab gained per-graph `unit` (W/°C/%)
+  for the axis + tooltip + stats line (graph.avgRes now takes {unit}),
+  and two tiles: "Battery temperature" and "Battery charge per module".
+  Also fixed a pre-existing quirk the tiles exposed: the stats "avg"
+  was hardcoded to the GRID series for every graph ("avg 201 °C") —
+  now per-graph avgKey (power graphs keep grid as before).
+- Note: header/CI verification hit a real tooling fact — headless
+  Chrome's remote-debugging port occasionally refuses the first
+  connection; retrying with a fresh port/process works.
