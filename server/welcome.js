@@ -3,7 +3,7 @@
 // when the AI is unavailable. A background scheduler keeps the cache warm so
 // opening the tab never waits for the AI; the route's lazy refresh is only
 // the fallback. The route never throws and never leaks config.
-import { kvGet, kvSet } from "./db.js";
+import { kvGet, kvSet, getModuleHistory } from "./db.js";
 import {
   parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson, isWelcomeLang,
 } from "./welcome-sources.js";
@@ -344,14 +344,57 @@ export function registerWelcomeRoute(app, deps) {
     }
     try {
       const geo = await geocode(config.address);
-      const [weather, pvgis] = await Promise.all([
+      const [weather, pvgis, overview, yesterday] = await Promise.all([
         fetchWeather(geo.lat, geo.lon),
         fetchPvgis(geo.lat, geo.lon, config.pv),
+        // Full energy split for the answers (2026-09-27, user request: the
+        // Ask AI should know production/consumption split by source for
+        // today/yesterday/week/month). Same internal loopback the welcome
+        // refresh already uses — best-effort, the ask still works without.
+        deps.statsOverviewUrl ? fetchJson(deps.statsOverviewUrl).catch(() => null) : null,
+        deps.statsOverviewUrl
+          ? fetchJson(deps.statsOverviewUrl.replace("/api/stats/overview", "/api/stats/period?type=day&offset=1")).catch(() => null)
+          : null,
       ]);
-      const context = buildContext({ config, geo, weather, pvgis, deps });
+      const context = buildContext({ config, geo, weather, pvgis, statsOverview: overview?.data ?? null, deps });
+
+      // Per-module battery state + 24h history (same request): main unit
+      // SOC/temp, each expansion pack's SOC/SOH/temp (MQTT-only — null while
+      // the push channel stalls), and each module's 24h min/max SOC/temp.
+      const lb = deps.getLiveBattery?.() ?? null;
+      const history24h = {};
+      for (const r of getModuleHistory(Date.now() - 24 * 3600 * 1000, Date.now())) {
+        const m = (history24h[r.module] ??= { minSoc: null, maxSoc: null, minTempC: null, maxTempC: null, samples: 0 });
+        m.samples++;
+        if (r.soc != null) {
+          m.minSoc = m.minSoc == null ? r.soc : Math.min(m.minSoc, r.soc);
+          m.maxSoc = m.maxSoc == null ? r.soc : Math.max(m.maxSoc, r.soc);
+        }
+        if (r.temperature_c != null) {
+          m.minTempC = m.minTempC == null ? r.temperature_c : Math.min(m.minTempC, r.temperature_c);
+          m.maxTempC = m.maxTempC == null ? r.temperature_c : Math.max(m.maxTempC, r.temperature_c);
+        }
+      }
+
       const live = {
         liveGridW: deps.getLivePower?.() ?? null,
         liveBattery: context.battery,
+        batteryModules: lb
+          ? {
+              soc: lb.soc ?? null,
+              mainUnitSoc: lb.mainSoc ?? null,
+              temperatureC: lb.temperatureC ?? null,
+              expansionPacks: lb.expansionPacks ?? 0,
+              expansions: lb.expansions ?? null,
+              history24h,
+            }
+          : null,
+        energy: {
+          today: overview?.data?.byPeriod?.today ?? null,
+          yesterday: yesterday?.data ?? null,
+          week: overview?.data?.byPeriod?.week ?? null,
+          month: overview?.data?.byPeriod?.month ?? null,
+        },
       };
       const answer = await callAskAI(config, { ...context, live }, question, lang);
       return res.json({ ok: true, data: answer });
