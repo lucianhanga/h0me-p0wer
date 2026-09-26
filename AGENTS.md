@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.72, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.73, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4140,3 +4140,24 @@ side recovers — no action needed unless it persists for days.
   segments, legend with SOH/temp) which was REMOVED before committing.
   First live 040a will log `[mqtt] expansion data: N pack(s) ...` —
   check that line when the broker recovers.
+
+## Strategy tab: h-solar batteries only + estimated per-module fill (2026-09-26, user request)
+
+- User (with a production screenshot): "show only the batteries in the
+  h-solar system vertically and show them how full they are too." Two
+  changes, both BatteryTab.jsx:
+  1. **Only the primary system renders** (`batteries.slice(0, 1)`) — the
+     h-solarbank-4 (h-power site) stays tracked in the backend/API but
+     no longer gets a card here; it belongs to the future multi-system
+     view (epic #218). The "2 batteries" stamp goes back to the primary
+     name by construction.
+  2. **Estimated per-module fill while MQTT is stalled**: per-module SOC
+     is MQTT-only and the broker was (again) delivering nothing, so
+     waiting for exact values wasn't a viable answer to the request.
+     Each module now falls back to the OVERALL charge, clearly marked
+     "≈" (segment fill + legend), with the note "≈ overall charge shown
+     per module — exact per-module values arrive via MQTT". Exact
+     mainSoc/040a values replace the estimate automatically when they
+     land (anyEstimate disappears then).
+- Verified via headless-Chrome screenshot with real (MQTT-stalled) data:
+  both segments filled ≈24%, SB4 card gone.
