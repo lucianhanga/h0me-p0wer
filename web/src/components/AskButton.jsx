@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import SyncedSpeech from "./SyncedSpeech.jsx";
 import { speechSupported } from "./SpeakButton.jsx";
+import { useLanguage, useSpeechLang, useT } from "../i18n/LanguageProvider.jsx";
 
 // Voice Q&A button (header, next to the title): press → browser STT
 // (SpeechRecognition) → POST /api/ask → the AI corrects the transcript and
@@ -12,6 +13,9 @@ const SR =
     : null;
 
 export default function AskButton() {
+  const t = useT();
+  const { language } = useLanguage();
+  const speechLang = useSpeechLang();
   const [state, setState] = useState("idle"); // idle | listening | thinking | done | error
   const [transcript, setTranscript] = useState("");
   const [result, setResult] = useState(null); // {correctedQuestion, answer}
@@ -41,7 +45,7 @@ export default function AskButton() {
     setTranscript("");
     const rec = new SR();
     recRef.current = rec;
-    rec.lang = "en-US";
+    rec.lang = speechLang;
     rec.interimResults = true;
     rec.maxAlternatives = 1;
     rec.onresult = (e) => {
@@ -53,8 +57,8 @@ export default function AskButton() {
       setState("error");
       setError(
         e.error === "not-allowed"
-          ? "Microphone access denied — allow it in the browser and try again."
-          : `Speech recognition failed (${e.error}).`,
+          ? t("ask.micDenied")
+          : t("ask.failed", { error: e.error }),
       );
     };
     rec.onend = () => setState((s) => (s === "listening" ? "idle" : s));
@@ -76,7 +80,7 @@ export default function AskButton() {
       const j = await fetch("/api/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question }),
+        body: JSON.stringify({ question, lang: language }),
       }).then((r) => r.json());
       if (j.ok) {
         setResult(j.data);
@@ -110,11 +114,11 @@ export default function AskButton() {
         title={
           SR
             ? state === "listening"
-              ? "Stop listening"
-              : "Ask a question by voice"
-            : "Voice input not supported in this browser"
+              ? t("ask.stop")
+              : t("ask.byVoice")
+            : t("ask.unsupported")
         }
-        aria-label="Ask a question by voice"
+        aria-label={t("ask.byVoice")}
       >
         🎤
       </button>
@@ -127,13 +131,13 @@ export default function AskButton() {
               if (state === "done") armAutoClose(); // dead-man switch: stay open while tapped
             }}
           >
-            <button className="ask-close" onClick={close} aria-label="Close">×</button>
+            <button className="ask-close" onClick={close} aria-label={t("ask.close")}>×</button>
             {state === "listening" && (
-              <p className="muted">Listening… {transcript && <em>{transcript}</em>}</p>
+              <p className="muted">{t("ask.listening")} {transcript && <em>{transcript}</em>}</p>
             )}
             {state === "thinking" && (
               <p className="muted">
-                “{transcript}” — thinking…
+                {t("ask.thinkingWithTranscript", { transcript })}
               </p>
             )}
             {state === "error" && <p className="muted">{error}</p>}

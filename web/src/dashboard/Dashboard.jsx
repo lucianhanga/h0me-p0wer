@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
 // /api/stats/overview call.
 export default function Dashboard() {
+  const t = useT();
   const [stats, setStats] = useState(null);
   const [topDays, setTopDays] = useState(null);
   const [error, setError] = useState(null);
@@ -39,7 +41,7 @@ export default function Dashboard() {
   }, []);
 
   if (error) return <div className="error-box">{error}</div>;
-  if (!stats) return <p className="muted">loading…</p>;
+  if (!stats) return <p className="muted">{t("common.loading")}</p>;
 
   return (
     <div>
@@ -47,33 +49,33 @@ export default function Dashboard() {
       <div className="src-grid">
         <SourceCard
           type="day"
-          title="Today"
+          title={t("dashboard.today")}
           data={stats.byPeriod.today}
           formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         />
         <SourceCard
           type="week"
-          title="This week"
+          title={t("dashboard.thisWeek")}
           data={stats.byPeriod.week}
           formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
         />
         <SourceCard
           type="month"
-          title="This month"
+          title={t("dashboard.thisMonth")}
           data={stats.byPeriod.month}
           formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
         />
         <SourceCard
           type="year"
-          title="This year"
+          title={t("dashboard.thisYear")}
           data={stats.byPeriod.year}
           formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
         />
       </div>
       {topDays && (topDays.top.length > 0 || topDays.bottom.length > 0) && (
         <div className="topdays-grid">
-          <TopDaysCard title="Highest production days" rows={topDays.top} />
-          <TopDaysCard title="Lowest production days" rows={topDays.bottom} />
+          <TopDaysCard title={t("dashboard.topdays.highest")} rows={topDays.top} />
+          <TopDaysCard title={t("dashboard.topdays.lowest")} rows={topDays.bottom} />
         </div>
       )}
     </div>
@@ -96,13 +98,14 @@ const formatDayLabel = (dateStr) =>
   });
 
 function TopDaysCard({ title, rows }) {
+  const t = useT();
   return (
     <div className="src-card topdays-card">
       <div className="tile-title src-title">
         <span>{title}</span>
       </div>
       {rows.length === 0 ? (
-        <p className="muted topdays-empty">not enough finished days yet</p>
+        <p className="muted topdays-empty">{t("dashboard.topdays.notEnough")}</p>
       ) : (
         <div className="topdays-rows">
           {rows.map((d, i) => (
@@ -111,14 +114,16 @@ function TopDaysCard({ title, rows }) {
               <div className="topdays-info">
                 <div className="topdays-headline">
                   <span className="topdays-date">{formatDayLabel(d.date)}</span>
-                  <span className="topdays-produced wx-c-pv">{d.pvProducedKwh} kWh produced</span>
+                  <span className="topdays-produced wx-c-pv">
+                    {t("dashboard.producedKwh", { kwh: d.pvProducedKwh })}
+                  </span>
                 </div>
                 <div className="topdays-stats">
-                  <span>house {d.homeKwh} kWh</span>
-                  <span className="wx-c-grid">grid {d.gridKwh} kWh</span>
+                  <span>{t("dashboard.topdays.house", { kwh: d.homeKwh })}</span>
+                  <span className="wx-c-grid">{t("dashboard.topdays.grid", { kwh: d.gridKwh })}</span>
                   <span className="wx-c-batt">
-                    battery {d.battKwh} kWh out
-                    {d.battInKwh > 0 ? ` · ${d.battInKwh} kWh in` : ""}
+                    {t("dashboard.topdays.battOut", { kwh: d.battKwh })}
+                    {d.battInKwh > 0 ? t("dashboard.topdays.battIn", { kwh: d.battInKwh }) : ""}
                   </span>
                 </div>
               </div>
@@ -143,17 +148,18 @@ function TopDaysCard({ title, rows }) {
 // server/savings.js) isn't their sum, so a per-row € next to them would
 // look inconsistent with the summary.
 const SRC_ROWS = [
-  { key: "gridKwh", label: "Grid", color: "#f7a44f" },
-  { key: "pvKwh", label: "PV direct", color: "#5fce80" },
-  { key: "battKwh", label: "From battery", color: "#c084fc" },
+  { key: "gridKwh", labelKey: "dashboard.rows.grid", color: "#f7a44f" },
+  { key: "pvKwh", labelKey: "dashboard.rows.pvDirect", color: "#5fce80" },
+  { key: "battKwh", labelKey: "dashboard.rows.fromBattery", color: "#c084fc" },
 ];
-const BATT_IN_ROW = { key: "battInKwh", label: "To battery", color: "#8b98a5", stored: true };
+const BATT_IN_ROW = { key: "battInKwh", labelKey: "dashboard.rows.toBattery", color: "#8b98a5", stored: true };
 // Residual grid export (2026-09-23, user request) — shown on every period
 // card; 0.00 is the goal, anything above it is the honest remainder that
 // slipped past zero-export.
-const EXPORT_ROW = { key: "exportKwh", label: "To grid", color: "#e5544b" };
+const EXPORT_ROW = { key: "exportKwh", labelKey: "dashboard.rows.toGrid", color: "#e5544b" };
 
 function SourceCard({ type, title, data, formatLabel }) {
+  const t = useT();
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
   const [past, setPast] = useState(null); // /api/stats/period response (offset ≥ 1)
   const [blocked, setBlocked] = useState(false); // no data further back
@@ -195,11 +201,11 @@ function SourceCard({ type, title, data, formatLabel }) {
           (bar-chart) side too — it used to live inside the front face and
           vanish once the card was flipped (2026-09-19, user request). */}
       <div className="tile-title src-title">
-        <button className="src-nav" onClick={() => go(1)} disabled={blocked} aria-label="Older period">
+        <button className="src-nav" onClick={() => go(1)} disabled={blocked} aria-label={t("dashboard.olderPeriod")}>
           ‹
         </button>
         <span>{offset === 0 ? title : (past?.label ?? title)}</span>
-        <button className="src-nav" onClick={() => go(-1)} disabled={offset === 0} aria-label="Newer period">
+        <button className="src-nav" onClick={() => go(-1)} disabled={offset === 0} aria-label={t("dashboard.newerPeriod")}>
           ›
         </button>
       </div>
@@ -209,29 +215,28 @@ function SourceCard({ type, title, data, formatLabel }) {
           {active.pvProducedKwh != null && (
             <div className="src-produced">
               <span className="src-produced-icon">☀</span>
-              <span>{active.pvProducedKwh} kWh produced</span>
+              <span>{t("dashboard.producedKwh", { kwh: active.pvProducedKwh })}</span>
             </div>
           )}
           {active.dataCoveragePct != null && active.dataCoveragePct < 90 && (
             <div className="src-gap-note">
-              ⚠ {active.dataCoveragePct}% of today covered, even after recovering what we could
-              from Anker's cloud — actual totals may still be higher than shown
+              {t("dashboard.coverage", { pct: active.dataCoveragePct })}
             </div>
           )}
           <div className="src-rows">
             {rows.map((r) => (
               <div className="src-row" key={r.key}>
                 <span className="src-dot" style={{ background: r.color }} />
-                <span className="src-label">{r.label}</span>
+                <span className="src-label">{t(r.labelKey)}</span>
                 <span className="src-value">
                   <span className="src-kwh">{active[r.key]} kWh</span>
-                  {r.stored && <span className="src-eur">stored</span>}
+                  {r.stored && <span className="src-eur">{t("dashboard.stored")}</span>}
                 </span>
               </div>
             ))}
           </div>
           <div className="src-money">
-            spent €{active.gridEur} · saved €{active.savedEur}
+            {t("dashboard.spentSaved", { grid: active.gridEur, saved: active.savedEur })}
           </div>
         </div>
       </FlipTile>

@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import echarts from "../echarts.js";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Nothing-fancy today-so-far line(s) for a Live tab tile's flip side: no
 // zoom, no scroll, no legend — just the day's shape for that tile's metric
@@ -14,6 +15,7 @@ import echarts from "../echarts.js";
 // which side of zero it fell on (2026-09-19, same-day follow-up: "show
 // both load and unload").
 export default function TodayMiniChart({ lines, unit = "W", zeroLine = false }) {
+  const t = useT();
   const ref = useRef(null);
   const hasData = lines?.some((l) => l.data?.length);
 
@@ -71,6 +73,6 @@ export default function TodayMiniChart({ lines, unit = "W", zeroLine = false }) 
     };
   }, [lines, unit, zeroLine, hasData]);
 
-  if (!hasData) return <p className="muted todaymini-empty">no data yet today</p>;
+  if (!hasData) return <p className="muted todaymini-empty">{t("live.noDataToday")}</p>;
   return <div ref={ref} className="todaymini-chart" />;
 }

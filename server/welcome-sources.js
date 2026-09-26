@@ -13,6 +13,12 @@ export const CARDINALS = {
   S: 180, SSW: 202.5, SW: 225, WSW: 247.5, W: 270, WNW: 292.5, NW: 315, NNW: 337.5,
 };
 
+// Languages the Welcome/Ask AI briefings support (the frontend passes
+// ?lang=). The full NAME is what the AI context carries — "write your prose
+// in German" reads unambiguously to the model where an ISO code might not.
+export const LANG_NAMES = { en: "English", de: "German", ro: "Romanian" };
+export const isWelcomeLang = (v) => Object.keys(LANG_NAMES).includes(v);
+
 // PVGIS aspect convention: 0 = south, negative = east, positive = west.
 export function cardinalToAspect(sym) {
   const deg = CARDINALS[sym?.toUpperCase()?.trim()];

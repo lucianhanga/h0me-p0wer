@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.80, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.81, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4313,3 +4313,41 @@ side recovers — no action needed unless it persists for days.
 - Verified: 09-23 (pre-swap) batt 49 buckets max 26 W (the old unit's
   real morning discharge) + grid anchors restored on dev (no meter);
   09-25 batt max 566 W; 09-26+ untouched (new SN).
+
+## i18n: English / German / Romanian (2026-09-27, user request — pattern from the h0me project)
+
+- Full app internationalization following the reference project's pattern
+  (/Users/lucian.hanga/private/lgit/h0me, plain-JS variant): nested
+  dictionaries per language + dot-path keys + {placeholder} interpolation
+  with fallback selected→en→key. New web/src/i18n/: translate.js
+  (storage key h0mep0wer.language, detect de*/ro*/en), en.js (source of
+  truth, 15 surface sections, ~320 keys), de.js, ro.js (full mirrors),
+  LanguageProvider.jsx (context, useT/useLanguage/useSpeechLang, mirrors
+  <html lang>, stops speech on language change). EN·DE·RO switcher in the
+  header. Every component's static strings go through t() — server-
+  generated strings (power-plan decision reasons, API payloads) stay
+  as-is; units are language-neutral.
+- **AI content per language**: GET /api/welcome?lang= + POST
+  /api/welcome/refresh?lang= + POST /api/ask {lang} (validated en/de/ro,
+  default AI_LANGUAGE). welcome_store cache is keyed per language
+  (welcome:<lang>); the 2h scheduler warms ONLY the default language (AI
+  cost unchanged), other languages lazy-refresh on request; per-language
+  inflight dedupe Maps. The AI context's language field gets the FULL
+  name (LANG_NAMES in welcome-sources.js) — prompts already said "see
+  language field". Verified live: ?lang=de produced "Guten Abend! Hier
+  ist der Energieabschluss für Samstag." The deterministic fallback
+  stays English (documented).
+- **Voice follows the language**: TTS — speak.js (split out of
+  SpeakButton.jsx so LanguageProvider can stopSpeech() without a circular
+  import) picks a voice by language prefix (Google voices preferred) with
+  BCP-47 fallback; STT — AskButton sets rec.lang from useSpeechLang()
+  (en-US/de-DE/ro-RO) and posts lang with the question.
+- Gotchas hit: welcome.js's ask route lives in welcome.js, NOT index.js;
+  statusQuo context used to spread language AFTER callStatusQuoAI set it
+  (would clobber the full name — removed); usePolledResource refetches on
+  URL change (verified — lang switch reloads the briefing without a
+  flash); ECharts series names double as legend identity, so GraphTab/
+  BackBars rebuild charts on language change (savedSpanMs survives).
+- Verified: vite build; Strategy tab screenshots in DE and RO (switcher,
+  translated chrome, gauge, modules, legends); German AI briefing
+  generated end-to-end.

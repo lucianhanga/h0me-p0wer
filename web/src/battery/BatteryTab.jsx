@@ -3,6 +3,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Rendered inside StrategyTab.jsx (moved out of its own top-level tab
 // 2026-09-16) — the gauge stays visible, the detailed param cards below
@@ -11,7 +12,7 @@ import { useLiveStream } from "../useLiveStream.js";
 const fmtW = (v) => (v == null ? "—" : `${Math.round(v)} W`);
 const fmtPct = (v) => (v == null ? "—" : `${v} %`);
 const fmtTemp = (v) => (v == null ? "—" : `${Math.round(v)} °C`);
-const onOff = (v) => (v == null ? "—" : v ? "on" : "off");
+const onOff = (t, v) => (v == null ? "—" : v ? t("battery.on") : t("battery.off"));
 const fmtTime = (ts) =>
   ts == null
     ? "—"
@@ -36,12 +37,13 @@ function ParamRow({ k, v }) {
 // "≈ overall" estimate was tried for a day and rejected — identical fills
 // looked fabricated).
 function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel }) {
+  const t = useT();
   const packs = constants?.expansionPacks ?? 0;
   if (!packs) return null;
   const modules = [
     {
       key: "main",
-      name: "Main unit",
+      name: t("battery.modules.mainUnit"),
       kwh: constants.baseCapacityKwh,
       soc: live.mainSoc ?? null,
       tempC: live.temperatureC ?? null,
@@ -51,7 +53,7 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
       const exp = live.expansions?.[i] ?? null;
       return {
         key: `exp${i}`,
-        name: `Expansion ${i + 1}`,
+        name: t("battery.modules.expansion", { n: i + 1 }),
         kwh: constants.expansionPackKwh,
         soc: exp?.soc ?? null,
         tempC: exp?.temperatureC ?? null,
@@ -65,7 +67,7 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
   const anyUnknown = modules.some((m) => m.soc == null);
   return (
     <div className="batt-modules">
-      <div className="batt-seg" title="battery modules, stacked as installed (solarbank on top)">
+      <div className="batt-seg" title={t("battery.modules.tip")}>
         {modules.map((m) => (
           <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
             <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
@@ -80,14 +82,16 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
           </span>
           <span className="batt-gauge-kwh">
             {live.storedKwh != null && constants?.capacityKwh != null
-              ? `${live.storedKwh} kWh of ${constants.capacityKwh} kWh`
-              : "capacity n/a"}
+              ? t("battery.storedKwh", { stored: live.storedKwh, total: constants.capacityKwh })
+              : t("battery.capacityNa")}
           </span>
           {(limits.minPct != null || limits.maxPct != null) && (
             <span className="batt-modules-limits muted">
-              {limits.minPct != null && `min ${limits.minPct}%`}
-              {limits.floorPct != null && limits.floorPct !== limits.minPct && ` · floor ${limits.floorPct}%`}
-              {limits.maxPct != null && ` · max ${limits.maxPct}%`}
+              {limits.minPct != null && t("battery.gauge.min", { pct: limits.minPct })}
+              {limits.floorPct != null &&
+                limits.floorPct !== limits.minPct &&
+                ` · ${t("battery.gauge.floor", { pct: limits.floorPct })}`}
+              {limits.maxPct != null && ` · ${t("battery.gauge.max", { pct: limits.maxPct })}`}
             </span>
           )}
         </div>
@@ -104,7 +108,7 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
           ))}
           {anyUnknown && (
             <div className="batt-modules-note muted">
-              per-module SOC arrives automatically when Anker's push channel (MQTT) delivers — currently stalled on Anker's side
+              {t("battery.modules.mqttNote")}
             </div>
           )}
         </div>
@@ -126,6 +130,7 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
 function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh }) {
+  const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
 
@@ -134,13 +139,14 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
     onRefresh().finally(() => setRefreshing(false));
   };
 
-  if (!live) return <p className="muted">no battery data yet</p>;
+  if (!live) return <p className="muted">{t("battery.noData")}</p>;
 
   const soc = live.soc ?? 0;
   // 2026-09-17: near-full gets its own color (user request) — distinct from
   // "just healthy" (lvl-high) so a topped-up battery reads at a glance.
   const lvlClass = soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
-  const zoneLabel = lvlClass === "lvl-full" ? "Full" : lvlClass === "lvl-low" ? "Low" : null;
+  const zoneLabel =
+    lvlClass === "lvl-full" ? t("battery.zone.full") : lvlClass === "lvl-low" ? t("battery.zone.low") : null;
   // 2026-09-16 fix: outputW is the TOTAL inverter output (PV pass-through +
   // cell discharge combined, see server/battery-params.js's
   // deriveBatteryFlow) — comparing it directly misread pure PV pass-through
@@ -189,14 +195,17 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
     <div>
       <div className="card batt-gauge-card">
         <div className="batt-card-head">
-          <span className="batt-card-name">{live.name ?? "battery"}</span>
+          <span className="batt-card-name">{live.name ?? t("battery.fallbackName")}</span>
           {live.pn && <span className="batt-card-sn">{live.pn}</span>}
           {live.expansionPacks > 0 && (
             <span
               className="badge ok"
-              title={`${live.expansionPacks} expansion pack(s) detected (cloud sub_package_num) — +${constants?.expansionPackKwh ?? "?"} kWh each`}
+              title={t("battery.expansionTip", {
+                n: live.expansionPacks,
+                kwh: constants?.expansionPackKwh ?? "?",
+              })}
             >
-              +{live.expansionPacks} ext
+              {t("battery.expansionBadge", { n: live.expansionPacks })}
             </span>
           )}
           {live.sn && <span className="batt-card-sn">{live.sn}</span>}
@@ -221,18 +230,26 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               <div
                 className="batt-tick"
                 style={{ left: `${minPct}%` }}
-                title={`account discharge floor ${minPct}%`}
+                title={t("battery.gauge.minTip", { pct: minPct })}
               />
             )}
             {showFloorTick && (
               <div
                 className="batt-tick batt-tick-floor"
                 style={{ left: `${effectiveFloorPct}%` }}
-                title={`controller won't discharge below ${effectiveFloorPct}% (${minPct}% floor + ${dischargeTolerancePct}% safety margin)`}
+                title={t("battery.gauge.floorTip", {
+                  floor: effectiveFloorPct,
+                  min: minPct,
+                  margin: dischargeTolerancePct,
+                })}
               />
             )}
             {maxPct != null && (
-              <div className="batt-tick" style={{ left: `${maxPct}%` }} title={`max charge ${maxPct}%`} />
+              <div
+                className="batt-tick"
+                style={{ left: `${maxPct}%` }}
+                title={t("battery.gauge.maxTip", { pct: maxPct })}
+              />
             )}
             <div className="batt-gauge-center">
               <span className="batt-gauge-pct">
@@ -240,25 +257,25 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               </span>
               <span className="batt-gauge-kwh">
                 {live.storedKwh != null && constants?.capacityKwh != null
-                  ? `${live.storedKwh} kWh of ${constants.capacityKwh} kWh`
-                  : "capacity n/a"}
+                  ? t("battery.storedKwh", { stored: live.storedKwh, total: constants.capacityKwh })
+                  : t("battery.capacityNa")}
               </span>
             </div>
           </div>
           <div className={`batt-gauge-cap ${lvlClass}`} />
           {minPct != null && (
             <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
-              min {minPct}%
+              {t("battery.gauge.min", { pct: minPct })}
             </span>
           )}
           {showFloorTick && (
             <span className="batt-tick-label batt-tick-label-floor" style={{ left: `${effectiveFloorPct}%` }}>
-              floor {effectiveFloorPct}%
+              {t("battery.gauge.floor", { pct: effectiveFloorPct })}
             </span>
           )}
           {maxPct != null && (
             <span className="batt-tick-label" style={{ left: `${maxPct}%` }}>
-              max {maxPct}%
+              {t("battery.gauge.max", { pct: maxPct })}
             </span>
           )}
           </div>
@@ -271,8 +288,8 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
                 <span>▲</span>
                 <span>▲</span>
               </span>
-              <span className="batt-status-main">⚡ charging {fmtW(chargeW)}</span>
-              {etaLabel && <span className="batt-status-eta">full in ≈ {etaLabel}</span>}
+              <span className="batt-status-main">{t("battery.status.charging", { w: fmtW(chargeW) })}</span>
+              {etaLabel && <span className="batt-status-eta">{t("battery.status.fullIn", { eta: etaLabel })}</span>}
             </>
           )}
           {mode === "discharging" && (
@@ -282,12 +299,14 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
                 <span>▼</span>
                 <span>▼</span>
               </span>
-              <span className="batt-status-main">⏏ discharging {fmtW(cellsW)}</span>
-              {etaLabel && <span className="batt-status-eta">empty in ≈ {etaLabel}</span>}
+              <span className="batt-status-main">{t("battery.status.discharging", { w: fmtW(cellsW) })}</span>
+              {etaLabel && <span className="batt-status-eta">{t("battery.status.emptyIn", { eta: etaLabel })}</span>}
             </>
           )}
-          {mode === "idle" && <span className="batt-status-main">idle</span>}
-          {usableKwh != null && <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>}
+          {mode === "idle" && <span className="batt-status-main">{t("battery.status.idle")}</span>}
+          {usableKwh != null && (
+            <span className="batt-status-sub">{t("battery.status.usableWindow", { kwh: usableKwh })}</span>
+          )}
         </div>
       </div>
 
@@ -296,51 +315,51 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
         // live-only — its config endpoints aren't verified for this hardware,
         // so there is no Configuration/Status detail to expand.
         <p className="muted" style={{ marginTop: 8 }}>
-          live monitoring only — not part of the house system, no control or history
+          {t("battery.liveOnlyNote")}
         </p>
       ) : (
         <>
           <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-            Battery information <span className="chevron">{open ? "▾" : "▸"}</span>
+            {t("battery.infoToggle")} <span className="chevron">{open ? "▾" : "▸"}</span>
           </button>
           {open && (
         <div className="param-cards">
           <div className="card">
             <div className="card-label">
-              Configuration
+              {t("battery.config.title")}
               <button
                 className={`wx-refresh${refreshing ? " spinning" : ""}`}
                 disabled={refreshing}
-                title="refetch device configuration from the cloud"
+                title={t("battery.config.refreshTip")}
                 onClick={forceRefresh}
               >
                 ↻
               </button>
             </div>
-            <ParamRow k="Charge upper limit" v={fmtPct(config?.chargeUpperLimitPct)} />
-            <ParamRow k="Discharge lower limit" v={fmtPct(config?.dischargeLowerLimitPct)} />
+            <ParamRow k={t("battery.config.chargeUpperLimit")} v={fmtPct(config?.chargeUpperLimitPct)} />
+            <ParamRow k={t("battery.config.dischargeLowerLimit")} v={fmtPct(config?.dischargeLowerLimitPct)} />
             <ParamRow
-              k="Backup reserve"
+              k={t("battery.config.backupReserve")}
               v={
                 config?.backupReservePct != null
-                  ? `${config.backupReservePct} % · ${onOff(config.backupReserveSwitch)}`
+                  ? `${config.backupReservePct} % · ${onOff(t, config.backupReserveSwitch)}`
                   : "—"
               }
             />
             <ParamRow
-              k="Limits source"
+              k={t("battery.config.limitsSource")}
               v={
                 <span
                   className={`badge ${["power_cutoff", "account"].includes(config?.limitsSource) ? "ok" : "warn"}`}
                 >
-                  {config?.limitsSource ?? "unknown"}
+                  {config?.limitsSource ?? t("battery.config.limitsSourceUnknown")}
                 </span>
               }
             />
-            <ParamRow k="Zero-export (0w feed)" v={onOff(features?.zeroExport)} />
-            <ParamRow k="SOC calibration" v={onOff(config?.socCalibrationEnable)} />
+            <ParamRow k={t("battery.config.zeroExport")} v={onOff(t, features?.zeroExport)} />
+            <ParamRow k={t("battery.config.socCalibration")} v={onOff(t, config?.socCalibrationEnable)} />
             <ParamRow
-              k="Config fetched"
+              k={t("battery.config.fetched")}
               v={`${fmtTime(config?.fetchedAt)}${config?.source ? ` · ${config.source}` : ""}`}
             />
             {config?.station && (
@@ -349,11 +368,11 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           </div>
 
           <div className="card">
-            <div className="card-label">Status</div>
-            <ParamRow k="Temperature" v={fmtTemp(live.temperatureC)} />
-            <ParamRow k="Charging status" v={live.chargingStatus ?? "—"} />
-            <ParamRow k="Error code" v={live.errCode ?? "—"} />
-            <ParamRow k="Heating power" v={fmtW(live.heatingPower)} />
+            <div className="card-label">{t("battery.statusCard.title")}</div>
+            <ParamRow k={t("battery.statusCard.temperature")} v={fmtTemp(live.temperatureC)} />
+            <ParamRow k={t("battery.statusCard.chargingStatus")} v={live.chargingStatus ?? "—"} />
+            <ParamRow k={t("battery.statusCard.errorCode")} v={live.errCode ?? "—"} />
+            <ParamRow k={t("battery.statusCard.heatingPower")} v={fmtW(live.heatingPower)} />
             <ParamRow
               k={live.pv3W != null || live.pv4W != null ? "PV1 / PV2 / PV3 / PV4" : "PV1 / PV2"}
               v={
@@ -362,9 +381,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
                   : `${fmtW(live.pv1W)} / ${fmtW(live.pv2W)}`
               }
             />
-            <ParamRow k="Grid → battery" v={fmtW(live.gridToBatteryW)} />
-            <ParamRow k="PV → grid" v={fmtW(live.pvToGridW)} />
-            <ParamRow k="Home load" v={fmtW(live.homeLoadW)} />
+            <ParamRow k={t("battery.statusCard.gridToBattery")} v={fmtW(live.gridToBatteryW)} />
+            <ParamRow k={t("battery.statusCard.pvToGrid")} v={fmtW(live.pvToGridW)} />
+            <ParamRow k={t("battery.statusCard.homeLoad")} v={fmtW(live.homeLoadW)} />
           </div>
         </div>
           )}
@@ -395,6 +414,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
 // get a one-item array; the fallback to treating the bare payload as one
 // item stays for older servers.
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
+  const t = useT();
   const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
 
   // Live push (2026-09-22, user request: status as fast as the Anker app):
@@ -457,7 +477,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
       .then((res) => res.ok && setData(res.data));
 
   if (error && !data) return <div className="error-box">{error}</div>;
-  if (!data) return <p className="muted">loading…</p>;
+  if (!data) return <p className="muted">{t("common.loading")}</p>;
 
   // Only the PRIMARY system's batteries are shown here (2026-09-26, user
   // request: "show only the batteries in the h-solar system") — batteries[0]
@@ -471,7 +491,9 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   return (
     <div>
       <UpdatedStamp at={latestTs}>
-        {batteries.length > 1 ? `${batteries.length} batteries` : (batteries[0].live?.name ?? "battery")}
+        {batteries.length > 1
+          ? t("battery.count", { n: batteries.length })
+          : (batteries[0].live?.name ?? t("battery.fallbackName"))}
       </UpdatedStamp>
 
       <div className="battery-list">

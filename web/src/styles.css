@@ -112,6 +112,23 @@ nav {
   align-self: center;
 }
 
+/* Language switcher (EN/DE/RO) — same button idiom as the nav, compact. */
+.lang-switch {
+  display: flex;
+  gap: 0.25rem;
+  align-self: center;
+}
+
+.lang-switch button {
+  padding: 0.2rem 0.45rem;
+  font-size: 0.75rem;
+}
+
+.lang-switch button.nav-active {
+  border-color: #f7a44f;
+  color: #f7a44f;
+}
+
 nav button.nav-active {
   border-color: #f7a44f;
   color: #f7a44f;

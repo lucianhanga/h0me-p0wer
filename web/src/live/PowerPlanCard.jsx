@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Power Plan section: collapsible (collapsed by default). Shows the
 // controller state; the output preset can be taken over from here, but
 // handing it back is intentionally NOT offered in the UI (the
 // /api/power-plan/disable endpoint still exists for that).
 export default function PowerPlanCard() {
+  const t = useT();
   // Same endpoint/cadence as the Strategy tab — see the matching comment
   // there.
   const { data: state, setData: setState } = usePolledResource("/api/power-plan", {
@@ -22,7 +24,7 @@ export default function PowerPlanCard() {
       if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
       setState(s.data);
     } catch (err) {
-      alert(`Power plan enable failed: ${err.message}`);
+      alert(t("powerplan.enableFailed", { message: err.message }));
     } finally {
       setBusy(false);
     }
@@ -36,37 +38,39 @@ export default function PowerPlanCard() {
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        Power Plan{" "}
-        {state?.enabled && <span className="badge ok">active</span>}{" "}
+        {t("powerplan.title")}{" "}
+        {state?.enabled && <span className="badge ok">{t("powerplan.active")}</span>}{" "}
         <span className="chevron">{open ? "▾" : "▸"}</span>
       </button>
       {open && (
         <>
           <p className="muted">
             {state == null
-              ? "loading…"
+              ? t("common.loading")
               : state.enabled
-                ? "Active — the app sets the battery output preset."
-                : "Off — the Anker app schedule is in control."}
+                ? t("powerplan.statusActive")
+                : t("powerplan.statusOff")}
           </p>
           {state?.enabled && d && (
             <div className="cards">
               <div className="card">
-                <div className="card-label">Target output</div>
+                <div className="card-label">{t("powerplan.targetOutput")}</div>
                 <div className="card-value">{d.targetW} W</div>
                 <div className="card-label">
-                  preset {state.lastWrittenPower != null ? `${state.lastWrittenPower} W` : "—"}
+                  {t("powerplan.presetValue", {
+                    preset: state.lastWrittenPower != null ? `${state.lastWrittenPower} W` : "—",
+                  })}
                 </div>
               </div>
               <div className="card">
-                <div className="card-label">Decision inputs</div>
+                <div className="card-label">{t("powerplan.decisionInputs")}</div>
                 <div className="card-value" style={{ fontSize: "1rem" }}>
-                  PV {d.pvW} W · house {d.demandW} W · SOC {d.soc}%
+                  {t("powerplan.inputs", { pv: d.pvW, house: d.demandW, soc: d.soc })}
                 </div>
                 <div className="card-label">
-                  {d.wrote ? `preset written (${d.reason})` : d.reason}
+                  {d.wrote ? t("powerplan.presetWritten", { reason: d.reason }) : d.reason}
                   {state.lastWriteAt
-                    ? ` · last write ${new Date(state.lastWriteAt).toLocaleTimeString()}`
+                    ? ` · ${t("powerplan.lastWrite", { time: new Date(state.lastWriteAt).toLocaleTimeString() })}`
                     : ""}
                 </div>
               </div>
@@ -74,10 +78,12 @@ export default function PowerPlanCard() {
           )}
           {state && !state.enabled && (
             <button disabled={busy} onClick={enable}>
-              Take over output control
+              {t("powerplan.takeOver")}
             </button>
           )}
-          {state?.lastError && <p className="muted">last error: {state.lastError}</p>}
+          {state?.lastError && (
+            <p className="muted">{t("powerplan.lastError", { error: state.lastError })}</p>
+          )}
         </>
       )}
     </div>

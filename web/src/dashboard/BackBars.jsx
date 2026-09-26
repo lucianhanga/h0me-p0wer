@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react";
 import echarts from "../echarts.js";
+import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Stacked per-bucket kWh bars (grid/battery/PV) for a tile's flip side.
 // Hover/touch a bar for that bucket's split (ECharts axis tooltip).
 export default function BackBars({ rows, formatLabel }) {
+  const t = useT();
   const ref = useRef(null);
 
   useEffect(() => {
@@ -33,9 +35,9 @@ export default function BackBars({ rows, formatLabel }) {
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
       series: [
-        { name: "Grid", type: "bar", stack: "s", itemStyle: { color: "#f7a44f" }, data: rows.map((r) => r.grid) },
-        { name: "Battery", type: "bar", stack: "s", itemStyle: { color: "#c084fc" }, data: rows.map((r) => r.batt) },
-        { name: "PV", type: "bar", stack: "s", itemStyle: { color: "#5fce80" }, data: rows.map((r) => r.pv) },
+        { name: t("dashboard.bars.grid"), type: "bar", stack: "s", itemStyle: { color: "#f7a44f" }, data: rows.map((r) => r.grid) },
+        { name: t("dashboard.bars.battery"), type: "bar", stack: "s", itemStyle: { color: "#c084fc" }, data: rows.map((r) => r.batt) },
+        { name: t("dashboard.bars.pv"), type: "bar", stack: "s", itemStyle: { color: "#5fce80" }, data: rows.map((r) => r.pv) },
       ],
     });
     const ro = new ResizeObserver(() => chart.resize());
@@ -44,7 +46,7 @@ export default function BackBars({ rows, formatLabel }) {
       ro.disconnect();
       chart.dispose();
     };
-  }, [rows, formatLabel]);
+  }, [rows, formatLabel, t]);
 
   return <div ref={ref} className="back-bars" />;
 }

@@ -5,7 +5,7 @@
 // the fallback. The route never throws and never leaks config.
 import { kvGet, kvSet } from "./db.js";
 import {
-  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson,
+  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson, isWelcomeLang,
 } from "./welcome-sources.js";
 import {
   buildContext,
@@ -36,6 +36,11 @@ function lastSlotMs(now = new Date()) {
 // one outage block AI briefings until the next slot.
 const FALLBACK_TTL_MS = 15 * 60 * 1000;
 const CACHE_KEY = "welcome:latest";
+// The cache is keyed PER LANGUAGE (2026-09-26, i18n): each lang gets its own
+// briefing slot, refreshed lazily on request — the 2h-slot scheduler only
+// keeps the DEFAULT language warm (non-default ones would multiply the daily
+// AI-call budget for traffic that may never come).
+const cacheKey = (lang) => `${CACHE_KEY}:${lang}`;
 // "Right now" (today.statusQuo) refreshes independently of the main 2h
 // slots (2026-09-17, user request) — lazily, whenever a GET request finds
 // it older than this, not on its own background timer (user: "update it
@@ -49,9 +54,16 @@ const SCHEDULER_TICK_MS = 60 * 1000;
 const STARTUP_DELAY_MS = 45 * 1000;
 
 export function registerWelcomeRoute(app, deps) {
-  let inflight = null; // dedupe concurrent refreshes (route + scheduler)
+  // Dedupe concurrent refreshes (route + scheduler) per language.
+  const inflights = new Map(); // lang -> Promise
+  function refreshOnce(config, lang) {
+    if (!inflights.has(lang)) {
+      inflights.set(lang, refresh(config, lang).finally(() => inflights.delete(lang)));
+    }
+    return inflights.get(lang);
+  }
 
-  async function refresh(config) {
+  async function refresh(config, lang = config.ai.language) {
     const geo = await geocode(config.address);
     const [weather, pvgis, statsOverview] = await Promise.all([
       fetchWeather(geo.lat, geo.lon),
@@ -70,7 +82,7 @@ export function registerWelcomeRoute(app, deps) {
     let aiPowered = Boolean(config.ai.apiKey);
     if (aiPowered) {
       try {
-        ai = await callWelcomeAI(config, context);
+        ai = await callWelcomeAI(config, context, lang);
       } catch (err) {
         console.warn(`[welcome] AI call failed (${err.message}) — deterministic fallback`);
         ai = buildFallback(config, context);
@@ -169,12 +181,12 @@ export function registerWelcomeRoute(app, deps) {
         battDischargeKwhUntilSunrise: context.consumption.battDischargeKwhUntilSunrise,
       },
     };
-    kvSet(CACHE_KEY, payload);
+    kvSet(cacheKey(lang), payload);
     return payload;
   }
 
-  function freshCache() {
-    const cached = kvGet(CACHE_KEY);
+  function freshCache(lang) {
+    const cached = kvGet(cacheKey(lang));
     if (!cached) return null;
     // Fresh = generated at/after the most recent briefing slot; a fallback
     // payload additionally expires after 15 min so the AI self-heals sooner.
@@ -185,10 +197,9 @@ export function registerWelcomeRoute(app, deps) {
 
   // Refresh only when the cache is missing or past its TTL. Shared by the
   // scheduler and the route; failures leave any old cache in place.
-  async function refreshIfStale(config) {
-    if (freshCache()) return;
-    inflight ??= refresh(config).finally(() => (inflight = null));
-    await inflight;
+  async function refreshIfStale(config, lang = config.ai.language) {
+    if (freshCache(lang)) return;
+    await refreshOnce(config, lang);
   }
 
   // Lightweight "Right now" mini-refresh — see welcome-ai.js's
@@ -196,9 +207,10 @@ export function registerWelcomeRoute(app, deps) {
   // Merges into whatever's cached rather than replacing it; a no-op if
   // there's nothing cached yet (the main refresh will produce the first
   // statusQuo on its own).
-  let statusQuoInflight = null;
-  async function refreshStatusQuo(config) {
-    const cached = kvGet(CACHE_KEY);
+  const statusQuoInflights = new Map(); // lang -> Promise
+  async function refreshStatusQuo(config, lang) {
+    const key = cacheKey(lang);
+    const cached = kvGet(key);
     if (!cached?.value) return;
     const batt = deps.getLiveBattery?.() ?? null;
     const context = {
@@ -206,19 +218,18 @@ export function registerWelcomeRoute(app, deps) {
         ? { socNow: batt.soc, outputW: batt.outputW, chargeW: batt.chargeW, pvNowW: batt.pvW ?? null }
         : { socNow: null, outputW: null, chargeW: null, pvNowW: null },
       strategy: buildStrategyContext(deps.getPowerPlanState?.()),
-      language: config.ai.language,
     };
     const statusQuo = config.ai.apiKey
-      ? await callStatusQuoAI(config, context)
+      ? await callStatusQuoAI(config, context, lang)
       : fallbackStatusQuo(context);
-    kvSet(CACHE_KEY, {
+    kvSet(key, {
       ...cached.value,
       today: { ...cached.value.today, statusQuo, statusQuoUpdatedAt: new Date().toISOString() },
     });
   }
 
-  function statusQuoStale() {
-    const cached = kvGet(CACHE_KEY);
+  function statusQuoStale(lang) {
+    const cached = kvGet(cacheKey(lang));
     if (!cached?.value) return false; // nothing to refresh into yet
     const updatedAt = cached.value.today?.statusQuoUpdatedAt;
     if (!updatedAt) return true; // pre-existing cache from before this field existed
@@ -229,11 +240,16 @@ export function registerWelcomeRoute(app, deps) {
   // main refresh — only called when the MAIN payload is otherwise fresh
   // (a full refresh already updates statusQuo, so triggering both at once
   // would just be two concurrent AI calls for the same field).
-  function refreshStatusQuoIfStale(config) {
-    if (!statusQuoStale()) return;
-    statusQuoInflight ??= refreshStatusQuo(config)
-      .catch((err) => console.warn(`[welcome] status-quo refresh failed: ${err.message}`))
-      .finally(() => (statusQuoInflight = null));
+  function refreshStatusQuoIfStale(config, lang) {
+    if (!statusQuoStale(lang)) return;
+    if (!statusQuoInflights.has(lang)) {
+      statusQuoInflights.set(
+        lang,
+        refreshStatusQuo(config, lang)
+          .catch((err) => console.warn(`[welcome] status-quo refresh failed: ${err.message}`))
+          .finally(() => statusQuoInflights.delete(lang)),
+      );
+    }
   }
 
   function loadConfig() {
@@ -244,8 +260,9 @@ export function registerWelcomeRoute(app, deps) {
     }
   }
 
-  // Background scheduler: keeps the briefing warm at the fixed slots.
-  // unref'd so it never blocks shutdown.
+  // Background scheduler: keeps the briefing warm at the fixed slots — the
+  // DEFAULT language only (refreshIfStale's lang default); other languages
+  // refresh lazily when requested. unref'd so it never blocks shutdown.
   setTimeout(() => {
     const config = loadConfig();
     if (!config) return;
@@ -267,28 +284,32 @@ export function registerWelcomeRoute(app, deps) {
     if (!config) {
       return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
     }
-    const fresh = freshCache();
+    const lang = req.query.lang ?? config.ai.language;
+    if (!isWelcomeLang(lang)) {
+      return res.json({ ok: false, error: `Unsupported lang "${req.query.lang}" — use one of en, de, ro.` });
+    }
+    const fresh = freshCache(lang);
     if (fresh) {
       // Main payload's slot hasn't rolled over — but "Right now" has its
       // own, shorter TTL (see refreshStatusQuoIfStale); a no-op when it's
       // not actually stale yet.
-      refreshStatusQuoIfStale(config);
+      refreshStatusQuoIfStale(config, lang);
       return res.json({ ok: true, data: fresh.value });
     }
-    const cached = kvGet(CACHE_KEY);
+    const cached = kvGet(cacheKey(lang));
     if (cached) {
       // Never make the client wait: serve what we have (flagged stale) and
       // refresh in the background. The blocking wait for the AI call was the
       // recurring "Preparing your briefing…" the user reported.
-      refreshIfStale(config).catch((err) =>
+      refreshIfStale(config, lang).catch((err) =>
         console.warn(`[welcome] background refresh failed: ${err.message}`),
       );
       return res.json({ ok: true, data: { ...cached.value, stale: true } });
     }
     try {
       // Cold start (no cache at all): nothing to serve yet — wait once.
-      await refreshIfStale(config);
-      return res.json({ ok: true, data: kvGet(CACHE_KEY).value });
+      await refreshIfStale(config, lang);
+      return res.json({ ok: true, data: kvGet(cacheKey(lang)).value });
     } catch (err) {
       console.warn(`[welcome] refresh failed: ${err.message}`);
       if (cached) return res.json({ ok: true, data: { ...cached.value, stale: true } });
@@ -317,6 +338,10 @@ export function registerWelcomeRoute(app, deps) {
     if (!config.ai.apiKey) {
       return res.json({ ok: false, error: "No AI configured (AI_API_KEY missing)." });
     }
+    const lang = req.body?.lang ?? config.ai.language;
+    if (!isWelcomeLang(lang)) {
+      return res.json({ ok: false, error: `Unsupported lang "${req.body?.lang}" — use one of en, de, ro.` });
+    }
     try {
       const geo = await geocode(config.address);
       const [weather, pvgis] = await Promise.all([
@@ -328,7 +353,7 @@ export function registerWelcomeRoute(app, deps) {
         liveGridW: deps.getLivePower?.() ?? null,
         liveBattery: context.battery,
       };
-      const answer = await callAskAI(config, { ...context, live }, question);
+      const answer = await callAskAI(config, { ...context, live }, question, lang);
       return res.json({ ok: true, data: answer });
     } catch (err) {
       console.warn(`[ask] failed: ${err.message}`);
@@ -347,12 +372,15 @@ export function registerWelcomeRoute(app, deps) {
     if (!config) {
       return res.json({ ok: false, error: "HOME_ADDRESS not set in .env — Welcome tab not configured." });
     }
+    const lang = req.query.lang ?? config.ai.language;
+    if (!isWelcomeLang(lang)) {
+      return res.json({ ok: false, error: `Unsupported lang "${req.query.lang}" — use one of en, de, ro.` });
+    }
     try {
-      inflight ??= refresh(config).finally(() => (inflight = null));
-      return res.json({ ok: true, data: await inflight });
+      return res.json({ ok: true, data: await refreshOnce(config, lang) });
     } catch (err) {
       console.warn(`[welcome] manual refresh failed: ${err.message}`);
-      const cached = kvGet(CACHE_KEY);
+      const cached = kvGet(cacheKey(lang));
       if (cached) return res.json({ ok: true, data: { ...cached.value, stale: true } });
       return res.json({ ok: false, error: "Welcome data unavailable — check server logs." });
     }

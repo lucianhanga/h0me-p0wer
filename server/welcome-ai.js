@@ -11,7 +11,7 @@ import {
   getCloudPvDayPower,
   sumCloudEnergyInGaps,
 } from "./db.js";
-import { localDate } from "./welcome-sources.js";
+import { localDate, LANG_NAMES } from "./welcome-sources.js";
 import { deriveBatteryFlow } from "./battery-params.js";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -344,8 +344,10 @@ function validateAiResponse(j) {
   return j;
 }
 
-export async function callWelcomeAI(config, context) {
-  const user = JSON.stringify({ language: config.ai.language, ...context });
+export async function callWelcomeAI(config, context, lang = config.ai.language) {
+  // Full language name, not the ISO code — the prompt says "see language
+  // field" and a name is unambiguous to the model.
+  const user = JSON.stringify({ language: LANG_NAMES[lang] ?? lang, ...context });
   const body = (responseFormat) => ({
     model: config.ai.model,
     reasoning_effort: "low",
@@ -407,8 +409,8 @@ export function fallbackStatusQuo(context) {
     : "Live battery status isn't available right now.";
 }
 
-export async function callStatusQuoAI(config, context) {
-  const user = JSON.stringify({ language: config.ai.language, ...context });
+export async function callStatusQuoAI(config, context, lang = config.ai.language) {
+  const user = JSON.stringify({ language: LANG_NAMES[lang] ?? lang, ...context });
   const body = (responseFormat) => ({
     model: config.ai.model,
     reasoning_effort: "low",
@@ -518,8 +520,8 @@ Hard rules:
 - Spoken-style language (the answer is read aloud), numbers rounded sensibly.
   Language for both fields: see language field.`;
 
-export async function callAskAI(config, context, question) {
-  const user = JSON.stringify({ language: config.ai.language, question, ...context });
+export async function callAskAI(config, context, question, lang = config.ai.language) {
+  const user = JSON.stringify({ language: LANG_NAMES[lang] ?? lang, question, ...context });
   const body = (responseFormat) => ({
     model: config.ai.model,
     reasoning_effort: "low",
