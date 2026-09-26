@@ -30,11 +30,10 @@ function ParamRow({ k, v }) {
 // expansion packs), stacked like the real hardware — main unit at the
 // bottom, expansions on top; segment height ∝ capacity. Per-module SOC
 // comes from MQTT only (main unit via 0405 a3, packs via 040a) — REST has
-// no per-pack data. While MQTT hasn't delivered (broker stalls can last
-// days), each module instead shows the OVERALL charge as a clearly-marked
-// estimate ("≈", user request 2026-09-26: "show them how full they are
-// too") — exact per-module values replace the estimate automatically the
-// moment the first 040a arrives.
+// no per-pack data. Modules show "—" until real per-module data arrives:
+// an earlier version filled every segment with the overall charge as an
+// "≈" estimate, which just rendered N identical segments — "it looks
+// stupid" (user, 2026-09-26); honest unknowns won.
 function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel }) {
   const packs = constants?.expansionPacks ?? 0;
   if (!packs) return null;
@@ -62,22 +61,16 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
   const totalKwh = modules.reduce((a, m) => a + m.kwh, 0);
   const lvlOf = (soc) =>
     soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
-  const anyEstimate = modules.some((m) => m.soc == null) && live.soc != null;
+  const anyUnknown = modules.some((m) => m.soc == null);
   return (
     <div className="batt-modules">
       <div className="batt-seg" title="battery modules, stacked as installed">
-        {[...modules].reverse().map((m) => {
-          const shown = m.soc ?? live.soc ?? null;
-          const est = m.soc == null && shown != null;
-          return (
-            <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
-              <div className={`batt-seg-fill ${lvlOf(shown) ?? ""}`} style={{ height: `${shown ?? 0}%` }} />
-              <span className="batt-seg-soc">
-                {shown != null ? `${est ? "≈" : ""}${shown} %` : "—"}
-              </span>
-            </div>
-          );
-        })}
+        {[...modules].reverse().map((m) => (
+          <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
+            <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
+            <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>
+          </div>
+        ))}
       </div>
       <div className="batt-modules-side">
         <div className="batt-modules-hero">
@@ -98,23 +91,19 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
           )}
         </div>
         <div className="batt-modules-legend">
-          {modules.map((m) => {
-            const rowShown = m.soc ?? live.soc ?? null;
-            const rowEst = m.soc == null && rowShown != null;
-            return (
-              <div key={m.key} className="batt-modules-row">
-                <span className="batt-modules-name">{m.name}</span>
-                <span className="batt-modules-detail">
-                  {m.kwh} kWh · {rowShown != null ? `${rowEst ? "≈" : ""}${rowShown} %` : "—"}
-                  {m.soh != null && ` · SOH ${m.soh} %`}
-                  {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
-                </span>
-              </div>
-            );
-          })}
-          {anyEstimate && (
+          {modules.map((m) => (
+            <div key={m.key} className="batt-modules-row">
+              <span className="batt-modules-name">{m.name}</span>
+              <span className="batt-modules-detail">
+                {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
+                {m.soh != null && ` · SOH ${m.soh} %`}
+                {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
+              </span>
+            </div>
+          ))}
+          {anyUnknown && (
             <div className="batt-modules-note muted">
-              ≈ overall charge shown per module — exact per-module values arrive via MQTT
+              per-module SOC arrives automatically when Anker's push channel (MQTT) delivers — currently stalled on Anker's side
             </div>
           )}
         </div>
