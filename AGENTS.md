@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.74, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.75, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4178,3 +4178,21 @@ side recovers — no action needed unless it persists for days.
   time. Nothing was wrong with the rendering.
 - Verified via headless-Chrome screenshot: no horizontal gauge, vertical
   segments ≈22%, hero/limits/legend all present.
+
+## MQTT stall diagnosed live (3rd recurrence) + per-module estimate reverted (2026-09-26, user: "my MQTT does not work? check the online account")
+
+- Standalone diagnostic against the live account (AnkerMqtt, 75 s window):
+  get_user_mqtt_info OK, connect OK, subscribe OK, realtime trigger
+  publish OK — and ZERO messages routed by the broker. Same Anker-side
+  stall signature as 2026-09-11 and 2026-09-22 (production /api/health:
+  connected:true, fresh:false, lastDataAt:null). Nothing on our side is
+  broken; the Anker app keeps working because it polls REST scen_info,
+  which is also what we fall back to. No action possible; it self-heals
+  when Anker's side recovers.
+- User on the ≈-estimate per-module fill: "showing them both at 22%
+  looks stupid." REVERTED: per-module segments show "—" again until real
+  040a/0405-mainSoc data arrives, with the note "per-module SOC arrives
+  automatically when Anker's push channel (MQTT) delivers — currently
+  stalled on Anker's side". The estimate experiment lasted one day
+  (v1.5.73 → v1.5.75) — identical fills looked fabricated, honest
+  unknowns won.
