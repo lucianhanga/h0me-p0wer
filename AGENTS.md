@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.85, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.86, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4406,3 +4406,32 @@ side recovers — no action needed unless it persists for days.
      translated template per language).
 - Verified at real 390px emulation: name on one line, badge intact,
   legend stacked clean, single-card rule confirmed in markup.
+
+## Ask AI: full energy + per-module context (2026-09-27, user request)
+
+- The /api/ask context was just buildContext + live grid power. User:
+  "it should get all the important information — production/consume for
+  today, yesterday, … split on battery, solar, grid; the battery and
+  extensions' current load status, temperature and historic values;
+  weather/outside temperature/climate in the area; all the other
+  significant information." Now the handler additionally fetches (best-
+  effort, same internal-loopback pattern as the welcome refresh)
+  /api/stats/overview (today/week/month byPeriod splits) and
+  /api/stats/period?type=day&offset=1 (yesterday), exposed as
+  live.energy {today, yesterday, week, month} (gridKwh/battKwh/pvKwh/
+  pvProducedKwh/exportKwh/homeKwh per period), plus live.batteryModules
+  (soc, mainUnitSoc, temperatureC, expansionPacks, expansions[] with
+  soc/soh/temperatureC/status, and history24h = each module's 24h
+  min/max SOC and temperature from module_snapshots). Weather/7-day
+  forecast/PVGIS were already in buildContext. ASK_SYSTEM_PROMPT gained
+  bullets explaining these blocks (answer splits from live.energy;
+  expansions may be null while the realtime channel stalls — say so,
+  don't guess).
+- Verified with real asks: "Wie voll ist die Erweiterungsbatterie und
+  wie warm ist sie?" → "Die Erweiterungsbatterie ist zu 5 Prozent
+  geladen und hat 24 Grad Celsius." (the real 040a values);
+  "how much did we produce and consume yesterday, split by source?" →
+  "produced 5.08 kWh; consumed 11 kWh: 6.56 from the grid, 3.96
+  supplied through the battery unit from PV, 0.48 from battery
+  discharge; nothing was exported." — all exact, and correctly
+  inverter-routed per the flow-model rule.
