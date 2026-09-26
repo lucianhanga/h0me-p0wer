@@ -42,6 +42,10 @@ import {
   pruneCloudGrid,
   getPvDaily,
   getCloudPvDayPower,
+  getLastNonzeroPvDayBefore,
+  getCloudPvDaySum,
+  kvGet,
+  kvSet,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -1123,58 +1127,73 @@ async function catchUpBatteryPvHistory() {
 
   const storedBatt = getStoredPeriodStarts(latestBattery.sn, "day");
   const storedPv = getStoredPvPeriodStarts("day");
-  const missing = [];
+  // 2026-09-26 bug (real data destroyed): the missing-day test used to be
+  // "!storedBatt OR !storedPv" — after the Plus→Pro swap the NEW battery SN
+  // had NO history, so ALL 31 days counted as missing, and the SITE-LEVEL
+  // solar_production fetch for each of those days returned zeros from the
+  // freshly-recreated site and upserted them over the real PV history.
+  // Compute the two missing sets independently now: a fresh battery SN may
+  // trigger 31 battery fetches (harmless — they write under its own SN),
+  // but never a site-level PV refetch it has nothing to do with.
+  const missingBatt = [];
+  const missingPv = [];
   for (let i = BACKFILL_DAYS; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const start = localDate(d);
-    if (!storedBatt.has(start) || !storedPv.has(start) || i === 0) missing.push(start);
+    if (!storedBatt.has(start) || i === 0) missingBatt.push(start);
+    if (!storedPv.has(start)) missingPv.push(start);
   }
+  const missing = [...new Set([...missingBatt, ...missingPv])].sort();
   if (!missing.length) return;
 
   console.log(`[cloud-sync] backfilling ${missing.length} day(s) of battery/PV history…`);
   let completed = true;
   for (const start of missing) {
-    try {
-      const battData = await anker.getEnergyAnalysis({
-        siteId: latestBattery.siteId,
-        deviceSn: latestBattery.sn,
-        deviceType: "solarbank",
-        type: "day",
-        startTime: start,
-        endTime: "",
-      });
-      const battRows = (battData?.power ?? []).map((p) => ({
-        time: p.time,
-        power: p.value,
-        import_energy: "",
-        export_energy: "",
-      }));
-      saveCloudTrend(latestBattery.sn, "day", start, battRows);
-    } catch (err) {
-      console.warn(`[cloud-sync] battery backfill day ${start} failed: ${err.message}`);
-      completed = false;
-      break; // rate-limited or login issue — retry later (below)
+    if (missingBatt.includes(start)) {
+      try {
+        const battData = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          deviceSn: latestBattery.sn,
+          deviceType: "solarbank",
+          type: "day",
+          startTime: start,
+          endTime: "",
+        });
+        const battRows = (battData?.power ?? []).map((p) => ({
+          time: p.time,
+          power: p.value,
+          import_energy: "",
+          export_energy: "",
+        }));
+        saveCloudTrend(latestBattery.sn, "day", start, battRows);
+      } catch (err) {
+        console.warn(`[cloud-sync] battery backfill day ${start} failed: ${err.message}`);
+        completed = false;
+        break; // rate-limited or login issue — retry later (below)
+      }
+      await sleep(6000);
     }
-    await sleep(6000);
 
-    try {
-      const pvData = await anker.getEnergyAnalysis({
-        siteId: latestBattery.siteId,
-        deviceSn: latestBattery.sn ?? "",
-        deviceType: "solar_production",
-        type: "day",
-        startTime: start,
-        endTime: "",
-      });
-      const pvRows = (pvData?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
-      saveCloudPvTrend("day", start, pvRows);
-    } catch (err) {
-      console.warn(`[cloud-sync] PV backfill day ${start} failed: ${err.message}`);
-      completed = false;
-      break;
+    if (missingPv.includes(start)) {
+      try {
+        const pvData = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          deviceSn: latestBattery.sn ?? "",
+          deviceType: "solar_production",
+          type: "day",
+          startTime: start,
+          endTime: "",
+        });
+        const pvRows = (pvData?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
+        saveCloudPvTrend("day", start, pvRows);
+      } catch (err) {
+        console.warn(`[cloud-sync] PV backfill day ${start} failed: ${err.message}`);
+        completed = false;
+        break;
+      }
+      await sleep(6000);
     }
-    await sleep(6000);
   }
   // Same re-arm as the meter backfill (2026-09-22 code review — the
   // "next round" the break comment promised never existed until restart).
@@ -1285,6 +1304,57 @@ poller.onSnapshot((state) => {
   broadcastLive();
 });
 
+// One-time repair (kv flag pv_shape_repair_v1, 2026-09-26): after the
+// h-solar site was recreated in the Plus→Pro battery swap, the PV backfill
+// upserted all-zero solar_production trends over 12 days of real
+// cloud_pv_history (2026-09-14..25) — the flipped Dashboard tiles lost
+// their green PV segments (the totals survived via pv_daily). The intraday
+// shapes are unrecoverable from the cloud (the old site is deleted and the
+// new one returns zeros for pre-creation days), so each affected day is
+// rebuilt from pv_daily's REAL produced total (local trapezoid — the most
+// accurate figure) distributed over the most recent real day-shape we
+// still have. Totals stay exact; only the shape is approximate — logged
+// once, flagged, never runs again.
+function repairZeroedPvHistory() {
+  if (kvGet("pv_shape_repair_v1")) return;
+  const todayStr = localDate();
+  // Reference shape: latest COMPLETE real day. Today itself qualifies only
+  // once it's dark (hour ≥ 20 — September PV is long over by then), so a
+  // deploy tonight repairs now while a midday deploy waits for the next
+  // restart instead of borrowing a half-drawn curve.
+  let shapeDay = getLastNonzeroPvDayBefore(todayStr);
+  if (!shapeDay && new Date().getHours() >= 20 && getCloudPvDaySum("day", todayStr) > 0) {
+    shapeDay = todayStr;
+  }
+  if (!shapeDay) return; // no reference shape yet — retry on the next restart
+  const shape = getCloudPvDayPower(shapeDay, shapeDay).filter((r) => r.power != null);
+  const shapeSum = shape.reduce((a, r) => a + r.power, 0);
+  if (!shape.length || shapeSum <= 0) return;
+  let repaired = 0;
+  for (const d of getPvDaily("2020-01-01", todayStr)) {
+    if (d.date >= todayStr || !(d.produced > 0)) continue;
+    if (getCloudPvDaySum("day", d.date) > 0) continue; // day is intact
+    // energy(kWh) = Σ power(W) × (20/60) / 1000 = Σpower / 3000
+    const scale = (d.produced * 3000) / shapeSum;
+    saveCloudPvTrend(
+      "day",
+      d.date,
+      shape.map((s) => ({
+        time: new Date(s.ts).toTimeString().slice(0, 8),
+        power: Math.round(s.power * scale * 10) / 10,
+      })),
+    );
+    repaired++;
+  }
+  kvSet("pv_shape_repair_v1", { repaired, shapeDay, at: Date.now() });
+  if (repaired) {
+    console.log(
+      `[cloud-sync] repaired ${repaired} zeroed PV-history day(s) from pv_daily totals ` +
+        `(shape borrowed from ${shapeDay} — totals exact, shape approximate)`,
+    );
+  }
+}
+
 // Prune samples older than the retention window once an hour; also roll up
 // PV and grid daily energy (raw samples age out after 48 h).
 pruneOld();
@@ -1292,6 +1362,7 @@ pruneBattery();
 pruneCloudGrid();
 rollupPvDaily();
 rollupGridDaily();
+repairZeroedPvHistory();
 setInterval(() => {
   pruneOld();
   pruneBattery();
