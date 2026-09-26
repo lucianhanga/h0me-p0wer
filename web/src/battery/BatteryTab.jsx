@@ -27,13 +27,14 @@ function ParamRow({ k, v }) {
 }
 
 // Upright segmented battery: one module per physical battery unit (main +
-// expansion packs), stacked like the real hardware — main unit at the
-// bottom, expansions on top; segment height ∝ capacity. Per-module SOC
-// comes from MQTT only (main unit via 0405 a3, packs via 040a) — REST has
-// no per-pack data. Modules show "—" until real per-module data arrives:
-// an earlier version filled every segment with the overall charge as an
-// "≈" estimate, which just rendered N identical segments — "it looks
-// stupid" (user, 2026-09-26); honest unknowns won.
+// expansion packs), stacked like the real hardware — solarbank (main unit)
+// ON TOP, expansion battery(s) BELOW (user correction 2026-09-26: "the
+// battery stack is first the solarbank and then the battery — this is how
+// it's done in practice"); segment height ∝ capacity. Per-module SOC comes
+// from MQTT only (main unit via 0405 a3, packs via 040a) — REST has no
+// per-pack data. Modules show "—" until real per-module data arrives (an
+// "≈ overall" estimate was tried for a day and rejected — identical fills
+// looked fabricated).
 function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel }) {
   const packs = constants?.expansionPacks ?? 0;
   if (!packs) return null;
@@ -64,8 +65,8 @@ function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLa
   const anyUnknown = modules.some((m) => m.soc == null);
   return (
     <div className="batt-modules">
-      <div className="batt-seg" title="battery modules, stacked as installed">
-        {[...modules].reverse().map((m) => (
+      <div className="batt-seg" title="battery modules, stacked as installed (solarbank on top)">
+        {modules.map((m) => (
           <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
             <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
             <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>

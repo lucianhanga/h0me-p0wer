@@ -1990,6 +1990,8 @@ pre {
    the segmented view replaced that gauge (2026-09-26), so they live here. */
 .batt-modules-side {
   flex: 1;
+  min-width: 0; /* flex children don't shrink below content by default —
+                   without this the side column pushes the page past 390px */
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -2014,6 +2016,7 @@ pre {
 
 .batt-modules-name {
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .batt-modules-detail {
@@ -2035,5 +2038,17 @@ pre {
   .batt-seg {
     width: 72px;
     height: 150px;
+  }
+
+  /* Phone: the legend row's name+detail don't fit side by side (seen live:
+     "Expansion 1" and "· 25 °C" wrapped onto their own lines) — stack the
+     detail under the module name instead. */
+  .batt-modules-row {
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .batt-modules-detail {
+    text-align: left;
   }
 }
