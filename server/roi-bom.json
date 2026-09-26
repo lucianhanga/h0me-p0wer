@@ -36,6 +36,15 @@
     "priceSnapshotDate": "2026-09-26"
   },
   {
+    "asin": "PVMOUNT6",
+    "name": "PV Flachdach-Halterung ohne Bohren, für 6 Module, Silber",
+    "desc": "Ballasted flat-roof/ground mount for six modules — no drilling; matches the six new panels of the h-power system exactly.",
+    "qty": 1,
+    "unitPriceEur": 209.95,
+    "url": "https://www.amazon.de/s?k=PV+Flachdach+Halterung+ohne+Bohren+6+Module",
+    "priceSnapshotDate": "2026-09-26"
+  },
+  {
     "asin": "B0F4QGJVXN",
     "name": "Anker SOLIX solar extension cable 10 m, 6 mm² (set of 2)",
     "desc": "10 m, 6 mm² MC4 extension cables (set of 2) linking the panels to the Solarbank's DC inputs.",
@@ -49,7 +58,7 @@
     "name": "Anker SOLIX solar extension cable 10 m, 6 mm² (set of 2)",
     "desc": "Second purchase of the same 10 m, 6 mm² MC4 extension cables — for the additional panels of the h-power system.",
     "qty": 3,
-    "unitPriceEur": 44.90,
+    "unitPriceEur": 44.9,
     "url": "https://www.amazon.de/dp/B0F4QGJVXN",
     "priceSnapshotDate": "2026-09-26"
   },
@@ -58,7 +67,7 @@
     "name": "Anker SOLIX Y cable for solar panels (pack of 2)",
     "desc": "Y-splitter MC4 cable for parallel photovoltaic connection of two panels on one input (pack of 2).",
     "qty": 2,
-    "unitPriceEur": 19.90,
+    "unitPriceEur": 19.9,
     "url": "https://www.amazon.de/dp/B0F4QH9F1Q",
     "priceSnapshotDate": "2026-09-26"
   },
@@ -67,9 +76,36 @@
     "name": "Anker SOLIX Solarbank 2 E1600 Pro (1.6 kWh)",
     "desc": "1.6 kWh LFP plug-and-play storage with 800 W inverter output; stores surplus PV and releases it after sunset. Replaced the originally purchased E1600 Plus, which was returned to the seller.",
     "qty": 1,
-    "unitPriceEur": 429.00,
+    "unitPriceEur": 429.0,
     "url": "https://solago.de/products/anker-solix-solarbank-2-e1600-pro-speicher-fur-balkonkraftwerk-basiseinheit",
     "priceSnapshotDate": "2026-09-26"
+  },
+  {
+    "asin": "SOLIX4E5000",
+    "name": "Anker SOLIX Solarbank 4 E5000 Pro + 1× BP5000 + Smart Meter Gen 2",
+    "desc": "Full next-gen bundle (5 kWh Solarbank 4 Pro + one BP5000 expansion + a second-generation Smart Meter) — the h-power system that becomes the main installation at the switchover (epic #218). Seller: atc_solarvolt / New Power GmbH, Aschauer Str. 32, 81549 München. eBay Artikelnr. 127918005920, Bestellnummer 03-15200-52914.",
+    "qty": 1,
+    "unitPriceEur": 2299.0,
+    "url": "https://www.ebay.de/itm/127918005920",
+    "priceSnapshotDate": "2026-09-20"
+  },
+  {
+    "asin": "BP5000",
+    "name": "Anker Solix BP5000 – 5 kWh Erweiterungsakku für Anker SOLIX 4 Pro",
+    "desc": "5 kWh plug-and-play expansion battery module for the Anker SOLIX 4 Pro line (LiFePO4, up to 30 kWh total). An additional standalone unit beyond the BP5000 included in the Solarbank 4 bundle below.",
+    "qty": 1,
+    "unitPriceEur": 1049.0,
+    "url": "https://solago.de/products/anker-solix-bp5000-5kwh-erweiterungsakku-fur-anker-solix-4-pro",
+    "priceSnapshotDate": "2026-09-19"
+  },
+  {
+    "asin": "SOLIXPOWERDOCK",
+    "name": "Anker SOLIX Power Dock",
+    "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — the hub of the h-power system.",
+    "qty": 1,
+    "unitPriceEur": 299.0,
+    "url": "https://www.ankersolix.com/de/products/a17c5-multisystem?variant=58394961281373&ref=naviMenu_1_5_1_1_img&s_combine=BE100GZK&o_c=de&o_tab=1",
+    "priceSnapshotDate": "2026-09-20"
   },
   {
     "asin": "B0GXZ6LR5C",
@@ -81,56 +117,11 @@
     "priceSnapshotDate": "2026-09-15"
   },
   {
-    "asin": "B0H2HZWTX9",
-    "name": "Mendler HWC-O43 metal cover w/ planter, 118×124×65 cm (battery housing)",
-    "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
-    "qty": 1,
-    "unitPriceEur": 412.99,
-    "url": "https://www.amazon.de/dp/B0H2HZWTX9",
-    "priceSnapshotDate": "2026-09-15"
-  },
-  {
-    "asin": "BP5000",
-    "name": "Anker Solix BP5000 – 5 kWh Erweiterungsakku für Anker SOLIX 4 Pro",
-    "desc": "5 kWh plug-and-play expansion battery module for the Anker SOLIX 4 Pro line (LiFePO4, up to 30 kWh total). An additional standalone unit beyond the BP5000 included in the Solarbank 4 bundle below.",
-    "qty": 1,
-    "unitPriceEur": 1049.00,
-    "url": "https://solago.de/products/anker-solix-bp5000-5kwh-erweiterungsakku-fur-anker-solix-4-pro",
-    "priceSnapshotDate": "2026-09-19"
-  },
-  {
-    "asin": "SOLIX4E5000",
-    "name": "Anker SOLIX Solarbank 4 E5000 Pro + 1× BP5000 + Smart Meter Gen 2",
-    "desc": "Full next-gen bundle (5 kWh Solarbank 4 Pro + one BP5000 expansion + a second-generation Smart Meter) — the h-power system that becomes the main installation at the switchover (epic #218). Seller: atc_solarvolt / New Power GmbH, Aschauer Str. 32, 81549 München. eBay Artikelnr. 127918005920, Bestellnummer 03-15200-52914.",
-    "qty": 1,
-    "unitPriceEur": 2299.00,
-    "url": "https://www.ebay.de/itm/127918005920",
-    "priceSnapshotDate": "2026-09-20"
-  },
-  {
-    "asin": "ROCKWOOL50MM",
-    "name": "Rockwool KLIMAMAT Steinwolle Lamellenmatte alukaschiert 50mm - 5m x 1m",
-    "desc": "Aluminum-faced mineral wool insulation mat, 50 mm, 5×1 m roll. Brand on listing: 4home&work.",
-    "qty": 1,
-    "unitPriceEur": 75.00,
-    "url": "https://www.amazon.de/s?k=Rockwool+KLIMAMAT+Steinwolle+Lamellenmatte+alukaschiert+50mm+5m+x+1m",
-    "priceSnapshotDate": "2026-09-19"
-  },
-  {
-    "asin": "SOLIXPOWERDOCK",
-    "name": "Anker SOLIX Power Dock",
-    "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — the hub of the h-power system.",
-    "qty": 1,
-    "unitPriceEur": 299.00,
-    "url": "https://www.ankersolix.com/de/products/a17c5-multisystem?variant=58394961281373&ref=naviMenu_1_5_1_1_img&s_combine=BE100GZK&o_c=de&o_tab=1",
-    "priceSnapshotDate": "2026-09-20"
-  },
-  {
     "asin": "B0DXVVDWTF",
     "name": "ABB S203-C32 Leitungsschutzschalter, 3-polig, C32A, 6kA",
     "desc": "3-pole miniature circuit breaker (400V three-phase, 32A, 6kA breaking capacity), DIN-rail mount. Three-phase protection for the Power Dock / Multisystem installation.",
     "qty": 1,
-    "unitPriceEur": 39.90,
+    "unitPriceEur": 39.9,
     "url": "https://www.amazon.de/dp/B0DXVVDWTF",
     "priceSnapshotDate": "2026-09-20"
   },
@@ -142,5 +133,23 @@
     "unitPriceEur": 30.39,
     "url": "https://www.amazon.de/dp/B003A6DLBQ",
     "priceSnapshotDate": "2026-09-20"
+  },
+  {
+    "asin": "B0H2HZWTX9",
+    "name": "Mendler HWC-O43 metal cover w/ planter, 118×124×65 cm (battery housing)",
+    "desc": "Weatherproof metal housing with planter top that shelters the battery outdoors; sized to fit the Solarbank 2 unit.",
+    "qty": 1,
+    "unitPriceEur": 412.99,
+    "url": "https://www.amazon.de/dp/B0H2HZWTX9",
+    "priceSnapshotDate": "2026-09-15"
+  },
+  {
+    "asin": "ROCKWOOL50MM",
+    "name": "Rockwool KLIMAMAT Steinwolle Lamellenmatte alukaschiert 50mm - 5m x 1m",
+    "desc": "Aluminum-faced mineral wool insulation mat, 50 mm, 5×1 m roll. Brand on listing: 4home&work.",
+    "qty": 1,
+    "unitPriceEur": 75.0,
+    "url": "https://www.amazon.de/s?k=Rockwool+KLIMAMAT+Steinwolle+Lamellenmatte+alukaschiert+50mm+5m+x+1m",
+    "priceSnapshotDate": "2026-09-19"
   }
 ]

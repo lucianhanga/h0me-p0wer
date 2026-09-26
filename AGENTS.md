@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.68, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.69, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4025,3 +4025,13 @@ side recovers — no action needed unless it persists for days.
 - Added `PVMOUNT4` (€176.95, no-drill ballasted mount for 4 modules —
   for four of the six new h-power panels). `totalInvestedEur` 5,924.12
   → **6,101.07** (verified live; image serves 200).
+
+## ROI BOM: 6-module mount + grouped ordering (2026-09-26, user request)
+
+- Added `PVMOUNT6` (€209.95, 6-module no-drill mount — matches the six
+  new h-power panels). `totalInvestedEur` 6,101.07 → **6,311.02**
+  (17 rows, verified live).
+- BOM reordered by category so like items sit together (order drives
+  the ROI tab list and the PDF): PV panels → mounts → cabling →
+  storage (SB2 Pro, SB4 bundle, BP5000) → Power Dock → metering →
+  electrical protection (breaker, RCD) → housing/insulation.
