@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.65, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.66, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -3983,3 +3983,22 @@ side recovers — no action needed unless it persists for days.
   yet registered with the Anker account" — the A17C3 (Plus) still in the
   account is the unit currently wired in; the swap happens with the
   h-power switchover (epic #218).
+
+## ROI BOM: entire planned/extended list purchased (2026-09-26, user: "more or less all")
+
+- All seven extended entries moved to purchased: `excluded` AND
+  `category: "extended"` both removed (removing only `excluded` would
+  have DOUBLE-COUNTED in roi-pdf.js, whose grand total is
+  totalInvestedEur + extendedSubtotal). The "Extended (not yet
+  purchased)" UI card and PDF section now render nothing (both guarded
+  on non-empty lists). Descriptions de-"planned"-ified (the SB4 bundle
+  now described as the h-power system for the epic #218 switchover; the
+  standalone BP5000 noted as an ADDITIONAL unit beyond the one in the
+  bundle — confirm with the user if that's wrong).
+- `totalInvestedEur` 934.35 → **5,139.63** (verified live via /api/roi;
+  PDF still renders with the extended path empty). Consequence: payback
+  moved out to ~2043 — expected, the invested sum roughly 5.5x'ed while
+  the savings baseline (measured on the small balcony system) is
+  unchanged. The baseline refresh (ROI tab ↻) should be re-run once the
+  h-power system is actually producing, so the forecast reflects the
+  bigger installation.
