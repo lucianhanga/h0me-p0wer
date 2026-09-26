@@ -12,7 +12,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, CONSTANTS } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, resolveConstants } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -424,8 +424,10 @@ async function computeFlowPayload() {
           // Charge/discharge ETA inputs — see the note above the route.
           // floorPct is the EFFECTIVE floor (account discharge floor +
           // the controller's safety margin), not the bare account value —
-          // "including the extra amount" per the user's request.
-          capacityKwh: CONSTANTS.capacityKwh,
+          // "including the extra amount" per the user's request. Capacity
+          // resolves per device (pn) + expansion packs (2026-09-26: Pro +
+          // BP5000 = 6.6 kWh).
+          capacityKwh: resolveConstants(b.pn, b.expansionPacks).capacityKwh,
           maxPct: chargeCeilingPct,
           floorPct: dischargeFloorPct + dischargeTolerancePct,
         }

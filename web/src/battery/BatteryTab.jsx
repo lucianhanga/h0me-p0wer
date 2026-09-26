@@ -102,6 +102,15 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
       <div className="card batt-gauge-card">
         <div className="batt-card-head">
           <span className="batt-card-name">{live.name ?? "battery"}</span>
+          {live.pn && <span className="batt-card-sn">{live.pn}</span>}
+          {live.expansionPacks > 0 && (
+            <span
+              className="badge ok"
+              title={`${live.expansionPacks} expansion pack(s) detected (cloud sub_package_num) — +${constants?.expansionPackKwh ?? "?"} kWh each`}
+            >
+              +{live.expansionPacks} ext
+            </span>
+          )}
           {live.sn && <span className="batt-card-sn">{live.sn}</span>}
         </div>
         <div className="batt-gauge-wrap">
@@ -243,7 +252,14 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             <ParamRow k="Charging status" v={live.chargingStatus ?? "—"} />
             <ParamRow k="Error code" v={live.errCode ?? "—"} />
             <ParamRow k="Heating power" v={fmtW(live.heatingPower)} />
-            <ParamRow k="PV1 / PV2" v={`${fmtW(live.pv1W)} / ${fmtW(live.pv2W)}`} />
+            <ParamRow
+              k={live.pv3W != null || live.pv4W != null ? "PV1 / PV2 / PV3 / PV4" : "PV1 / PV2"}
+              v={
+                live.pv3W != null || live.pv4W != null
+                  ? `${fmtW(live.pv1W)} / ${fmtW(live.pv2W)} / ${fmtW(live.pv3W)} / ${fmtW(live.pv4W)}`
+                  : `${fmtW(live.pv1W)} / ${fmtW(live.pv2W)}`
+              }
+            />
             <ParamRow k="Grid → battery" v={fmtW(live.gridToBatteryW)} />
             <ParamRow k="PV → grid" v={fmtW(live.pvToGridW)} />
             <ParamRow k="Home load" v={fmtW(live.homeLoadW)} />
