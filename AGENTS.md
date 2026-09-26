@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.67, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.68, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4019,3 +4019,9 @@ side recovers — no action needed unless it persists for days.
 - Follow-up for the user, NOT done: `.env`'s `PV_PEAK_KWP` is still 1.0
   — once the 6 new panels are installed it should become 4.0 (Welcome/
   PVGIS projections scale from it).
+
+## ROI BOM: 4-module flat-roof mount (2026-09-26, user request)
+
+- Added `PVMOUNT4` (€176.95, no-drill ballasted mount for 4 modules —
+  for four of the six new h-power panels). `totalInvestedEur` 5,924.12
+  → **6,101.07** (verified live; image serves 200).
