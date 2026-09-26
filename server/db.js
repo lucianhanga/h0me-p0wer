@@ -104,8 +104,32 @@ const selectCloudRows = db.prepare(`
 
 const num = (v) => (v === "" || v == null ? null : Number(v));
 
+const selectCloudDayAbs = db.prepare(`
+  SELECT COALESCE(SUM(ABS(power)) + SUM(ABS(import_energy)) + SUM(ABS(export_energy)), 0) AS s
+  FROM cloud_history WHERE device_sn = ? AND period_type = ? AND period_start = ?
+`);
+
 export function saveCloudTrend(sn, type, start, dataTrend) {
   const now = Date.now();
+  // Zero-clobber guard (2026-09-26): same class as the PV one below — the
+  // recreated h-solar site returned all-zero trends for every pre-creation
+  // day after the Plus→Pro swap, and the backfill upserted 31 days of zeros
+  // under the NEW battery's SN (harmless there — its own PK — but a meter
+  // or site change could clobber real rows the same way). Never let an
+  // all-zero incoming trend overwrite a stored day that has real data.
+  // ABS sums: meter power is signed, so plain SUM could cancel to zero.
+  const incomingAbs = dataTrend.reduce(
+    (a, t) =>
+      a + Math.abs(num(t.power) ?? 0) + Math.abs(num(t.import_energy) ?? 0) + Math.abs(num(t.export_energy) ?? 0),
+    0,
+  );
+  if (incomingAbs === 0) {
+    const storedAbs = selectCloudDayAbs.get(sn, type, start)?.s ?? 0;
+    if (storedAbs > 0) {
+      console.warn(`[db] refused to overwrite nonzero cloud history for ${sn}/${start} with an all-zero trend`);
+      return;
+    }
+  }
   // One transaction per trend instead of one per row (2026-09-22 review):
   // 72 upserts per call add up across the 15-min sync + backfills.
   db.exec("BEGIN");
