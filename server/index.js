@@ -46,6 +46,8 @@ import {
   getCloudPvDaySum,
   kvGet,
   kvSet,
+  saveModuleSnapshot,
+  getModuleHistory,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -553,6 +555,18 @@ app.get("/api/timeseries", (req, res) => {
     if (!acc.get(bt)?.grid) add(bt, "grid", r.grid_w - (r.pv_to_grid_w ?? 0));
   }
 
+  // Source 1d: per-module battery data (MQTT 0405/040a — SOC + temperature
+  // per physical module, 2026-09-27) for the Graph tab's module charts. No
+  // cloud fallback exists for these (040a is realtime-only): they exist from
+  // the MQTT subtopic fix onward, 48h retention.
+  for (const r of getModuleHistory(from - CLOUD_INTERVAL_MS, to)) {
+    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+    const socKey = r.module === "main" ? "socMain" : r.module === "exp1" ? "socExp1" : null;
+    const tempKey = r.module === "main" ? "tempMain" : r.module === "exp1" ? "tempExp1" : null;
+    if (socKey && r.soc != null) add(bt, socKey, r.soc);
+    if (tempKey && r.temperature_c != null) add(bt, tempKey, r.temperature_c);
+  }
+
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
   // data (local wins). Still-open 20-min intervals are skipped — their
   // partial averages produce phantom dips.
@@ -779,6 +793,10 @@ app.get("/api/timeseries", (req, res) => {
       battOut: b ? round(b.battOut) : null,
       battChg: b ? round(b.battChg) : null,
       pv: b ? round(b.pv) : null,
+      socMain: b ? round(b.socMain) : null,
+      socExp1: b ? round(b.socExp1) : null,
+      tempMain: b ? round(b.tempMain) : null,
+      tempExp1: b ? round(b.tempExp1) : null,
     });
   }
 
@@ -1408,6 +1426,10 @@ function startBatteryMqtt() {
     lastCloudOkAt = Date.now();
     try {
       saveBatterySnapshot(latestBattery);
+      // Per-module history (Graph tab): the main unit's own SOC/temp.
+      if (d.mainSoc != null || d.temperatureC != null) {
+        saveModuleSnapshot(d.ts, "main", d.mainSoc ?? latestBattery.mainSoc ?? null, d.temperatureC ?? null);
+      }
     } catch (err) {
       console.warn("[db] failed to persist battery snapshot:", err.message);
     }
@@ -1423,6 +1445,13 @@ function startBatteryMqtt() {
       expansions: d.packs,
     };
     lastCloudOkAt = Date.now();
+    try {
+      // Per-module history (Graph tab): main + every reported pack.
+      if (d.mainSoc != null) saveModuleSnapshot(d.ts, "main", d.mainSoc, latestBattery.temperatureC ?? null);
+      d.packs.forEach((p, i) => saveModuleSnapshot(d.ts, `exp${i + 1}`, p.soc ?? null, p.temperatureC ?? null));
+    } catch (err) {
+      console.warn("[db] failed to persist module snapshot:", err.message);
+    }
     broadcastLive({ batteryTriggered: true });
   };
   batteryMqtt.start(); // never rejects — retries internally with backoff
@@ -1624,7 +1653,14 @@ app.post("/api/power-plan/disable", async (req, res) => {
   }
 });
 app.post("/api/power-plan/strategy", (req, res) => {
-  const { strategy, trigger, manualDischarge } = req.body ?? {};
+  // Strategy changes are PIN-protected (2026-09-27, user request): the PIN
+  // lives in .env (STRATEGY_PIN), default 0000 when unset. Read at REQUEST
+  // time, not module top level — remember the dotenv-import-hoisting
+  // incident (env.js must evaluate first; reading late is immune by design).
+  const { pin, strategy, trigger, manualDischarge } = req.body ?? {};
+  if (pin !== (process.env.STRATEGY_PIN ?? "0000")) {
+    return res.status(403).json({ ok: false, error: "invalid PIN" });
+  }
   const strategies = ["house_priority", "battery_priority", "anker_app"];
   const triggers = ["auto", "manual"];
   if (strategy !== undefined && !strategies.includes(strategy)) {

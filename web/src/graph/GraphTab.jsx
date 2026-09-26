@@ -77,6 +77,28 @@ const GRAPHS = [
       { key: "battChgNeg", nameKey: "graph.series.charging", color: "#8a63d2", width: 1, area: true },
     ],
   },
+  {
+    // Per-module temperature (MQTT 0405/040a — exists from 2026-09-26 on).
+    titleKey: "graph.title.battTemp",
+    legendKeys: ["graph.series.tempMain", "graph.series.tempExpansion"],
+    unit: "°C",
+    avgKey: "tempMain",
+    series: [
+      { key: "tempMain", nameKey: "graph.series.tempMain", color: "#f7a44f", width: 2 },
+      { key: "tempExp1", nameKey: "graph.series.tempExpansion", color: "#6bb8f5", width: 2 },
+    ],
+  },
+  {
+    // Per-module charge level (SOC %) — main unit vs. expansion pack.
+    titleKey: "graph.title.battSoc",
+    legendKeys: ["graph.series.socMain", "graph.series.socExpansion"],
+    unit: "%",
+    avgKey: "socMain",
+    series: [
+      { key: "socMain", nameKey: "graph.series.socMain", color: "#5fce80", width: 2, area: true },
+      { key: "socExp1", nameKey: "graph.series.socExpansion", color: "#c084fc", width: 2, area: true },
+    ],
+  },
 ];
 
 // Remembers each graph's selected span across tab switches — GraphTab
@@ -150,6 +172,7 @@ export default function GraphTab() {
         title: t(def.titleKey),
         legend: def.legendKeys.map((k) => t(k)),
         series: def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
+        unit: def.unit ?? "W",
       })),
     [t],
   );
@@ -183,7 +206,7 @@ export default function GraphTab() {
           : { top: 22, right: 60, bottom: 26, left: 10, containLabel: true },
         tooltip: {
           trigger: "axis",
-          valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
+          valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} ${def.unit ?? "W"}`),
           backgroundColor: "#1a2128",
           borderColor: "#2a3238",
           textStyle: { color: "#e8ecef", fontSize: 12 },
@@ -227,7 +250,7 @@ export default function GraphTab() {
           axisLabel: {
             color: "#8b98a5",
             fontSize: 11,
-            formatter: (v) => `${Math.round(v)} W`,
+            formatter: (v) => `${Math.round(v)} ${def.unit ?? "W"}`,
             inside: isPhone,
           },
           splitLine: { lineStyle: { color: "#2a323866" } },
@@ -351,13 +374,17 @@ export default function GraphTab() {
       }
 
       function updateStats(rows, bucketMs) {
-        const grids = rows.map((r) => r.grid).filter((v) => v != null);
+        // Per-graph average (2026-09-27): was hardcoded to the grid series
+        // for every graph — meaningless on the °C/% module tiles ("avg
+        // 201 °C"). Power graphs keep the grid average as before; the
+        // module tiles average their own first series via avgKey.
+        const vals = rows.map((r) => rowValue(def.avgKey ?? "grid", r)).filter((v) => v != null);
         setStatsArr((arr) =>
           arr.map((s, i) =>
             i === gi
-              ? grids.length
+              ? vals.length
                 ? {
-                    avg: Math.round(grids.reduce((a, b) => a + b, 0) / grids.length),
+                    avg: Math.round(vals.reduce((a, b) => a + b, 0) / vals.length),
                     bucketMs,
                   }
                 : null
@@ -515,6 +542,7 @@ export default function GraphTab() {
               <span className="muted" style={{ marginLeft: "auto" }}>
                 {t("graph.avgRes", {
                   avg: statsArr[i].avg,
+                  unit: graphs[i].unit ?? "W",
                   res:
                     statsArr[i].bucketMs < 60000
                       ? `${statsArr[i].bucketMs / 1000}s`

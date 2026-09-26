@@ -84,8 +84,9 @@ function Shell() {
               key={l}
               className={language === l ? "nav-active" : ""}
               onClick={() => setLanguage(l)}
+              aria-label={l.toUpperCase()}
             >
-              {l.toUpperCase()}
+              {{ en: "🇬🇧", de: "🇩🇪", ro: "🇷🇴" }[l]}
             </button>
           ))}
         </div>
