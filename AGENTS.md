@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.75, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.76, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4196,3 +4196,21 @@ side recovers — no action needed unless it persists for days.
   stalled on Anker's side". The estimate experiment lasted one day
   (v1.5.73 → v1.5.75) — identical fills looked fabricated, honest
   unknowns won.
+
+## How the Anker app shows per-module data during a broker stall: BLE (2026-09-26, user report)
+
+- User: "in the Anker app I see both Solarbank 2 and BP5000 with their
+  temperatures and load percentage" — while our MQTT diagnostic got ZERO
+  broker-routed messages. Explanation: the app has TWO channels to the
+  device — cloud MQTT (stalled for the app too) and **Bluetooth LE
+  direct to the device** when the phone is in range. The community
+  reverse-engineered the MQTT binary format FROM the BT traffic
+  (thomluther/anker-solix-api discussion #222): both carry the identical
+  messages (0405 telemetry, 040a expansion). Verified there is NO
+  REST/cloud equivalent for per-module data (docs/ANKER_SOLIX_API
+  _v3.23.0.md + full scen_info payload). So the app's per-module view
+  only works in BLE range during a stall.
+- Opened issue #231: give the server its own BLE channel to the
+  Solarbank (same philosophy as the meter's local Modbus) — our binary
+  parser is already written (mqtt.js works unchanged over BLE); open
+  questions are host Bluetooth hardware/range and the BLE stack choice.
