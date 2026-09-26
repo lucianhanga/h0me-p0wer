@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.66, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.67, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4002,3 +4002,20 @@ side recovers — no action needed unless it persists for days.
   unchanged. The baseline refresh (ROI tab ↻) should be re-run once the
   h-power system is actually producing, so the forecast reflects the
   bigger installation.
+
+## ROI BOM: 6 more panels + cables + Y-splitters (2026-09-26, user request)
+
+- Added: NAKA 500 W 6er-Angebot (€609.99, `NAKA6PACK` — 8 panels/4000 Wp
+  total now, the h-power generation side), a second purchase of the
+  Anker 10 m 6 mm² extension cables (3 sets @ €44.90, different price
+  from the first batch → separate row), and Anker SOLIX Y cables
+  (2 packs @ €19.90, B0F4QH9F1Q, parallel PV connection).
+  `totalInvestedEur` 5,139.63 → **5,924.12** (verified live; ROI tab
+  screenshot with all 15 rows + thumbnails).
+- Gotcha: `/api/roi/image/:asin` strips non-alphanumerics from the asin
+  before resolving the file — an asin like `B0F4QGJVXN-B` 404s; the file
+  must be named after the SANITIZED asin (`B0F4QGJVXNB.jpg`). Keep
+  synthetic asins alphanumeric-only.
+- Follow-up for the user, NOT done: `.env`'s `PV_PEAK_KWP` is still 1.0
+  — once the 6 new panels are installed it should become 4.0 (Welcome/
+  PVGIS projections scale from it).
