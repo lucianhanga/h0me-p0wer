@@ -20,6 +20,11 @@ import mqtt from "mqtt";
 // (4B signed LE), 04 bin, 05 sfle (4B float LE).
 const MSGTYPE_TELEMETRY = "0405";
 const MSGTYPE_REALTIME_TRIGGER = "0057";
+// 040a = Solarbank 2 EXPANSION data (param_info topic): per-pack SOC/SOH/
+// temperature/SN for up to 5 expansion batteries (community _A17C1_040a).
+// Only streams while the realtime trigger is active (the trigger we already
+// re-send every 4 min for 0405 covers it).
+const MSGTYPE_EXPANSION = "040a";
 
 // Field map for message 0405 on A17C3 (Solarbank 2 E1600 Plus) — shared with
 // A17C1 in the community SOLIXMQTTMAP (_A17C1_0405). factor: raw × factor.
@@ -118,6 +123,34 @@ function decodeValue({ type, value }) {
     default:
       return null; // bin/strb/json — not needed for telemetry
   }
+}
+
+// Decode a 040a expansion message into {ts, packCount, mainSoc, packs}.
+// Field layout (community _A17C1_040a): a2 = pack count, a3 = main battery
+// SOC, then per pack idx 1..5 field a{3+idx} is ONE composite bin field —
+// byte offsets within its payload: 0: controller SN (str 16), 18: battery
+// status (ui), 19: temperature (ui, two's complement), 21: SOC (ui),
+// 22: SOH (ui), 27: pack SN (str 17). Exported for testing.
+export function decodeExpansionData(fields) {
+  const packCount = fields.a2 ? decodeValue(fields.a2) : null;
+  const mainSoc = fields.a3 ? decodeValue(fields.a3) : null;
+  const packs = [];
+  for (let idx = 1; idx <= 5; idx++) {
+    const f = fields[(0xa3 + idx).toString(16)];
+    if (!f?.value || f.value.length < 44) continue;
+    const v = f.value; // composite bytes (type 0x04 bin), offsets per the map
+    const readStr = (off, len) =>
+      v.subarray(off, off + len).toString("utf8").replaceAll("\0", "").trim();
+    packs.push({
+      controllerSn: readStr(0, 16) || null,
+      status: v[18],
+      temperatureC: v[19] > 127 ? v[19] - 256 : v[19],
+      soc: v[21],
+      soh: v[22],
+      sn: readStr(27, 17) || null,
+    });
+  }
+  return { ts: Date.now(), packCount, mainSoc, packs };
 }
 
 // Build the realtime-trigger command (0057): the device streams 0405 telemetry
@@ -309,6 +342,20 @@ export class AnkerMqtt {
           console.log(`[mqtt] unparseable device message: ${inner.data.slice(0, 120)}`);
         return; // bad checksum or not a Solix binary message
       }
+      if (msg.msgtype === MSGTYPE_EXPANSION) {
+        const exp = decodeExpansionData(msg.fields);
+        this.lastDataAt = Date.now(); // device data = connection is alive
+        this.backoffMs = 5000;
+        if (!this.loggedFirstExpansion) {
+          this.loggedFirstExpansion = true;
+          console.log(
+            `[mqtt] expansion data: ${exp.packs.length} pack(s)` +
+              exp.packs.map((p) => ` soc=${p.soc}% soh=${p.soh}% sn=${p.sn ?? "?"}`).join(""),
+          );
+        }
+        this.onExpansion?.(exp);
+        return;
+      }
       if (msg.msgtype !== MSGTYPE_TELEMETRY) {
         if (process.env.MQTT_DEBUG) console.log(`[mqtt] non-telemetry msgtype ${msg.msgtype}`);
         return;
@@ -336,6 +383,7 @@ export class AnkerMqtt {
       const data = {
         ts: out.ts,
         soc: out.soc ?? out.mainSoc ?? null,
+        mainSoc: out.mainSoc ?? null, // main unit only (expansions report via 040a)
         outputW: out.dischargeW ?? out.outputW ?? out.acOutputW ?? 0,
         chargeW: out.chargeW ?? 0,
         pvW: out.pvW ?? 0,

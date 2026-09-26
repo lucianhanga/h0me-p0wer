@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.71, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.72, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4107,3 +4107,36 @@ side recovers — no action needed unless it persists for days.
   6.6, storedKwh 2.64 at soc 40; flow capacityKwh 6.6; Strategy tab
   screenshot shows the badge + "2.64 kWh of 6.6 kWh" + ETA at the new
   capacity.
+
+## Per-module battery data (MQTT 040a) + upright segmented modules view (2026-09-26, user request)
+
+- User: "there could be more than one battery attached to the solarbank —
+  detect all of them and their load status, display them as segments...
+  show them up standing." Per-module data is MQTT-ONLY (no REST
+  equivalent): message type **040a** on the param_info topic (community
+  `_A17C1_040a`) carries per-pack controller SN, battery status,
+  temperature, **SOC**, **SOH**, and pack SN for up to 5 packs; the 0405
+  map's `a3` (main_battery_soc) is the main unit's own SOC vs `ad`'s
+  controller+expansions average. Expansion messages stream only while the
+  realtime trigger is active — our existing 4-min re-trigger covers it.
+- mqtt.js: 040a routed in #onMessage to a new `onExpansion` callback via
+  `decodeExpansionData()` (exported; composite bin fields parsed by byte
+  offsets per the map); 0405's mainSoc is now forwarded too. index.js
+  merges both into latestBattery and carries them forward across REST
+  syncs (same pattern as temperatureC — a full REST replace must not
+  blank MQTT-only fields).
+- UI: `BatteryModules` (BatteryTab.jsx) — an upright portrait battery
+  split into per-module segments (main unit at the bottom, expansions on
+  top like the hardware; height ∝ capacity; fill = module SOC, same
+  lvl-* palette) + a legend row per module (kWh, SOC, SOH, temperature).
+  Shown only when expansionPacks > 0. Per-module SOC shows "—" until
+  MQTT delivers, with an explanatory note — deliberately NOT the overall
+  average (that would be fabrication).
+- **Verified with a synthetic wire message, not live** (the broker was
+  stalled again at implementation time): crafted a 040a binary per the
+  community map (pack SN, soc 41, soh 100, temp 19) and confirmed
+  parseDeviceMessage + decodeExpansionData extract it exactly; the UI
+  was verified with a temporary route injection (screenshot: both
+  segments, legend with SOH/temp) which was REMOVED before committing.
+  First live 040a will log `[mqtt] expansion data: N pack(s) ...` —
+  check that line when the broker recovers.
