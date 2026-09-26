@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.79, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.80, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4291,3 +4291,25 @@ side recovers — no action needed unless it persists for days.
 - Note: 09-19/09-20 stay zero — pv_daily has no rows for them, so
   there's nothing real to reconstruct from (their totals were only ever
   in the destroyed cloud rows).
+
+## Graph tab: battery history missing after the swap (2026-09-26, user report)
+
+- Two compounding causes in /api/timeseries: (1) the battery cloud-anchor
+  loop read only `latestBattery.sn` — the cross-SN continuity fix
+  (v1.5.70) covered stats/ROI but MISSED this route, so pre-swap days
+  anchored on the new SN's all-zero backfill artifacts and the graph's
+  battery series went flat beyond the 48h local retention. Now iterates
+  batterySns() with prefer-nonzero merging (the two physical batteries
+  never ran simultaneously, so nonzero never conflicts; zeros fill only
+  genuinely empty buckets). (2) The whole cloud-anchor section was gated
+  on `poller.snapshot?.meter?.sn` — when Modbus is unreachable (dev, or
+  any meter outage) grid AND battery cloud anchors silently died, the
+  opposite of what they're for; now `?? getAnyDeviceSn()` like every
+  other call site.
+- Zero-clobber guard extended from saveCloudPvTrend to saveCloudTrend
+  (ABS sums — meter power is signed): the recreated site had also
+  upserted 31 days of zero battery trends under the new SN (harmless
+  there — its own PK — but the class is now closed everywhere).
+- Verified: 09-23 (pre-swap) batt 49 buckets max 26 W (the old unit's
+  real morning discharge) + grid anchors restored on dev (no meter);
+  09-25 batt max 566 W; 09-26+ untouched (new SN).

@@ -563,7 +563,12 @@ app.get("/api/timeseries", (req, res) => {
   // stay null — a data outage ending just inside the window has no in-window
   // left anchor). Edge anchors are never emitted (output starts at `from`).
   const anchorFrom = from - CLOUD_INTERVAL_MS;
-  const sn = poller.snapshot?.meter?.sn;
+  // getAnyDeviceSn() fallback (2026-09-26): every other call site in this
+  // file already uses it — without it, the entire cloud-anchor section
+  // (grid AND battery) silently dies whenever Modbus is unreachable, which
+  // is exactly when cloud anchors matter most (dev instances never see them
+  // at all while production holds the meter's single connection).
+  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
   if (sn) {
     const cloudRows = [];
     for (const r of getCloudDayPower(sn, fromDate, toDate)) {
@@ -594,12 +599,19 @@ app.get("/api/timeseries", (req, res) => {
 
     // Battery cloud fallback: day-trend anchors where live 5-min battery
     // snapshots haven't synced yet (e.g. right after server start).
-    if (latestBattery?.sn) {
-      for (const r of getCloudDayPower(latestBattery.sn, fromDate, toDate)) {
+    // ALL battery SNs (2026-09-26 swap): the new SN holds all-zero backfill
+    // artifacts for pre-swap days while the old SN holds the real discharge
+    // data — the route used to read only the live SN, so the Graph tab lost
+    // pre-swap battery history entirely. Prefer-nonzero merge: the two
+    // physical batteries never ran simultaneously, so nonzero never
+    // conflicts; zeros only fill genuinely empty buckets.
+    for (const sn of batterySns()) {
+      for (const r of getCloudDayPower(sn, fromDate, toDate)) {
         if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
         if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
         const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-        if (!acc.get(bt)?.batt) {
+        const existing = acc.get(bt)?.batt;
+        if (!existing || (existing.s === 0 && r.power !== 0)) {
           add(bt, "batt", r.power);
           add(bt, "battOut", Math.max(r.power, 0)); // signed trend: discharge+
           add(bt, "battChg", Math.max(-r.power, 0)); // charge is negative power
