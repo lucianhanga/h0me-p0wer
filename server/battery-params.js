@@ -55,6 +55,7 @@ export function resolveConstants(pn, expansionPacks = 0) {
   return {
     ...base,
     capacityKwh: Math.round((base.capacityKwh + packs * EXPANSION_PACK_KWH) * 100) / 100,
+    baseCapacityKwh: base.capacityKwh,
     expansionPacks: packs,
     expansionPackKwh: EXPANSION_PACK_KWH,
   };
@@ -278,12 +279,15 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
       const flow = b ? deriveBatteryFlow(b) : null;
       const constants = resolveConstants(b?.pn, b?.expansionPacks);
       const live = b
-        ? {
-            ts: b.ts ?? null,
+        ? {            ts: b.ts ?? null,
             name: b.name ?? "Solarbank",
             sn: b.sn ?? null,
             pn: b.pn ?? null,
             expansionPacks: b.expansionPacks ?? 0,
+            // Per-module detail (MQTT 0405 a3 / 040a; null until the broker
+            // delivers — REST has no per-pack data at all).
+            mainSoc: b.mainSoc ?? null,
+            expansions: b.expansions ?? null,
             soc: b.soc ?? null,
             outputW: b.outputW ?? 0,
             chargeW: b.chargeW ?? 0,

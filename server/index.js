@@ -1330,6 +1330,18 @@ function startBatteryMqtt() {
     }
     broadcastLive({ batteryTriggered: true }); // MQTT cadence ~3-5 s, throttled inside
   };
+  // 040a expansion messages: per-pack SOC/SOH/temperature for the attached
+  // expansion batteries (BP5000 etc.) — merged into latestBattery and
+  // carried forward across REST syncs (see syncBatteryInner).
+  batteryMqtt.onExpansion = (d) => {
+    latestBattery = {
+      ...latestBattery,
+      mainSoc: d.mainSoc ?? latestBattery?.mainSoc ?? null,
+      expansions: d.packs,
+    };
+    lastCloudOkAt = Date.now();
+    broadcastLive({ batteryTriggered: true });
+  };
   batteryMqtt.start(); // never rejects — retries internally with backoff
 }
 
@@ -1355,8 +1367,14 @@ async function syncBatteryInner() {
     const info = await anker.getBatteryInfo();
     if (info) {
       // REST has no temperature field — carry the last MQTT-sourced value
-      // forward instead of blanking it on every 10 s REST sync.
-      latestBattery = { ...info, temperatureC: latestBattery?.temperatureC ?? null };
+      // forward instead of blanking it on every 10 s REST sync. Same for
+      // mainSoc/expansions (MQTT 0405/040a only, no REST equivalent).
+      latestBattery = {
+        ...info,
+        temperatureC: latestBattery?.temperatureC ?? null,
+        mainSoc: latestBattery?.mainSoc ?? null,
+        expansions: latestBattery?.expansions ?? null,
+      };
       lastCloudOkAt = Date.now();
       saveBatterySnapshot(latestBattery);
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside

@@ -1897,3 +1897,123 @@ pre {
     font-size: 0.75rem;
   }
 }
+
+/* --- Battery modules (expansion packs): upright segmented view ---------- */
+
+/* One portrait "battery" per solarbank, split into modules (main unit at
+   the bottom, expansions on top — stacked like the hardware), segment
+   height ∝ capacity, each filled by its own module SOC (MQTT 040a). */
+.batt-modules {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-top: 0.9rem;
+}
+
+.batt-seg {
+  position: relative;
+  width: 84px;
+  height: 180px;
+  flex-shrink: 0;
+  border: 2px solid #2a3441;
+  border-radius: 10px;
+  padding: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* the little positive-terminal nub on top, like the horizontal gauge's cap */
+.batt-seg::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 30px;
+  height: 7px;
+  background: #2a3441;
+  border-radius: 3px 3px 0 0;
+}
+
+.batt-seg-mod {
+  position: relative;
+  border-radius: 6px;
+  background: #101418;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.batt-seg-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  transition: height 1s ease;
+}
+
+.batt-seg-fill.lvl-full {
+  background: linear-gradient(180deg, #6bb8f5, #3d8fe0);
+}
+
+.batt-seg-fill.lvl-high {
+  background: linear-gradient(180deg, #74da92, #5fce80);
+}
+
+.batt-seg-fill.lvl-mid {
+  background: linear-gradient(180deg, #f9b468, #f7a44f);
+}
+
+.batt-seg-fill.lvl-low {
+  background: linear-gradient(180deg, #e67474, #e05c5c);
+}
+
+.batt-seg-soc {
+  position: relative;
+  z-index: 1;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.batt-modules-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding-bottom: 2px;
+  max-width: 460px;
+}
+
+.batt-modules-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.batt-modules-name {
+  font-weight: 600;
+}
+
+.batt-modules-detail {
+  color: #8b98a5;
+  text-align: right;
+}
+
+.batt-modules-note {
+  font-size: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .batt-seg-fill {
+    transition: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .batt-seg {
+    width: 72px;
+    height: 150px;
+  }
+}

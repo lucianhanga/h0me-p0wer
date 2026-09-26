@@ -26,6 +26,69 @@ function ParamRow({ k, v }) {
   );
 }
 
+// Upright segmented battery: one module per physical battery unit (main +
+// expansion packs), stacked like the real hardware — main unit at the
+// bottom, expansions on top; segment height ∝ capacity. Per-module SOC
+// comes from MQTT only (main unit via 0405 a3, packs via 040a) — REST has
+// no per-pack data, so modules show "—" until the broker delivers (a note
+// says so). Never falls back to the overall SOC: that average is NOT the
+// per-module value, and showing it as one would be fabrication.
+function BatteryModules({ live, constants }) {
+  const packs = constants?.expansionPacks ?? 0;
+  if (!packs) return null;
+  const modules = [
+    {
+      key: "main",
+      name: "Main unit",
+      kwh: constants.baseCapacityKwh,
+      soc: live.mainSoc ?? null,
+      tempC: live.temperatureC ?? null,
+      soh: null,
+    },
+    ...Array.from({ length: packs }, (_, i) => {
+      const exp = live.expansions?.[i] ?? null;
+      return {
+        key: `exp${i}`,
+        name: `Expansion ${i + 1}`,
+        kwh: constants.expansionPackKwh,
+        soc: exp?.soc ?? null,
+        tempC: exp?.temperatureC ?? null,
+        soh: exp?.soh ?? null,
+      };
+    }),
+  ];
+  const totalKwh = modules.reduce((a, m) => a + m.kwh, 0);
+  const lvlOf = (soc) =>
+    soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  return (
+    <div className="batt-modules">
+      <div className="batt-seg" title="battery modules, stacked as installed">
+        {[...modules].reverse().map((m) => (
+          <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
+            <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
+            <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>
+          </div>
+        ))}
+      </div>
+      <div className="batt-modules-legend">
+        {modules.map((m) => (
+          <div key={m.key} className="batt-modules-row">
+            <span className="batt-modules-name">{m.name}</span>
+            <span className="batt-modules-detail">
+              {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
+              {m.soh != null && ` · SOH ${m.soh} %`}
+              {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
+            </span>
+          </div>
+        ))}
+        {live.expansions == null && (
+          <div className="batt-modules-note muted">per-module SOC arrives via MQTT when the broker delivers</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // One battery: animated SOC gauge (with the configured min/max markers right
 // on it) + every battery parameter. Split out of BatteryTab (2026-09-21,
 // user request) so a second physical battery is a data change, not a
@@ -187,6 +250,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           {mode === "idle" && <span className="batt-status-main">idle</span>}
           {usableKwh != null && <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>}
         </div>
+        <BatteryModules live={live} constants={constants} />
       </div>
 
       {config == null && features == null ? (
