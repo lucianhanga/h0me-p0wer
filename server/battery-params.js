@@ -27,6 +27,39 @@ export const CONSTANTS = {
   maxPvInputW: 1200, // max PV DC input
 };
 
+// Per-model base specs (2026-09-26: the A17C1 Pro replaced the Plus). Both
+// are 1.6 kWh base units with the same 800 W AC cap; the Pro takes 4 MPPT /
+// 2400 W PV. Unknown pn → the A17C3 defaults (previous behavior).
+const BASE_BY_PN = {
+  A17C3: CONSTANTS,
+  A17C1: {
+    model: "A17C1",
+    product: "Solarbank 2 E1600 Pro",
+    capacityKwh: 1.6,
+    maxAcOutputW: 800,
+    maxPvInputW: 2400,
+  },
+};
+
+// The cloud reports only the expansion-pack COUNT (sub_package_num), not
+// the pack model — this account's pack is a BP5000 (5 kWh, per the BOM).
+// Override via env if a different pack is ever attached.
+const EXPANSION_PACK_KWH = Number(process.env.EXPANSION_PACK_KWH ?? 5.0);
+
+// Effective hardware constants for the CURRENT device: base by pn plus
+// expansion-pack capacity. storedKwh / ETA / the gauge's "X of Y kWh" all
+// derive from capacityKwh, so they follow automatically.
+export function resolveConstants(pn, expansionPacks = 0) {
+  const base = BASE_BY_PN[pn] ?? CONSTANTS;
+  const packs = Number(expansionPacks ?? 0);
+  return {
+    ...base,
+    capacityKwh: Math.round((base.capacityKwh + packs * EXPANSION_PACK_KWH) * 100) / 100,
+    expansionPacks: packs,
+    expansionPackKwh: EXPANSION_PACK_KWH,
+  };
+}
+
 const numOrNull = (v) => (v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
 // Derived flow split (2026-09-16 bugfix): `outputW` is the TOTAL inverter AC
@@ -243,11 +276,14 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
     try {
       const b = getLiveBattery() ?? null;
       const flow = b ? deriveBatteryFlow(b) : null;
+      const constants = resolveConstants(b?.pn, b?.expansionPacks);
       const live = b
         ? {
             ts: b.ts ?? null,
             name: b.name ?? "Solarbank",
             sn: b.sn ?? null,
+            pn: b.pn ?? null,
+            expansionPacks: b.expansionPacks ?? 0,
             soc: b.soc ?? null,
             outputW: b.outputW ?? 0,
             chargeW: b.chargeW ?? 0,
@@ -257,6 +293,8 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
             pvW: b.pvW ?? 0,
             pv1W: b.pv1W ?? 0,
             pv2W: b.pv2W ?? 0,
+            pv3W: b.pv3W ?? null, // 4 MPPT only on the Pro (A17C1) — null on
+            pv4W: b.pv4W ?? null, // older hardware, so the UI can tell
             temperatureC: b.temperatureC ?? null,
             toHomeW: b.toHomeW ?? null,
             gridToHomeW: b.gridToHomeW ?? null,
@@ -267,7 +305,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
             errCode: b.errCode ?? null,
             // Charging beyond what PV covers = grid-sourced (usually 0).
             gridToBatteryW: flow.gridChargeW,
-            storedKwh: b.soc != null ? Math.round(((b.soc / 100) * CONSTANTS.capacityKwh) * 100) / 100 : null,
+            storedKwh: b.soc != null ? Math.round(((b.soc / 100) * constants.capacityKwh) * 100) / 100 : null,
           }
         : null;
 
@@ -286,7 +324,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
           multiPv: fs?.multi_pv ?? null,
           heating: fs?.heating ?? null,
         },
-        constants: CONSTANTS,
+        constants,
       };
 
       // Second battery (2026-09-24): the account gained a Solarbank 4 on a

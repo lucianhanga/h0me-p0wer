@@ -304,6 +304,13 @@ export class AnkerClient {
       // MQTT topics are keyed by pn, and the 2026-09-26 Plus→Pro swap made
       // the hardcoded A17C3 default wrong for the new unit.
       pn: sb.device_pn ?? null,
+      // Expansion battery packs attached (sub_package_num) — 1 = the BP5000
+      // on this account's Pro (2026-09-26). The cloud reports only the
+      // COUNT, not the pack model. Per-string PV extended to 4 channels:
+      // the Pro (A17C1) has 4 MPPT (pv_name lists PV1–PV4).
+      expansionPacks: Number(sb.sub_package_num ?? 0),
+      pv3W: num(info?.solar_power_3),
+      pv4W: num(info?.solar_power_4),
       soc: num(sb.battery_power), // state of charge, percent
       outputW: num(sb.output_power), // discharging into home
       chargeW: num(sb.bat_charge_power), // charging

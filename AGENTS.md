@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.70, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.71, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4081,3 +4081,29 @@ side recovers — no action needed unless it persists for days.
   A17C3 (both Solarbank 2) — ticket #210 covers verification before the
   power plan ever targets h-power; h-solar's plan keeps working since
   the schedule payload shape is shared across the SB2 family.
+
+## Expansion-pack detection (BP5000 on the Pro) + per-model constants (2026-09-26, user request)
+
+- The Pro has a BP5000 attached; the cloud reports it as
+  `sub_package_num: 1` in scen_info's solarbank entry (COUNT only, no
+  pack model). getBatteryInfo() now returns `expansionPacks` + `pv3W`/
+  `pv4W` (the A17C1 Pro has 4 MPPT — pv_name lists PV1–PV4).
+- battery-params.js: `resolveConstants(pn, expansionPacks)` — per-model
+  base specs (A17C1 Pro: 1.6 kWh base, 800 W AC, 2400 W PV; A17C3 Plus
+  unchanged) + `EXPANSION_PACK_KWH` (env, default 5.0 = this account's
+  BP5000 per the BOM — the cloud never says WHICH pack). Effective
+  capacity 1.6 + 5.0 = **6.6 kWh**. /api/battery/params' constants +
+  storedKwh and /api/flow's ETA capacityKwh both use it; all ETAs and
+  the gauge's "X kWh of Y kWh" follow automatically.
+- BatteryCard: "+N ext" badge in the card header (hover explains), PV
+  status row switches to PV1/PV2/PV3/PV4 when the 4-channel payload is
+  present (pv3W/pv4W are null, not 0, on older hardware so the UI can
+  tell). WS live-merge recomputes storedKwh against the resolved
+  capacity, so it can't disagree with the gauge.
+- Known limitation: the DB fallback path (getLatestBattery) has no pn/
+  expansionPacks columns, so capacity falls back to the A17C3 defaults
+  until the first REST sync after boot — cosmetic, seconds-long.
+- Verified live: params shows pn A17C1, expansionPacks 1, capacityKwh
+  6.6, storedKwh 2.64 at soc 40; flow capacityKwh 6.6; Strategy tab
+  screenshot shows the badge + "2.64 kWh of 6.6 kWh" + ETA at the new
+  capacity.
