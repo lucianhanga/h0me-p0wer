@@ -1985,6 +1985,26 @@ pre {
   max-width: 460px;
 }
 
+/* Hero side of the modules view: overall SOC (big), stored kWh, and the
+   min/floor/max limits that the horizontal gauge used to carry as ticks —
+   the segmented view replaced that gauge (2026-09-26), so they live here. */
+.batt-modules-side {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.batt-modules-hero {
+  display: flex;
+  flex-direction: column;
+}
+
+.batt-modules-limits {
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
 .batt-modules-row {
   display: flex;
   justify-content: space-between;

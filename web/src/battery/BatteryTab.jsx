@@ -35,7 +35,7 @@ function ParamRow({ k, v }) {
 // estimate ("≈", user request 2026-09-26: "show them how full they are
 // too") — exact per-module values replace the estimate automatically the
 // moment the first 040a arrives.
-function BatteryModules({ live, constants }) {
+function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel }) {
   const packs = constants?.expansionPacks ?? 0;
   if (!packs) return null;
   const modules = [
@@ -79,26 +79,45 @@ function BatteryModules({ live, constants }) {
           );
         })}
       </div>
-      <div className="batt-modules-legend">
-        {modules.map((m) => {
-          const shown = m.soc ?? live.soc ?? null;
-          const est = m.soc == null && shown != null;
-          return (
-            <div key={m.key} className="batt-modules-row">
-              <span className="batt-modules-name">{m.name}</span>
-              <span className="batt-modules-detail">
-                {m.kwh} kWh · {shown != null ? `${est ? "≈" : ""}${shown} %` : "—"}
-                {m.soh != null && ` · SOH ${m.soh} %`}
-                {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
-              </span>
+      <div className="batt-modules-side">
+        <div className="batt-modules-hero">
+          <span className="batt-gauge-pct">
+            {live.soc ?? 0} %{heroZoneLabel && <span className={`batt-gauge-zone ${heroLvlClass}`}>{heroZoneLabel}</span>}
+          </span>
+          <span className="batt-gauge-kwh">
+            {live.storedKwh != null && constants?.capacityKwh != null
+              ? `${live.storedKwh} kWh of ${constants.capacityKwh} kWh`
+              : "capacity n/a"}
+          </span>
+          {(limits.minPct != null || limits.maxPct != null) && (
+            <span className="batt-modules-limits muted">
+              {limits.minPct != null && `min ${limits.minPct}%`}
+              {limits.floorPct != null && limits.floorPct !== limits.minPct && ` · floor ${limits.floorPct}%`}
+              {limits.maxPct != null && ` · max ${limits.maxPct}%`}
+            </span>
+          )}
+        </div>
+        <div className="batt-modules-legend">
+          {modules.map((m) => {
+            const rowShown = m.soc ?? live.soc ?? null;
+            const rowEst = m.soc == null && rowShown != null;
+            return (
+              <div key={m.key} className="batt-modules-row">
+                <span className="batt-modules-name">{m.name}</span>
+                <span className="batt-modules-detail">
+                  {m.kwh} kWh · {rowShown != null ? `${rowEst ? "≈" : ""}${rowShown} %` : "—"}
+                  {m.soh != null && ` · SOH ${m.soh} %`}
+                  {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
+                </span>
+              </div>
+            );
+          })}
+          {anyEstimate && (
+            <div className="batt-modules-note muted">
+              ≈ overall charge shown per module — exact per-module values arrive via MQTT
             </div>
-          );
-        })}
-        {anyEstimate && (
-          <div className="batt-modules-note muted">
-            ≈ overall charge shown per module — exact per-module values arrive via MQTT
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -159,6 +178,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   const effectiveFloorPct =
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
   const showFloorTick = effectiveFloorPct != null && effectiveFloorPct !== minPct;
+  const hasModules = (constants?.expansionPacks ?? 0) > 0;
   const usableKwh =
     minPct != null && maxPct != null && constants?.capacityKwh != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
@@ -191,7 +211,20 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           )}
           {live.sn && <span className="batt-card-sn">{live.sn}</span>}
         </div>
-        <div className="batt-gauge-wrap">
+        {hasModules ? (
+          // Vertical segmented view replaces the horizontal gauge entirely
+          // (2026-09-26, user request: "show only the vertical, not the
+          // horizontal") — it carries the overall hero SOC + kWh + limits
+          // itself, so nothing is lost with the gauge.
+          <BatteryModules
+            live={live}
+            constants={constants}
+            limits={{ minPct, floorPct: effectiveFloorPct, maxPct }}
+            heroLvlClass={lvlClass}
+            heroZoneLabel={zoneLabel}
+          />
+        ) : (
+          <div className="batt-gauge-wrap">
           <div className={`batt-gauge-body ${lvlClass}`}>
             <div className={`batt-gauge-fill ${lvlClass} ${mode}`} style={{ width: `${soc}%` }} />
             {minPct != null && (
@@ -238,7 +271,8 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               max {maxPct}%
             </span>
           )}
-        </div>
+          </div>
+        )}
         <div className={`batt-status ${mode}`}>
           {mode === "charging" && (
             <>
@@ -265,7 +299,6 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           {mode === "idle" && <span className="batt-status-main">idle</span>}
           {usableKwh != null && <span className="batt-status-sub">usable window ≈ {usableKwh} kWh</span>}
         </div>
-        <BatteryModules live={live} constants={constants} />
       </div>
 
       {config == null && features == null ? (

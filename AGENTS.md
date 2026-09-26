@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.73, `main`, working tree clean, nothing pending.**
+**As of 2026-09-26, v1.5.74, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4161,3 +4161,20 @@ side recovers — no action needed unless it persists for days.
      land (anyEstimate disappears then).
 - Verified via headless-Chrome screenshot with real (MQTT-stalled) data:
   both segments filled ≈24%, SB4 card gone.
+
+## Battery card: vertical segmented view replaces the horizontal gauge (2026-09-26, user request)
+
+- User: "show only the vertical not the horizontal." When expansionPacks
+  > 0 the horizontal SOC gauge is no longer rendered at all —
+  BatteryModules is now the card's hero view: upright segmented battery
+  on the left, and beside it the overall SOC hero number + stored kWh +
+  the min/floor/max limits (previously the gauge's tick labels, now a
+  text row) + the module legend + status line. Cards WITHOUT expansions
+  keep the horizontal gauge unchanged (single-module systems have
+  nothing to segment).
+- Also answered for the user: both segments showed the SAME fill level
+  because both were the "≈" estimate (the overall charge) — exact
+  per-module levels only exist on the MQTT 040a channel, stalled at the
+  time. Nothing was wrong with the rendering.
+- Verified via headless-Chrome screenshot: no horizontal gauge, vertical
+  segments ≈22%, hero/limits/legend all present.
