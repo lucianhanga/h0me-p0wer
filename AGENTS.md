@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-26, v1.5.77, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.78, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4247,3 +4247,19 @@ side recovers — no action needed unless it persists for days.
   A17C3 may still have been real); issue #231 (BLE channel) got a
   correcting comment — BLE remains a valid independence option but the
   "the app needs BLE for this" premise was disproved.
+
+## Battery modules: physical stack order + phone legend (2026-09-27, user correction)
+
+- User: "the battery stack is first the solarbank and then the battery —
+  this is how it's done in practice." The segmented view had it INVERTED
+  (expansion on top); now the main unit (solarbank) is the TOP segment,
+  expansion(s) below. Phone UX: legend rows stack name-over-detail on
+  ≤600px (was mid-phrase wraps: "Expansion"/"1", "· 25 °C" alone),
+  name nowrap, min-width:0 on the flex side column.
+- Verification gotcha worth remembering: headless Chrome enforces a
+  ~500px MINIMUM layout viewport, so a --window-size=390 screenshot
+  clips right-aligned content and LOOKS like horizontal overflow when
+  there is none. For real phone-width checks use CDP
+  Emulation.setDeviceMetricsOverride (mobile: true) — that reported
+  scrollW == 390, no overflow, and the earlier "clipping" was purely the
+  artifact.
