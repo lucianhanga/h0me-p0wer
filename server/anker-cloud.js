@@ -285,38 +285,58 @@ export class AnkerClient {
     return list[0]?.site_id ?? null;
   }
 
-  // Live battery (Solarbank) status from the site's scene info. The site id
-  // is resolved once and cached (rate limits are tight) — see resolveSiteId.
+  // Live battery status from the site's scene info. DOCK ERA (2026-09-27):
+  // the site may carry MULTIPLE solarbanks (h-power: Solarbank 4 on socket A
+  // + Solarbank 2 Pro on socket B) — this returns the AGGREGATE as
+  // `latestBattery` shape (sums satisfy the same per-unit flow invariants),
+  // plus `members[]` = the per-unit objects. The site id is resolved once
+  // and cached (rate limits are tight) — see resolveSiteId.
   async getBatteryInfo() {
     const siteId = this.siteId ?? (await this.resolveSiteId());
     if (!siteId) return null;
     const scene = await this.getSceneInfo(siteId);
-    const sb = scene?.solarbank_info?.solarbank_list?.[0];
-    if (!sb) return null;
+    const list = scene?.solarbank_info?.solarbank_list ?? [];
+    if (!list.length) return null;
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
     const info = scene.solarbank_info;
     const gridInfo = scene.grid_info ?? {};
-    return {
-      ts: Date.now(),
+    const members = list.map((sb) => ({
       sn: sb.device_sn,
       name: sb.device_name,
-      // Product number (A17C3 Plus / A17C1 Pro / AE103 Solarbank 4) — the
-      // MQTT topics are keyed by pn, and the 2026-09-26 Plus→Pro swap made
-      // the hardcoded A17C3 default wrong for the new unit.
       pn: sb.device_pn ?? null,
-      // Expansion battery packs attached (sub_package_num) — 1 = the BP5000
-      // on this account's Pro (2026-09-26). The cloud reports only the
-      // COUNT, not the pack model. Per-string PV extended to 4 channels:
-      // the Pro (A17C1) has 4 MPPT (pv_name lists PV1–PV4).
+      soc: num(sb.battery_power),
+      outputW: num(sb.output_power),
+      chargeW: num(sb.bat_charge_power),
+      pvW: num(sb.photovoltaic_power),
       expansionPacks: Number(sb.sub_package_num ?? 0),
+      featureSwitch: sb.feature_switch ?? null,
+      chargingStatus: sb.charging_status ?? null,
+      errCode: sb.err_code ?? null,
+      heatingPower: num(sb.heating_power),
+    }));
+    // The Pro (A17C1) carries the expansion-pack MQTT channel (040a) and the
+    // verified telemetry map — prefer it as the primary; else first member.
+    const primary = members.find((m) => m.pn === "A17C1") ?? members[0];
+    // total_battery_power is a capacity-weighted fraction ("0.18" = 18%)
+    // across ALL units — the honest aggregate SOC (a plain mean would
+    // misweight the small Pro against the 5 kWh+ units).
+    const totalSoc = num(info?.total_battery_power) * 100;
+    return {
+      ts: Date.now(),
+      sn: primary.sn,
+      // The aggregate reads as the SYSTEM, not one unit — the flow diagram
+      // node and card header show this name (dock era, 2026-09-27).
+      name: members.length > 1 ? "Battery system" : primary.name,
+      pn: primary.pn ?? null,
+      expansionPacks: members.reduce((a, m) => a + m.expansionPacks, 0),
+      soc: totalSoc > 0 ? Math.round(totalSoc) : Math.round(primary.soc),
+      outputW: members.reduce((a, m) => a + m.outputW, 0),
+      chargeW: members.reduce((a, m) => a + m.chargeW, 0),
+      pvW: members.reduce((a, m) => a + m.pvW, 0),
+      pv1W: num(info?.solar_power_1), // per-string PV (site-level fields)
+      pv2W: num(info?.solar_power_2),
       pv3W: num(info?.solar_power_3),
       pv4W: num(info?.solar_power_4),
-      soc: num(sb.battery_power), // state of charge, percent
-      outputW: num(sb.output_power), // discharging into home
-      chargeW: num(sb.bat_charge_power), // charging
-      pvW: num(sb.photovoltaic_power), // solar input (total)
-      pv1W: num(info?.solar_power_1), // per-string PV (PV1/PV2 on E1600)
-      pv2W: num(info?.solar_power_2),
       toHomeW: num(info?.to_home_load),
       // Grid/home channels (grid_info): live values usable when the meter's
       // Modbus is down — gridToHome = import, pvToGrid = PV export, and the
@@ -324,13 +344,12 @@ export class AnkerClient {
       gridToHomeW: num(gridInfo.grid_to_home_power),
       pvToGridW: num(gridInfo.photovoltaic_to_grid_power),
       homeLoadW: num(scene.home_load_power),
-      // Status/feature fields (Battery tab): raw feature_switch map
-      // (0w_feed = zero-export, soc_enable, multi_pv, heating, …),
-      // charging_status string, err_code, heating power.
-      featureSwitch: sb.feature_switch ?? null,
-      chargingStatus: sb.charging_status ?? null,
-      errCode: sb.err_code ?? null,
-      heatingPower: num(sb.heating_power),
+      // Status/feature fields of the PRIMARY member (per-unit for the rest).
+      featureSwitch: primary.featureSwitch,
+      chargingStatus: primary.chargingStatus,
+      errCode: primary.errCode,
+      heatingPower: primary.heatingPower,
+      members,
       siteId,
     };
   }

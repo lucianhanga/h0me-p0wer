@@ -285,7 +285,7 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   // All battery SNs (2026-09-26 swap: E1600 Plus → Pro) — pre-swap days
   // live under the old SN; both must count toward measured savings AND
   // the install-date detection, or ROI history resets to the swap day.
-  const battSns = deps.getBatterySns?.() ?? getBatterySns(meterSn);
+  const battSns = deps.getBatterySns?.() ?? getBatterySns();
 
   // installDate = first day with savings data (PV rollup or battery trend),
   // but NEVER before the panels went up: the actual return of THIS

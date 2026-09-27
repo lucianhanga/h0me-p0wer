@@ -71,7 +71,7 @@ function ParamRow({ k, v }) {
 // applying that same research): the near-full/low SOC zones already had
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
-function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh }) {
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false }) {
   const t = useT();
   const [refreshing, setRefreshing] = useState(false);
   const [open, setOpen] = useState(false);
@@ -116,7 +116,10 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   const effectiveFloorPct =
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
   const showFloorTick = effectiveFloorPct != null && effectiveFloorPct !== minPct;
-  const hasModules = (constants?.expansionPacks ?? 0) > 0;
+  // The aggregate (system) card never shows the per-module view — its
+  // "modules" are the site members, which have their own cards below
+  // (2026-09-27, dock era). Member cards DO show their own expansions.
+  const hasModules = !aggregate && (constants?.expansionPacks ?? 0) > 0;
   const usableKwh =
     minPct != null && maxPct != null && constants?.capacityKwh != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
@@ -267,7 +270,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
         // live-only — its config endpoints aren't verified for this hardware,
         // so there is no Configuration/Status detail to expand.
         <p className="muted" style={{ marginTop: 8 }}>
-          {t("battery.liveOnlyNote")}
+          {member ? t("battery.memberNote") : t("battery.liveOnlyNote")}
         </p>
       ) : (
         <>
@@ -453,13 +456,11 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   if (error && !data) return <div className="error-box">{error}</div>;
   if (!data) return <p className="muted">{t("common.loading")}</p>;
 
-  // Only the PRIMARY system's batteries are shown here (2026-09-26, user
-  // request: "show only the batteries in the h-solar system") — batteries[0]
-  // is the house system by construction; batteries[1+] (the Solarbank 4 on
-  // the h-power site) stay tracked in the backend/API but are not rendered
-  // on this tab — they belong to the future multi-system view (epic #218).
-  const all = Array.isArray(data.batteries) ? data.batteries : [data];
-  const batteries = all.slice(0, 1);
+  // ALL entries render (2026-09-27, dock era): batteries[0] is the system
+  // aggregate, the rest are the site's member units (h-power carries SB4 +
+  // SB2 Pro on the Power Dock). The earlier slice(0,1) ("only the h-solar
+  // system") predates the dock — members ARE the house system now.
+  const batteries = Array.isArray(data.batteries) ? data.batteries : [data];
   const latestTs = batteries.reduce((max, b) => Math.max(max, b.live?.ts ?? 0), 0) || null;
 
   return (
@@ -478,6 +479,8 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
             config={b.config}
             features={b.features}
             constants={b.constants}
+            aggregate={b.aggregate ?? false}
+            member={b.member ?? false}
             // The discharge tolerance is a power-plan concept — it applies
             // only to the primary (controlled) battery, never to a
             // monitored-only secondary one.

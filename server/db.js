@@ -182,15 +182,52 @@ export function getSnapshotRows(fromMs, toMs) {
   return selectSnapshotRows.all(fromMs, toMs);
 }
 
-// Any METER SN seen in cloud history (fallback when the meter is offline).
-// The meter is the device that has month/year period rows; the battery only
-// has day rows.
+// METER SNs in cloud history (2026-09-27 meter swap, meter-1 → meter-2):
+// meters are the devices that have month/year period rows; batteries only
+// ever have day rows. getMeterSns() = all of them; getAnyDeviceSn() = the
+// freshest (fallback when the meter is offline).
+const selectMeterSns = db.prepare(`
+  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE period_type IN ('month', 'year') ORDER BY sn
+`);
+
+export function getMeterSns() {
+  return selectMeterSns.all().map((r) => r.sn);
+}
+
 const selectAnySn = db.prepare(`
-  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE period_type = 'month' LIMIT 1
+  SELECT device_sn AS sn FROM cloud_history WHERE period_type = 'month'
+  GROUP BY device_sn ORDER BY MAX(period_start) DESC, MAX(fetched_at) DESC LIMIT 1
 `);
 
 export function getAnyDeviceSn() {
   return selectAnySn.get()?.sn ?? null;
+}
+
+// Merged cloud trend across SNs (meter swap continuity, 2026-09-27):
+// month/year energy rows sum per label across meters (they never measure
+// simultaneously — physical swap — so sums are correct); day power rows
+// prefer the fresher nonzero value per label. Replaces per-SN reads for
+// every "history of the house's grid" use.
+export function getCloudTrendMulti(sns, type, start) {
+  const byLabel = new Map();
+  let fetchedAt = 0;
+  for (const sn of (Array.isArray(sns) ? sns : [sns]).filter(Boolean)) {
+    const { rows, fetchedAt: f } = getCloudTrend(sn, type, start);
+    fetchedAt = Math.max(fetchedAt, f);
+    for (const r of rows) {
+      const cur = byLabel.get(r.time);
+      if (!cur) {
+        byLabel.set(r.time, { ...r });
+        continue;
+      }
+      if (r.import_energy != null || r.export_energy != null) {
+        cur.import_energy = (cur.import_energy ?? 0) + (r.import_energy ?? 0);
+        cur.export_energy = (cur.export_energy ?? 0) + (r.export_energy ?? 0);
+      }
+      if (r.power != null && (cur.power == null || cur.power === 0)) cur.power = r.power;
+    }
+  }
+  return { rows: [...byLabel.values()], fetchedAt };
 }
 
 // First day with cloud history (when the meter was linked) — dashboard time
@@ -211,20 +248,23 @@ export function getEarliestCloudDay(sn) {
 // aggregation across the swap (old and new never overlap in time — it was a
 // physical swap — so summing both per day is physically correct).
 const selectBatterySn = db.prepare(`
-  SELECT device_sn AS sn FROM cloud_history WHERE device_sn != ?
+  SELECT device_sn AS sn FROM cloud_history
+  WHERE device_sn NOT IN (SELECT DISTINCT device_sn FROM cloud_history WHERE period_type IN ('month', 'year'))
   GROUP BY device_sn ORDER BY MAX(period_start) DESC, MAX(fetched_at) DESC LIMIT 1
 `);
 
-export function getBatterySn(meterSn) {
-  return selectBatterySn.get(meterSn ?? "")?.sn ?? null;
+export function getBatterySn() {
+  return selectBatterySn.get()?.sn ?? null;
 }
 
 const selectBatterySns = db.prepare(`
-  SELECT DISTINCT device_sn AS sn FROM cloud_history WHERE device_sn != ? ORDER BY sn
+  SELECT DISTINCT device_sn AS sn FROM cloud_history
+  WHERE device_sn NOT IN (SELECT DISTINCT device_sn FROM cloud_history WHERE period_type IN ('month', 'year'))
+  ORDER BY sn
 `);
 
-export function getBatterySns(meterSn) {
-  return selectBatterySns.all(meterSn ?? "").map((r) => r.sn);
+export function getBatterySns() {
+  return selectBatterySns.all().map((r) => r.sn);
 }
 
 // --- Battery (Solarbank) live snapshots ------------------------------------

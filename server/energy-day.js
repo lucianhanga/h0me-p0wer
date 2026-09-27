@@ -47,10 +47,16 @@ export function dayBattery(battSns, dateStr) {
 // rows. Bulk week/month/year views fetch a whole month at once instead
 // (a different access pattern, not duplicated logic — see monthKwh/
 // monthRows in index.js) — this is for the single-day case only.
-export function dayGridImportKwh(sn, dateStr) {
-  if (!sn) return 0;
+export function dayGridImportKwh(sns, dateStr) {
+  // Meter swap continuity (2026-09-27): one SN or an array — sum across
+  // meters (they never measured simultaneously).
+  const list = (Array.isArray(sns) ? sns : [sns]).filter(Boolean);
+  if (!list.length) return 0;
   const ym = dateStr.slice(0, 7);
-  return getCloudTrend(sn, "month", ym).rows.find((r) => r.time === dateStr)?.import_energy ?? 0;
+  return list.reduce(
+    (a, sn) => a + (getCloudTrend(sn, "month", ym).rows.find((r) => r.time === dateStr)?.import_energy ?? 0),
+    0,
+  );
 }
 
 // PV kWh for one FINISHED date, from the local pv_daily rollup (populated
