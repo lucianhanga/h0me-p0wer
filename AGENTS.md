@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.94, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.95, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4605,3 +4605,23 @@ side recovers — no action needed unless it persists for days.
   flow.home.consumption (both /api/flow and the WS push share it); the
   power plan keeps the unsmoothed despiked median-of-3 (reaction speed
   is the controller's, display steadiness is the user's).
+
+## Home display: use the Anker app's own home_load_power (2026-09-27, supersedes the v1.5.94 smoothing)
+
+- User: "the Anker app displays correctly (~500 W), our Live tab shows
+  ~300 and oscillates." Root cause, finally pinned with simultaneous
+  live data: our Home summed TWO feeds with different latencies — the
+  1 s local meter + the cloud-lagged inverter output — so every output
+  transition produced a phantom swing (the 2026-09-17 cross-feed
+  artifact class), and my v1.5.94 attempt (25 s rolling mean) only hid
+  it by making every transition display WRONG for ~25 s (the ~300 vs
+  ~500 the user compared). The Anker app's own Home Load
+  (`home_load_power` = grid_to_home + to_home_load) comes from ONE feed
+  with ONE timestamp, already conditioned device-side — verified
+  live: 442 = 254 + 188 exactly, while our lagged mix read 252.
+  refreshHomeConsumption() now prefers homeLoadW when the battery feed
+  is online (meter+outW fallback when it's down); the despike
+  median-of-3 stays for its transient incidents; the v1.5.94 display
+  smoother is REVERTED (pure lag on a single conditioned feed).
+  Verified live: home reads ~386-425 tracking homeLoadW (≈ the Anker
+  app's display), no more ±30 W phase jitter, no transition lag.

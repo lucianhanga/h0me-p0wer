@@ -344,34 +344,27 @@ function despikeHomeLoad(raw) {
 let latestHomeConsumptionW = null;
 function refreshHomeConsumption() {
   const gl = getGridLive();
+  // Prefer the battery's OWN home_load_power (2026-09-27, user: "the Anker
+  // app shows ~500, ours ~300 and oscillates"). It is the Anker app's own
+  // Home Load formula (grid_to_home + to_home_load — validated identical,
+  // 442 = 254 + 188 live) from ONE feed with ONE timestamp, already
+  // conditioned device-side. Our previous formula (fast meter + lagged
+  // cloud outputW) produced phantom swings at every inverter-output
+  // transition: the meter reacts in 1 s while outputW lags 3-60 s, so the
+  // sum oscillated by exactly the transition delta (the 2026-09-17
+  // cross-feed artifact class, at its worst around the floor).
+  // homeLoadW can transiently misreport (2026-09-17 incident) — the
+  // median-of-3 despike below covers that; the meter path stays for
+  // graphs/stats/watchdog, and is the fallback when the battery feed is
+  // down or homeLoadW is missing.
   const raw =
-    gl.source !== "cloud-live" && gl.power != null && latestBattery?.outputW != null
-      ? Math.max(gl.power, 0) + latestBattery.outputW
-      : (latestBattery?.homeLoadW ?? null);
+    latestBattery?.homeLoadW != null
+      ? latestBattery.homeLoadW
+      : gl.source !== "cloud-live" && gl.power != null && latestBattery?.outputW != null
+        ? Math.max(gl.power, 0) + latestBattery.outputW
+        : null;
   latestHomeConsumptionW = despikeHomeLoad(raw);
   return latestHomeConsumptionW;
-}
-
-// Home DISPLAY smoothing (2026-09-27, user report: the flow diagram's Home
-// oscillates ±30 W with no consumer changing while the Anker app is
-// steady). home = raw meter net + inverter output — and the meter's net
-// value jitters (single-phase inverter on L1 while loads sit on L3, see
-// GRID_DISPLAY_SMOOTH_MS; the 5 s grid smoothing covers the grid node but
-// not this sum, and is too short anyway). The Anker app conditions its
-// Home Load device-side; a ~25 s rolling mean on the DISPLAYED value
-// matches that feel. Display-only: the power plan keeps the despiked
-// median-of-3 from refreshHomeConsumption().
-const homeDisplayHistory = []; // {ts, v}
-const HOME_DISPLAY_SMOOTH_MS = 25000;
-function getSmoothedHomeConsumption() {
-  const v = latestHomeConsumptionW;
-  if (v == null) return null;
-  const now = Date.now();
-  homeDisplayHistory.push({ ts: now, v });
-  while (homeDisplayHistory.length && now - homeDisplayHistory[0].ts > HOME_DISPLAY_SMOOTH_MS) {
-    homeDisplayHistory.shift();
-  }
-  return Math.round(homeDisplayHistory.reduce((a, r) => a + r.v, 0) / homeDisplayHistory.length);
 }
 
 // Per-string PV kWh for today, memoized for 30 s — /api/flow is polled every
@@ -475,15 +468,9 @@ async function computeFlowPayload() {
     },
     home: {
       // Shared, despiked computation — see refreshHomeConsumption() above
-      // for why (2026-09-17: this used to be computed inline here with a
-      // DIFFERENT formula than the power-plan controller used, and
-      // un-despiked, so the two could disagree and both could show a
-      // transient bad reading right after a preset change). 2026-09-27:
-      // the DISPLAYED value is additionally smoothed over ~25 s
-      // (getSmoothedHomeConsumption) — the raw sum jitters ±30 W from the
-      // meter's phase artifact and visibly oscillated; the controller
-      // still uses the unsmoothed despiked value.
-      consumption: getSmoothedHomeConsumption(),
+      // for the formula (2026-09-27: the battery's own home_load_power, the
+      // Anker app's exact Home Load — single feed, no cross-feed jitter).
+      consumption: latestHomeConsumptionW,
     },
   };
 }
