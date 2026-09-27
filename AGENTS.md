@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.89, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.90, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4504,3 +4504,18 @@ side recovers — no action needed unless it persists for days.
 - Note: production's meter now answers at a NEW IP (192.168.1.16, was
   .102 — the meter re-pair reset Modbus AND its DHCP lease; the server
   .env on h-iot-serv was updated accordingly).
+
+## Production access & deploy boundary (2026-09-27, user instruction)
+
+- SSH access to production exists and works: `ssh lh@192.168.1.10`
+  (host h-iot-serv, checkout `~/lgit/h0me-p0wer`, Docker named volume
+  with the DB at /data/data.db inside the container). It was used ONCE
+  (2026-09-27) for the PV-history emergency repair, at the user's
+  explicit request.
+- **From now on production updates are the user's own step again**
+  (explicit instruction 2026-09-27 — same as the standing rule). This
+  repo's job stops at commit/PR/merge to `main`; the user runs
+  `git pull --ff-only && docker compose up -d --build` themselves.
+  SSH may still be used for READ-ONLY diagnosis when the user asks
+  (logs, DB queries) — never for deploys/restarts unless they
+  explicitly request it again.
