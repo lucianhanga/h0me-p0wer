@@ -203,6 +203,13 @@ export const de = {
     liveOnlyNote: "nur Live-Überwachung — nicht Teil des Haussystems, keine Steuerung oder Verlauf",
     lowFloorWarn: "Entladegrenze steht auf den werkseitigen 5 % — der Akku kann über Nacht in den Tiefschlaf entladen werden (er wacht erst mit Solar auf). In der Anker App erhöhen (z. B. 8–10 %), um eine Reserve zu halten.",
     infoToggle: "Akku-Informationen",
+    info: {
+      controllerTag: "Solarbank (Controller)",
+      configAppliesNote: "gilt für den gesamten Stack (Haupteinheit + Erweiterung)",
+      soc: "Ladestand",
+      status: "Akku-Status",
+      sn: "Seriennummer",
+    },
     config: {
       title: "Konfiguration",
       refreshTip: "Gerätekonfiguration erneut aus der Cloud laden",

@@ -375,10 +375,15 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             {config?.station && (
               <div className="param-raw">station: {JSON.stringify(config.station)}</div>
             )}
+            <div className="muted" style={{ fontSize: "0.75rem", marginTop: 6 }}>
+              {t("battery.info.configAppliesNote")}
+            </div>
           </div>
 
           <div className="card">
-            <div className="card-label">{t("battery.statusCard.title")}</div>
+            <div className="card-label">
+              {t("battery.statusCard.title")} · {t("battery.info.controllerTag")}
+            </div>
             <ParamRow k={t("battery.statusCard.temperature")} v={fmtTemp(live.temperatureC)} />
             <ParamRow k={t("battery.statusCard.chargingStatus")} v={live.chargingStatus ?? "—"} />
             <ParamRow k={t("battery.statusCard.errorCode")} v={live.errCode ?? "—"} />
@@ -395,6 +400,23 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             <ParamRow k={t("battery.statusCard.pvToGrid")} v={fmtW(live.pvToGridW)} />
             <ParamRow k={t("battery.statusCard.homeLoad")} v={fmtW(live.homeLoadW)} />
           </div>
+
+          {/* One card per expansion pack (2026-09-27, user request: it was
+              ambiguous whether the info above describes the main unit or
+              the extension — now each expansion has its own subsection). */}
+          {Array.from({ length: constants?.expansionPacks ?? 0 }, (_, i) => {
+            const exp = live.expansions?.[i] ?? null;
+            return (
+              <div className="card" key={`exp${i}`}>
+                <div className="card-label">{t("battery.modules.expansion", { n: i + 1 })}</div>
+                <ParamRow k={t("battery.info.soc")} v={fmtPct(exp?.soc)} />
+                <ParamRow k="SOH" v={fmtPct(exp?.soh)} />
+                <ParamRow k={t("battery.statusCard.temperature")} v={fmtTemp(exp?.temperatureC)} />
+                <ParamRow k={t("battery.info.status")} v={exp?.status ?? "—"} />
+                <ParamRow k={t("battery.info.sn")} v={exp?.sn ?? "—"} />
+              </div>
+            );
+          })}
         </div>
           )}
         </>

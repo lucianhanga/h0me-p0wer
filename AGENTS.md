@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.90, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.91, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4519,3 +4519,19 @@ side recovers — no action needed unless it persists for days.
   SSH may still be used for READ-ONLY diagnosis when the user asks
   (logs, DB queries) — never for deploys/restarts unless they
   explicitly request it again.
+
+## Battery information: labeled per device + expansion subsection (2026-09-27, user request)
+
+- User asked whether the expanded "Battery information" describes the
+  Solarbank 2 Pro or the BP5000 (answer: the Pro — config via its SN,
+  status from its own telemetry; the extension only appeared in the
+  modules view). Made unambiguous: the Status card is now titled
+  "Status · Solarbank (controller)", the Configuration card carries a
+  muted "applies to the whole stack (main unit + expansion)" note, and
+  each expansion pack gets its OWN card in the expanded area (charge
+  level, SOH, temperature, battery status, serial number — from
+  live.expansions, en/de/ro). Verified with a screenshot of the
+  expanded section (3 cards, real 040a values).
+- Also observed: the user raised the discharge floor to 8% (the
+  deep-sleep recommendation) — the gauge reads min 8% / floor 11% and
+  the factory-floor warning is gone by construction.
