@@ -17,7 +17,7 @@ import {
   buildStrategyContext,
 } from "./welcome-ai.js";
 import { savedEur } from "./savings.js";
-import { resolveConstants } from "./battery-params.js";
+import { resolveConstants, systemCapacityKwh } from "./battery-params.js";
 
 // Fixed briefing times (local clock): every 2 h from 6:00 to 22:00 — 9 AI
 // calls/day, each updated with the day's actuals so far. Stale = cache older
@@ -388,11 +388,14 @@ export function registerWelcomeRoute(app, deps) {
               temperatureC: lb.temperatureC ?? null,
               expansionPacks: lb.expansionPacks ?? 0,
               expansions: lb.expansions ?? null,
-              // Full battery size (2026-09-27, user request): base unit +
-              // expansion packs — e.g. 1.6 + 5.0 = 6.6 kWh total.
+              // Full battery size (2026-09-27, user request): the whole
+              // SYSTEM's capacity in the dock era (sum over all solarbanks
+              // + their packs — e.g. SB4 5.0 + Pro 6.6 = 11.6 kWh), via
+              // systemCapacityKwh; mainUnit/per-pack details stay the
+              // primary unit's.
               capacity: caps
                 ? {
-                    totalKwh: caps.capacityKwh,
+                    totalKwh: systemCapacityKwh(lb) ?? caps.capacityKwh,
                     mainUnitKwh: caps.baseCapacityKwh,
                     perExpansionPackKwh: caps.expansionPackKwh,
                   }
