@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.88, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.89, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4482,3 +4482,25 @@ side recovers — no action needed unless it persists for days.
 - Production action: redeploy → the startup log will either show the
   repair firing (graph gets its green back) or say exactly which branch
   it took.
+
+## PV graph still flat: "HH:MM" vs "HH:MM:SS" duplicate rows (2026-09-27, fixed live on production via SSH)
+
+- The v2 repair correctly reported "nothing to repair — all days intact"
+  (the v1 repair HAD written real values), yet the graph stayed flat:
+  the recreated site returns solar_production labels as **"HH:MM"** while
+  older syncs AND the repair wrote **"HH:MM:SS"** — every affected day
+  held BOTH rows per 20-min interval (145 rows/day: 73 zero + 72 real),
+  and the plain read's first row per bucket (the zero one) shadowed the
+  real values. Confirmed live on production's DB (ssh lh@192.168.1.10 —
+  server is h-iot-serv, checkout ~/lgit/h0me-p0wer, docker compose
+  volume /data/data.db).
+- Fix, three parts (db.js): getCloudPvDayPower DEDUPES per normalized
+  interval (label[:5]) preferring the max-power row; saveCloudPvTrend
+  NORMALIZES labels to "HH:MM:SS" on write so upserts replace instead of
+  duplicating; an idempotent boot-time DELETE removes short-label zero
+  rows shadowed by a nonzero sibling. Verified on dev (graph shows real
+  curves 09-21..09-25: 1068/1016/874/235/482 W), then deployed to
+  production via SSH and verified there.
+- Note: production's meter now answers at a NEW IP (192.168.1.16, was
+  .102 — the meter re-pair reset Modbus AND its DHCP lease; the server
+  .env on h-iot-serv was updated accordingly).
