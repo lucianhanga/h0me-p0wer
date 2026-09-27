@@ -26,24 +26,27 @@ function connect() {
     } catch {
       return; // malformed message — ignore
     }
-    if (msg?.type !== "live") return;
-    backoff = 2000; // healthy message — reset reconnect backoff
-    // Deploy marker: the server piggybacks its app version on every push.
-    // A tab still running an OLD bundle (opened before a deploy — the
-    // 2026-09-22 "UI still updates at 5 s" report) reloads itself once
-    // PER DISTINCT VERSION: store the version we reloaded for, not a
-    // boolean — a boolean latch never re-arms, so a second deploy in the
-    // same tab session would silently leave stale JS again (2026-09-22
-    // code review).
-    if (
-      msg.v &&
-      typeof __APP_VERSION__ !== "undefined" &&
-      msg.v !== __APP_VERSION__ &&
-      sessionStorage.getItem("hp-reloaded") !== msg.v
-    ) {
-      sessionStorage.setItem("hp-reloaded", msg.v);
-      location.reload();
-      return;
+    if (msg?.type === "live") {
+      backoff = 2000; // healthy message — reset reconnect backoff
+      // Deploy marker: the server piggybacks its app version on every push.
+      // A tab still running an OLD bundle (opened before a deploy — the
+      // 2026-09-22 "UI still updates at 5 s" report) reloads itself once
+      // PER DISTINCT VERSION: store the version we reloaded for, not a
+      // boolean — a boolean latch never re-arms, so a second deploy in the
+      // same tab session would silently leave stale JS again (2026-09-22
+      // code review).
+      if (
+        msg.v &&
+        typeof __APP_VERSION__ !== "undefined" &&
+        msg.v !== __APP_VERSION__ &&
+        sessionStorage.getItem("hp-reloaded") !== msg.v
+      ) {
+        sessionStorage.setItem("hp-reloaded", msg.v);
+        location.reload();
+        return;
+      }
+    } else if (msg?.type !== "activity") {
+      return; // unknown message type — ignore
     }
     for (const fn of subscribers) fn(msg);
   };

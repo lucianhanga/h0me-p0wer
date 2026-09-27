@@ -240,9 +240,13 @@ const SETTLE_AFTER_WRITE_MS = 120 * 1000;
 const POWER_PLAN_DISABLE = process.env.POWER_PLAN_DISABLE === "true";
 
 export class PowerPlanController {
-  constructor(anker, getLiveBattery) {
+  constructor(anker, getLiveBattery, logActivity = () => {}) {
     this.anker = anker;
     this.getLiveBattery = getLiveBattery;
+    // User-visible activity log (2026-09-27): structured kind+params events
+    // for the major decisions — strategy changes, floor guards, native-mode
+    // switches, export corrections — rendered per-language by the frontend.
+    this.logActivity = logActivity;
     const dbDir = path.dirname(
       process.env.DB_PATH ??
         path.join(path.dirname(fileURLToPath(import.meta.url)), "data.db"),
@@ -426,8 +430,10 @@ export class PowerPlanController {
     const { soc, dischargeFloorPct, demandW, max, step } = args;
     const effectiveFloor = dischargeFloorPct + DISCHARGE_TOLERANCE_PCT;
     if (soc <= effectiveFloor) {
+      if (!this.holdingAtFloor) this.logActivity("floor_guard", { phase: "enter", soc, floor: effectiveFloor });
       this.holdingAtFloor = true;
     } else if (soc >= effectiveFloor + DISCHARGE_RESUME_HYSTERESIS_PCT) {
+      if (this.holdingAtFloor) this.logActivity("floor_guard", { phase: "exit", soc, floor: effectiveFloor });
       this.holdingAtFloor = false;
     }
     if (this.holdingAtFloor) return this.passthroughOnly(args);
@@ -438,7 +444,19 @@ export class PowerPlanController {
   // to the house, the rest comes from the grid. Used by the manual "don't
   // discharge" toggle only.
   passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
-    if (soc <= dischargeFloorPct) return 0;
+    if (soc <= dischargeFloorPct) {
+      // At/below the account floor ALL output stops so PV recharges first —
+      // a major, user-visible decision; log the transition (once per latch).
+      if (!this.passthroughBlocked) {
+        this.passthroughBlocked = true;
+        this.logActivity("floor_guard", { phase: "enter", soc, floor: dischargeFloorPct });
+      }
+      return 0;
+    }
+    if (this.passthroughBlocked) {
+      this.passthroughBlocked = false;
+      this.logActivity("floor_guard", { phase: "exit", soc, floor: dischargeFloorPct });
+    }
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
@@ -638,6 +656,7 @@ export class PowerPlanController {
             reason = "switching to native self-consumption — waiting (min write gap)";
           }
         } else {
+          if (!this.nativeMode) this.logActivity("native_mode", { on: true });
           this.nativeMode = true;
           this.nativeSwitchAttempts = 0;
           this.nextNativeSwitchAt = 0;
@@ -669,6 +688,7 @@ export class PowerPlanController {
         // Leaving native self-consumption: force a fresh schedule read and an
         // unconditional preset write — lastWrittenPower refers to a dormant
         // custom-rate-plan value the device wasn't following while in mode 1.
+        this.logActivity("native_mode", { on: false });
         this.nativeMode = false;
         this.lastWrittenPower = null;
         this.template = null;
@@ -749,6 +769,7 @@ export class PowerPlanController {
         if (cut < targetW) {
           targetW = cut;
           exportCorrection = true;
+          this.logActivity("export_correction", { exportW: -exportW, newTargetW: cut });
         }
       }
       let shouldWrite = false;
@@ -955,10 +976,17 @@ export class PowerPlanController {
         // against reality instead of trusting a now-possibly-stale belief.
         this.template = null;
       }
+      if (strategy !== this.strategy) this.logActivity("strategy_changed", { from: this.strategy, to: strategy });
       this.strategy = strategy;
     }
-    if (trigger !== undefined) this.trigger = trigger;
-    if (manualDischarge !== undefined) this.manualDischarge = manualDischarge;
+    if (trigger !== undefined && trigger !== this.trigger) {
+      this.logActivity("trigger_changed", { from: this.trigger, to: trigger });
+      this.trigger = trigger;
+    }
+    if (manualDischarge !== undefined && manualDischarge !== this.manualDischarge) {
+      this.logActivity("manual_discharge", { on: manualDischarge });
+      this.manualDischarge = manualDischarge;
+    }
     this.saveState();
   }
 

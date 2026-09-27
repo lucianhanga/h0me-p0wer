@@ -48,6 +48,8 @@ import {
   kvSet,
   saveModuleSnapshot,
   getModuleHistory,
+  logActivity,
+  getActivity,
 } from "./db.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -1301,6 +1303,25 @@ function broadcastLiveSync(msg) {
     if (ws.readyState === ws.OPEN) ws.send(msg);
   }
 }
+
+// Activity log (2026-09-27, user request — "some activity log where you log
+// these major decisions... and notify"): ONE helper for every emit site —
+// persists the structured entry and instantly pushes it to all WS clients
+// (the header bell's badge lights up without waiting for a poll).
+function activity(kind, params = {}) {
+  logActivity(kind, params);
+  if (!wss.clients.size) return;
+  try {
+    const [entry] = getActivity(1);
+    if (entry) broadcastLiveSync(JSON.stringify({ type: "activity", entry }));
+  } catch (err) {
+    console.warn("[ws] activity broadcast failed:", err.message);
+  }
+}
+
+app.get("/api/activity", (req, res) => {
+  res.json({ ok: true, data: getActivity(req.query.limit ?? 50) });
+});
 let lastBatteryPushAt = 0;
 async function broadcastLive({ batteryTriggered = false } = {}) {
   if (!wss.clients.size) return;
@@ -1393,6 +1414,7 @@ function repairZeroedPvHistory() {
     kvSet("pv_shape_repair_v2", { repaired, shapeDay, at: Date.now() });
   }
   if (repaired) {
+    activity("pv_history_repaired", { n: repaired, shapeDay });
     console.log(
       `[cloud-sync] repaired ${repaired} zeroed PV-history day(s) from pv_daily totals ` +
         `(shape borrowed from ${shapeDay} — totals exact, shape approximate)`,
@@ -1436,6 +1458,7 @@ function startBatteryMqtt() {
   // watchdog-looping against the old device forever.
   if (batteryMqtt && batteryMqtt.sn !== latestBattery.sn) {
     console.log(`[mqtt] battery changed ${batteryMqtt.sn} -> ${latestBattery.sn}, rebinding`);
+    activity("battery_swapped", { from: batteryMqtt.sn, to: latestBattery.sn, name: latestBattery.name });
     batteryMqtt.stop();
     batteryMqtt = null;
   }
@@ -1472,6 +1495,10 @@ function startBatteryMqtt() {
       d.packs.forEach((p, i) => saveModuleSnapshot(d.ts, `exp${i + 1}`, p.soc ?? null, p.temperatureC ?? null));
     } catch (err) {
       console.warn("[db] failed to persist module snapshot:", err.message);
+    }
+    if (d.packs.length > 0 && !batteryMqtt.expansionLogged) {
+      batteryMqtt.expansionLogged = true;
+      activity("expansion_detected", { n: d.packs.length, sn: d.packs[0]?.sn ?? null });
     }
     broadcastLive({ batteryTriggered: true });
   };
@@ -1595,6 +1622,24 @@ async function syncSecondBattery() {
 setTimeout(syncSecondBattery, 20 * 1000); // after the primary battery sync
 setInterval(syncSecondBattery, 30 * 1000).unref();
 
+// Activity: infrastructure transitions worth seeing (meter direct up/down,
+// MQTT fresh/stalled). Transient dev mode flaps by design — meter events
+// are skipped there.
+let lastMeterConnected = null;
+let lastMqttFresh = null;
+setInterval(() => {
+  const mc = poller.getState().connected;
+  if (lastMeterConnected != null && mc !== lastMeterConnected && process.env.MODBUS_TRANSIENT !== "true") {
+    activity("meter", { state: mc ? "up" : "down" });
+  }
+  lastMeterConnected = mc;
+  const mf = batteryMqtt?.isFresh() ?? false;
+  if (lastMqttFresh != null && mf !== lastMqttFresh) {
+    activity("mqtt", { state: mf ? "fresh" : "stalled" });
+  }
+  lastMqttFresh = mf;
+}, 15 * 1000).unref();
+
 // Fast path while a frontend is watching (2026-09-22, user report: "the
 // Anker app is much faster, our UI is delayed a few seconds, intermediate
 // steps are missing"). Investigation that day: Anker's MQTT telemetry
@@ -1647,7 +1692,7 @@ setInterval(async () => {
 // algorithm instead of the static Anker-app schedule (see power-plan.js).
 // Tick on every battery sync (10 s cadence); the controller itself decides
 // whether a rewrite is warranted.
-const powerPlan = new PowerPlanController(anker, () => latestBattery ?? getLatestBattery());
+const powerPlan = new PowerPlanController(anker, () => latestBattery ?? getLatestBattery(), activity);
 
 // Envelope matches the rest of the API ({ok, data}/{ok, error}, same as
 // cloudRoute() below) — these four used to return the bare state object on

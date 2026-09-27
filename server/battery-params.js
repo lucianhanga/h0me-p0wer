@@ -7,7 +7,7 @@
 // shares Anker's tight per-endpoint rate limits and these values change only
 // when the user edits them in the app. `?refresh=1` forces a refetch.
 
-import { kvGet, kvSet } from "./db.js";
+import { kvGet, kvSet, logActivity } from "./db.js";
 
 const CONFIG_KV_KEY = "battery_config";
 // How long the (rarely-changing) account config is cached. Was 6 h —
@@ -233,6 +233,17 @@ async function fetchConfig(anker, getLiveBattery) {
     config.limitsSource ??= "default";
   }
   if (config.backupReservePct == null) config.backupReservePct = config.dischargeLowerLimitPct;
+  // Activity: a changed discharge floor is a user-visible decision
+  // (2026-09-27 — the floor once moved 8%→5% unnoticed until the battery
+  // slept). Logged on every REFRESH that finds a different value.
+  const prevFloor = kvGet(CONFIG_KV_KEY)?.value?.dischargeLowerLimitPct;
+  if (
+    prevFloor != null &&
+    config.dischargeLowerLimitPct != null &&
+    prevFloor !== config.dischargeLowerLimitPct
+  ) {
+    logActivity("floor_changed", { from: prevFloor, to: config.dischargeLowerLimitPct });
+  }
   return config;
 }
 

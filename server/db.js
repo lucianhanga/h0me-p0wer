@@ -617,6 +617,47 @@ export function getCloudDayPower(sn, fromDate, toDate) {
   }));
 }
 
+// --- Activity log (user-visible decision/event journal, 2026-09-27) -----
+// Structured (kind + params, NEVER pre-rendered text) so the frontend can
+// translate every entry into the selected UI language and read it aloud.
+// Append-only, capped — read by /api/activity and pushed live over WS.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS activity_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts INTEGER NOT NULL,
+    level TEXT NOT NULL DEFAULT 'info',
+    kind TEXT NOT NULL,
+    params TEXT
+  )
+`);
+
+const insertActivity = db.prepare(`
+  INSERT INTO activity_log (ts, level, kind, params) VALUES (?, ?, ?, ?)
+`);
+const selectActivity = db.prepare(`
+  SELECT id, ts, level, kind, params FROM activity_log ORDER BY id DESC LIMIT ?
+`);
+const deleteOldActivity = db.prepare(`
+  DELETE FROM activity_log WHERE id < (SELECT COALESCE(MAX(id), 0) - ? FROM activity_log)
+`);
+
+export const ACTIVITY_KEEP = 200;
+
+export function logActivity(kind, { level = "info", ...params } = {}) {
+  try {
+    insertActivity.run(Date.now(), level, kind, Object.keys(params).length ? JSON.stringify(params) : null);
+    deleteOldActivity.run(ACTIVITY_KEEP);
+  } catch (err) {
+    console.warn("[activity] log failed:", err.message);
+  }
+}
+
+export function getActivity(limit = 50) {
+  return selectActivity
+    .all(Math.min(Math.max(Number(limit) || 50, 1), ACTIVITY_KEEP))
+    .map((r) => ({ ...r, params: r.params ? JSON.parse(r.params) : null }));
+}
+
 // --- Cloud PV production day-trend (site-level "solar_production" energy
 // analysis, device_type is site-wide so there's no per-device SN to key on)
 // — a ground-truth backfill source for gaps in local battery_snapshots

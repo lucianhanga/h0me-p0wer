@@ -6,6 +6,7 @@ import Dashboard from "./dashboard/Dashboard.jsx";
 import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
+import ActivityBell from "./components/ActivityBell.jsx";
 import { LanguageProvider, useLanguage, useT } from "./i18n/LanguageProvider.jsx";
 import { LANGUAGES } from "./i18n/translate.js";
 
@@ -78,6 +79,7 @@ function Shell() {
       <header>
         <h1>h0me-p0wer</h1>
         <AskButton />
+        <ActivityBell />
         <div className="lang-switch" title={t("header.languageTip")} role="group" aria-label={t("header.language")}>
           {LANGUAGES.map((l) => (
             <button
