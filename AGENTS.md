@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.99, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.100, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4713,3 +4713,14 @@ side recovers — no action needed unless it persists for days.
   modes; nav hides only in simple mode.
 - Verified via CDP: toggle swaps nav→SimpleHome, flow + modules render,
   screenshot shows the minimal Tesla-like layout.
+
+## Phone header: two rows even with all the new controls (2026-09-27, user: "something expands on the second line because it's too long")
+
+- The activity bell + view toggle pushed row 1 (title + mic + flags)
+  past 390px, so the language flags wrapped to their OWN row — the
+  phone header became THREE rows (measured 138px). The ≤600px layout
+  is now explicitly ordered: row 1 = title + flags (flags pinned with
+  margin-left:auto so they can never leave row 1), row 2 = mic + bell +
+  view toggle + nav (nav takes the remaining width and scrolls).
+  Verified via CDP at real 390px emulation in BOTH modes: 102px header
+  in full, 97px in simple, scrollW == 390, no overflow anywhere.
