@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.92, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.93, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4566,3 +4566,27 @@ side recovers — no action needed unless it persists for days.
 - Verified live: strategy toggles + boot-time expansion detection land
   in /api/activity; badge counts unseen; panel renders highlighted with
   speak buttons.
+
+## passthroughOnly floor guard: release hysteresis (2026-09-27, user-observed oscillation)
+
+- User (house priority + manual + don't-discharge): "Home consumption
+  constantly changes without modifying consumers; PV swings between
+  house / not-to-house / charging battery — something is wrong with the
+  algorithm." Confirmed the mechanism live: the passthrough floor guard
+  blocked at soc <= floor and released at soc > floor with NO
+  hysteresis — the whole-point SOC jitters 8↔9 at the floor, so the
+  preset flip-flopped 0 ↔ ~220 W every couple of minutes (PV swinging
+  battery↔house, Home = grid + inverter out swinging with it, and the
+  demandW feedback amplifying through the write-discipline settling
+  guards). Fix: the guard now releases only at floor +
+  DISCHARGE_RESUME_HYSTERESIS_PCT (3 points, the same constant the
+  discharge path's latch already used). Simulated through the real
+  method: soc sequence 9,8,9,8,9,10,8,10,11,10,9,8 → stays blocked
+  through the entire 8-10 jitter, releases exactly at 11, re-enters at
+  8. The Activity log's floor_guard enter/exit entries now also mean
+  something stable (one pair per real floor event, not per blip).
+- Second, unrelated observation from the same data (NOT a bug, no
+  change): with the expansion module at 7% (below the 8% floor), the
+  DEVICE itself routes PV into charging the low module (~110 W) and
+  lets the grid carry the house even while our passthrough target is
+  nonzero — device-level pack protection until the expansion recovers.
