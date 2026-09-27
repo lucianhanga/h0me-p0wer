@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.97, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.98, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4675,3 +4675,22 @@ side recovers — no action needed unless it persists for days.
   since v1.5.95. Grid stays on the local meter BY DESIGN (1 s
   resolution, per-phase detail, offline-proof) with the cloud-live
   fallback — that part is our advantage over the app, not a bug.
+
+## Graph tab: per-phase (L1/L2/L3) toggle (2026-09-27, long-standing ideas item)
+
+- The "Home Power Usage" graph gains an L1·L2·L3 button in its controls
+  row: swaps the source-split series (grid/PV/battery/home) for the
+  three phase lines — data was always in /api/timeseries (l1/l2/l3),
+  just never surfaced there. Signed phases — live on production: L1 =
+  −178 W (the single-phase inverter's feed) while L3 = +354 W (the
+  loads), which is also the visual explanation for the meter's net
+  jitter users see on the grid node. Reuses the existing re-init path
+  (same mechanism as the language-switch series swap); i18n
+  (en/de/ro) for the button + tooltip. Verified: legend/series swap on
+  dev; phase data confirmed full on production (61/61 buckets). Empty
+  on dev only because its meter is unreachable (phases are local-
+  meter-only data — cloud has no phase channels).
+- Also triaged #212 (SB2 Pro onboarding): commented as mostly done
+  (registration ✓, MQTT verified via the raw 0405 capture, expansion
+  ✓); only multi-solarbank solarbank_list handling remains, moved to
+  the #216 switchover context.
