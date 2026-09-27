@@ -1334,7 +1334,7 @@ poller.onSnapshot((state) => {
   broadcastLive();
 });
 
-// One-time repair (kv flag pv_shape_repair_v1, 2026-09-26): after the
+// One-time repair (kv flag pv_shape_repair_v2): after the
 // h-solar site was recreated in the Plus→Pro battery swap, the PV backfill
 // upserted all-zero solar_production trends over 12 days of real
 // cloud_pv_history (2026-09-14..25) — the flipped Dashboard tiles lost
@@ -1343,10 +1343,15 @@ poller.onSnapshot((state) => {
 // new one returns zeros for pre-creation days), so each affected day is
 // rebuilt from pv_daily's REAL produced total (local trapezoid — the most
 // accurate figure) distributed over the most recent real day-shape we
-// still have. Totals stay exact; only the shape is approximate — logged
-// once, flagged, never runs again.
+// still have. Totals stay exact; only the shape is approximate.
+// v2 (2026-09-27): v1 set its flag UNCONDITIONALLY — a startup with no
+// reference shape (or zero repaired days) latched the repair off forever,
+// which is exactly what happened on production (v1.5.79+ deployed, days
+// still zero). The flag now only latches when days were actually repaired
+// (or verifiably nothing needs repairing), and every branch logs so the
+// server log says what happened on any given boot.
 function repairZeroedPvHistory() {
-  if (kvGet("pv_shape_repair_v1")) return;
+  if (kvGet("pv_shape_repair_v2")) return;
   const todayStr = localDate();
   // Reference shape: latest COMPLETE real day. Today itself qualifies only
   // once it's dark (hour ≥ 20 — September PV is long over by then), so a
@@ -1356,14 +1361,22 @@ function repairZeroedPvHistory() {
   if (!shapeDay && new Date().getHours() >= 20 && getCloudPvDaySum("day", todayStr) > 0) {
     shapeDay = todayStr;
   }
-  if (!shapeDay) return; // no reference shape yet — retry on the next restart
+  if (!shapeDay) {
+    console.log("[cloud-sync] PV-history repair: no reference shape in cloud_pv_history yet — will retry on next restart");
+    return;
+  }
   const shape = getCloudPvDayPower(shapeDay, shapeDay).filter((r) => r.power != null);
   const shapeSum = shape.reduce((a, r) => a + r.power, 0);
-  if (!shape.length || shapeSum <= 0) return;
+  if (!shape.length || shapeSum <= 0) {
+    console.log(`[cloud-sync] PV-history repair: shape day ${shapeDay} is empty — will retry on next restart`);
+    return;
+  }
   let repaired = 0;
+  let remaining = 0;
   for (const d of getPvDaily("2020-01-01", todayStr)) {
     if (d.date >= todayStr || !(d.produced > 0)) continue;
     if (getCloudPvDaySum("day", d.date) > 0) continue; // day is intact
+    remaining++;
     // energy(kWh) = Σ power(W) × (20/60) / 1000 = Σpower / 3000
     const scale = (d.produced * 3000) / shapeSum;
     saveCloudPvTrend(
@@ -1376,11 +1389,19 @@ function repairZeroedPvHistory() {
     );
     repaired++;
   }
-  kvSet("pv_shape_repair_v1", { repaired, shapeDay, at: Date.now() });
+  if (repaired > 0 || remaining === 0) {
+    kvSet("pv_shape_repair_v2", { repaired, shapeDay, at: Date.now() });
+  }
   if (repaired) {
     console.log(
       `[cloud-sync] repaired ${repaired} zeroed PV-history day(s) from pv_daily totals ` +
         `(shape borrowed from ${shapeDay} — totals exact, shape approximate)`,
+    );
+  } else if (remaining === 0) {
+    console.log("[cloud-sync] PV-history repair: nothing to repair — all days intact");
+  } else {
+    console.log(
+      `[cloud-sync] PV-history repair: 0 repaired (shape ${shapeDay}, ${remaining} zeroed candidate day(s)) — will retry on next restart`,
     );
   }
 }

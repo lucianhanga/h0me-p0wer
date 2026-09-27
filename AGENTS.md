@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.87, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.88, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4460,3 +4460,25 @@ side recovers — no action needed unless it persists for days.
   account's discharge floor is ≤ 5% ("Discharge floor is at the factory
   5% — the battery can drain into deep sleep overnight… raise it in the
   Anker app (e.g. 8–10%)", en/de/ro), verified rendering live at 390px.
+
+## PV repair v2: retryable + self-diagnosing (2026-09-27)
+
+- User: "check the graph tab for the battery and PV production — the
+  history is now shown." Battery history verified WORKING on production
+  (cross-SN timeseries fix): 09-20..09-26 show the old unit's real
+  values (51/94/97/13/2/340/377 W). But PV production was still flat
+  for everything before 09-25 despite v1.5.87 being deployed and
+  pv_daily having all the totals. Root cause of the repair not firing:
+  v1's kv flag was set UNCONDITIONALLY — a startup with no reference
+  shape (or 0 repaired days) latched the one-time repair off forever.
+  v2: new flag key pv_shape_repair_v2, latched ONLY when days were
+  actually repaired or verifiably nothing needs repairing, and every
+  branch logs a line ("no reference shape", "0 repaired (N candidates)
+  — will retry", "repaired N zeroed PV-history day(s)").
+- Verified end-to-end on dev: re-zeroed 09-24 + cleared the flag +
+  restart → "repaired 1 zeroed PV-history day(s)" and the day's sum is
+  back to 2730.1 (= produced 0.91 kWh × 3000, exact). Clean systems log
+  "nothing to repair — all days intact" and latch.
+- Production action: redeploy → the startup log will either show the
+  repair firing (graph gets its green back) or say exactly which branch
+  it took.
