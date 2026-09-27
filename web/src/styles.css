@@ -2149,3 +2149,87 @@ pre {
   margin-top: 0.75rem;
   font-size: 0.85rem;
 }
+
+/* --- Activity bell + panel (2026-09-27) ----------------------------------- */
+
+.activity-bell {
+  position: relative;
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.9rem;
+}
+
+.activity-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #e05c5c;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+@keyframes activity-pulse {
+  0%, 100% { transform: scale(1); }
+  30% { transform: scale(1.18); }
+}
+
+.activity-bell-pulse {
+  animation: activity-pulse 0.6s ease-in-out 3;
+}
+
+.activity-panel {
+  max-width: 560px;
+}
+
+.activity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+  margin-top: 0.5rem;
+}
+
+.activity-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
+
+.activity-new {
+  background: #f7a44f14;
+  box-shadow: inset 2px 0 0 #f7a44f;
+}
+
+.activity-time {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  width: 78px;
+}
+
+.activity-text {
+  flex: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activity-bell-pulse {
+    animation: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .activity-time {
+    width: 52px;
+  }
+}

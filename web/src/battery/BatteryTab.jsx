@@ -18,6 +18,37 @@ const fmtTime = (ts) =>
     ? "—"
     : new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
+// charging_status (scen_info string) → friendly label, per the community
+// SolarbankStatus enum (2026-09-27, user request). The raw code stays as a
+// muted suffix — friendly without losing the technical value.
+function chargingStatusLabel(t, v) {
+  if (v == null) return "—";
+  const code = String(v);
+  const KEY = {
+    "0": "detection",
+    "03": "protectionCharge",
+    "1": "bypass",
+    "12": "bypassDischarge",
+    "2": "discharge",
+    "3": "charge",
+    "31": "chargeBypass",
+    "32": "chargeAc",
+    "37": "chargePriority",
+    "4": "wakeup",
+    "116": "coldWakeup",
+    "5": "fullyCharged",
+    "6": "fullBypass",
+    "7": "standby",
+  }[code];
+  if (!KEY) return code;
+  return (
+    <>
+      {t(`battery.chargingStatus.${KEY}`)}
+      <span className="muted"> · {code}</span>
+    </>
+  );
+}
+
 function ParamRow({ k, v }) {
   return (
     <div className="param-row">
@@ -385,7 +416,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               {t("battery.statusCard.title")} · {t("battery.info.controllerTag")}
             </div>
             <ParamRow k={t("battery.statusCard.temperature")} v={fmtTemp(live.temperatureC)} />
-            <ParamRow k={t("battery.statusCard.chargingStatus")} v={live.chargingStatus ?? "—"} />
+            <ParamRow k={t("battery.statusCard.chargingStatus")} v={chargingStatusLabel(t, live.chargingStatus)} />
             <ParamRow k={t("battery.statusCard.errorCode")} v={live.errCode ?? "—"} />
             <ParamRow k={t("battery.statusCard.heatingPower")} v={fmtW(live.heatingPower)} />
             <ParamRow

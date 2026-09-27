@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.91, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.92, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4535,3 +4535,34 @@ side recovers — no action needed unless it persists for days.
 - Also observed: the user raised the discharge floor to 8% (the
   deep-sleep recommendation) — the gauge reads min 8% / floor 11% and
   the factory-floor warning is gone by construction.
+
+## Activity log + header bell (2026-09-27, user request: "some activity log where you log these major decisions... read aloud... notify")
+
+- Structured journal of the MAJOR decisions, not every preset write:
+  activity_log table (id, ts, level, kind, params — never pre-rendered
+  text, so every entry renders in the selected UI language), capped at
+  200 rows. One `activity(kind, params)` helper in index.js persists +
+  instantly pushes {type:"activity"} over the existing WS channel;
+  GET /api/activity?limit= serves the baseline poll.
+- Emit points: power-plan (strategy/trigger/manual changes via
+  setStrategy, native-mode on/off, floor_guard enter/exit from BOTH
+  latches — dischargeToTarget's holdingAtFloor AND passthroughOnly's
+  hard-zero at the raw floor, the user's exact "why is it charging at
+  8%?" scenario, plus export_correction), index.js (meter up/down
+  transitions — skipped in MODBUS_TRANSIENT dev mode, MQTT fresh/stalled
+  transitions, battery_swapped on the MQTT rebind, expansion_detected on
+  first 040a pack, pv_history_repaired), battery-params (floor_changed
+  detected on config refresh).
+- Frontend: ActivityBell in the header (bell + unread badge from a
+  localStorage watermark + pulse on WS push — useLiveStream now forwards
+  {type:"activity"} alongside live), panel reusing the .ask-* chrome:
+  timestamped translated entries, new entries accent-highlighted
+  (watermark frozen at open), per-entry SpeakButton (reads in the
+  selected language via the existing speech.js machinery). i18n kinds:
+  strategy_changed, trigger_changed, manualDischarge.on/off,
+  nativeMode.on/off, floorGuard.enter/exit, export_correction, meter.up/
+  down, mqtt.fresh/stalled, battery_swapped, expansion_detected,
+  floor_changed, pv_history_repaired (en/de/ro).
+- Verified live: strategy toggles + boot-time expansion detection land
+  in /api/activity; badge counts unseen; panel renders highlighted with
+  speak buttons.
