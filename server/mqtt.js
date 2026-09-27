@@ -28,6 +28,11 @@ const MSGTYPE_EXPANSION = "040a";
 
 // Field map for message 0405 on A17C3 (Solarbank 2 E1600 Plus) — shared with
 // A17C1 in the community SOLIXMQTTMAP (_A17C1_0405). factor: raw × factor.
+// SEMANTICS (verified live 2026-09-27): b7 bat_discharge_power is CELLS-ONLY
+// (0 during pure PV passthrough) while d3 output_power is the TOTAL inverter
+// output — scen_info carries both under the same names. The merge below must
+// prefer d3 for outputW or MQTT/REST alternate between two different
+// quantities and every downstream value flickers 0 ↔ total.
 const FIELDS_0405 = {
   a3: { key: "mainSoc", factor: 1 }, // main_battery_soc (controller only)
   ad: { key: "soc", factor: 1 }, // battery_soc (controller + expansions avg)
@@ -35,9 +40,12 @@ const FIELDS_0405 = {
   ab: { key: "pvW", factor: 0.1 }, // photovoltaic_power
   ac: { key: "acOutputW", factor: 0.1 }, // ac_output_power
   b0: { key: "chargeW", factor: 0.01 }, // bat_charge_power
-  b7: { key: "dischargeW", factor: 0.01 }, // bat_discharge_power
-  d3: { key: "outputW", factor: 0.1 }, // output_power (total)
-  c4: { key: "toHomeW", factor: 0.1 }, // home_demand
+  b7: { key: "dischargeW", factor: 0.01 }, // bat_discharge_power — CELLS-only!
+  d3: { key: "outputW", factor: 0.1 }, // output_power (TOTAL — the one to use)
+  c4: { key: "homeLoadW", factor: 0.1 }, // home_demand ≈ home_load_power
+  // (c4 used to be mapped to "toHomeW" — home_demand ≠ scen_info's
+  // to_home_load, the same alternating-semantics bug as b7/d3; REST owns
+  // toHomeW now.)
 };
 
 // Round like the community client: decimals derived from the factor.
@@ -386,18 +394,25 @@ export class AnkerMqtt {
           out[def.key] = applyFactor(raw, def.factor);
         }
       }
-      // Map onto the REST sync payload shape: discharge = dedicated field,
-      // falling back to total output power; SOC prefers the pack average.
+      // Map onto the REST sync payload shape: outputW is the TOTAL inverter
+      // output (d3 output_power) — NOT the cells-only b7 bat_discharge_power
+      // (b7 was preferred until 2026-09-27 and made MQTT/REST alternate
+      // outputW between 0 and the total — the flicker that cascaded through
+      // the flow diagram, Home line, gauge and graphs). toHomeW is REST-only
+      // (c4 is home_demand ≈ homeLoadW, a different quantity than
+      // to_home_load — see the map comment). Only forward keys that actually
+      // carry a value — a null would overwrite the REST channel's value on
+      // the shared latestBattery object.
       const data = {
         ts: out.ts,
         soc: out.soc ?? out.mainSoc ?? null,
-        mainSoc: out.mainSoc ?? null, // main unit only (expansions report via 040a)
-        outputW: out.dischargeW ?? out.outputW ?? out.acOutputW ?? 0,
+        mainSoc: out.mainSoc ?? null,
+        outputW: out.outputW ?? out.dischargeW ?? out.acOutputW ?? 0,
         chargeW: out.chargeW ?? 0,
         pvW: out.pvW ?? 0,
-        toHomeW: out.toHomeW ?? null,
         temperatureC: out.temperatureC ?? null,
       };
+      if (out.homeLoadW != null) data.homeLoadW = out.homeLoadW;
       if (!this.loggedFirstData) {
         this.loggedFirstData = true;
         console.log(

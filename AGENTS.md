@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.96, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.97, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4637,3 +4637,41 @@ side recovers — no action needed unless it persists for days.
   long as the flow was positive within a ~12 s hold window and hides
   only after a sustained zero (a genuinely off flow, e.g. night).
   Other edges unchanged (the grid edges already have their deadband).
+
+## ROOT CAUSE of the whole oscillation saga: MQTT vs REST outputW semantics (2026-09-27, deep review)
+
+- The user demanded a deep review ("quality decreased since yesterday").
+  They were right: v1.5.93-96 patched SYMPTOMS of one root cause.
+  **Raw 0405 capture proved it**: during pure PV passthrough, b7
+  (bat_discharge_power) reads 0 while d3 (output_power) reads ~320.
+  mqtt.js's merge PREFERRED b7 ("dischargeW") — but b7 is CELLS-ONLY
+  discharge while scen_info's output_power (what REST writes into the
+  same latestBattery.outputW) is the TOTAL inverter output. Once
+  v1.5.77's wildcard fix made MQTT deliver on the Pro (09-26 evening),
+  MQTT (0) and REST (330) alternated every few seconds — outputW
+  flickered, and with it: the PV→Home arc, the Home line (grid +
+  outW), the battery gauge's cellsW, and the graphs' battOut/Home.
+  Before v1.5.77, MQTT delivered NOTHING on the Pro → REST-only →
+  consistent → "worked fine yesterday."
+- **Fix**: the merge now prefers d3 (total) — outputW:
+  out.outputW ?? out.dischargeW ?? out.acOutputW. Same class in c4: it
+  is home_demand (≈ home_load_power), NOT to_home_load — remapped to
+  homeLoadW; toHomeW is REST-only now (the MQTT data object also no
+  longer overwrites REST channels with nulls — only present values are
+  forwarded). Verified live: pv.toHome steady 318-381 over 90 s
+  (was flipping 0↔330), home smooth.
+- **Cascade cleanup**: the v1.5.96 sticky-arc hack REVERTED (values are
+  stable without it). Kept deliberately: v1.5.93 floor hysteresis
+  (correct on its own), v1.5.95 homeLoadW display (still the best Home
+  source — the Anker app's own channel), v1.5.92 activity log.
+- Known artifact, no action: battery_snapshots rows from the
+  09-26-evening→09-27-morning flicker window hold alternating 0/total
+  output_w — graphs covering that window average them out oddly; they
+  age out with the 48 h retention.
+- User suggestion, answered: "use the Anker API data for display — it's
+  always good there." That IS the direction: PV/battery/Home-load are
+  all cloud-sourced already (scen_info REST + MQTT, now semantically
+  consistent); Home specifically is the Anker app's own home_load_power
+  since v1.5.95. Grid stays on the local meter BY DESIGN (1 s
+  resolution, per-phase detail, offline-proof) with the cloud-live
+  fallback — that part is our advantage over the app, not a bug.
