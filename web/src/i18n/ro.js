@@ -199,6 +199,13 @@ export const ro = {
     liveOnlyNote: "doar monitorizare live — nu face parte din sistemul casei, fără control sau istoric",
     lowFloorWarn: "Pragul de descărcare e la valoarea din fabrică de 5% — bateria se poate descărca până la deep sleep peste noapte (se trezește doar cu solar). Crește-l în aplicația Anker (de ex. 8–10%) pentru a păstra o rezervă.",
     infoToggle: "Informații baterie",
+    info: {
+      controllerTag: "Solarbank (controler)",
+      configAppliesNote: "valabil pentru întregul ansamblu (unitate principală + extensie)",
+      soc: "Nivel de încărcare",
+      status: "Stare baterie",
+      sn: "Număr de serie",
+    },
     config: {
       title: "Configurație",
       refreshTip: "recitește configurația dispozitivului din cloud",
