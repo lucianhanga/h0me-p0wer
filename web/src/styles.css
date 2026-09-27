@@ -2233,3 +2233,46 @@ pre {
     width: 52px;
   }
 }
+
+/* --- Simple view (2026-09-27, "Tesla way") -------------------------------- */
+
+.view-toggle {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.85rem;
+}
+
+/* One calm column, lots of breathing space, the visuals do the talking. */
+.simple-home {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+  padding-top: 2rem;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.simple-flow {
+  width: 100%;
+  max-width: 560px;
+}
+
+/* The flow diagram scales up to hero size in the simple view. */
+.simple-flow .flow-diagram {
+  width: 100%;
+  height: auto;
+}
+
+.simple-batt {
+  width: 100%;
+  max-width: 460px;
+}
+
+@media (max-width: 600px) {
+  .simple-home {
+    gap: 1.75rem;
+    padding-top: 1rem;
+  }
+}

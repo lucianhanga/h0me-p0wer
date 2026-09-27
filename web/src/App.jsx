@@ -7,7 +7,9 @@ import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
 import ActivityBell from "./components/ActivityBell.jsx";
+import SimpleHome from "./simple/SimpleHome.jsx";
 import { LanguageProvider, useLanguage, useT } from "./i18n/LanguageProvider.jsx";
+import { ViewProvider, useView } from "./view/ViewProvider.jsx";
 import { LANGUAGES } from "./i18n/translate.js";
 
 const PAGES = [
@@ -22,6 +24,7 @@ const PAGES = [
 function Shell() {
   const t = useT();
   const { language, setLanguage } = useLanguage();
+  const { isSimple, setView } = useView();
   const [page, setPage] = useState(() =>
     PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
   );
@@ -80,6 +83,14 @@ function Shell() {
         <h1>h0me-p0wer</h1>
         <AskButton />
         <ActivityBell />
+        <button
+          className={`view-toggle${isSimple ? " nav-active" : ""}`}
+          onClick={() => setView(isSimple ? "full" : "simple")}
+          title={isSimple ? t("view.fullTip") : t("view.simpleTip")}
+          aria-label={isSimple ? t("view.fullTip") : t("view.simpleTip")}
+        >
+          {isSimple ? "◑" : "◉"}
+        </button>
         <div className="lang-switch" title={t("header.languageTip")} role="group" aria-label={t("header.language")}>
           {LANGUAGES.map((l) => (
             <button
@@ -92,21 +103,25 @@ function Shell() {
             </button>
           ))}
         </div>
-        <nav>
-          {PAGES.map((p) => (
-            <button
-              key={p.key}
-              className={page === p.key ? "nav-active" : ""}
-              onClick={() => switchPage(p.key)}
-            >
-              {t(p.labelKey)}
-            </button>
-          ))}
-        </nav>
+        {!isSimple && (
+          <nav>
+            {PAGES.map((p) => (
+              <button
+                key={p.key}
+                className={page === p.key ? "nav-active" : ""}
+                onClick={() => switchPage(p.key)}
+              >
+                {t(p.labelKey)}
+              </button>
+            ))}
+          </nav>
+        )}
         <span className="app-version">v{__APP_VERSION__}</span>
       </header>
       <main>
-        {page === "welcome" ? (
+        {isSimple ? (
+          <SimpleHome />
+        ) : page === "welcome" ? (
           <WelcomeTab />
         ) : page === "live" ? (
           <LiveTab />
@@ -127,7 +142,9 @@ function Shell() {
 export default function App() {
   return (
     <LanguageProvider>
-      <Shell />
+      <ViewProvider>
+        <Shell />
+      </ViewProvider>
     </LanguageProvider>
   );
 }
