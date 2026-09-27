@@ -181,18 +181,42 @@ nav button.nav-active {
     display: none;
   }
 
-  /* Phone header = TWO rows (2026-09-27, user correction): title + mic +
-     language flags on the first row, the tab nav on its OWN full-width
-     second row (scrolling within itself if needed) — tabs must not share
-     the title row. Desktop keeps the single row (base rule). */
+  /* Phone header = TWO rows (2026-09-27): row 1 = title + language flags,
+     row 2 = mic + activity bell + view toggle + tab nav. Earlier layout
+     broke to THREE rows once the bell/toggle joined row 1 — the language
+     flags got pushed to their own line ("expands on the second line
+     because it's too long"). Ordering is explicit so the flags never
+     leave row 1; the nav takes the remaining row-2 width and scrolls. */
   header {
     flex-wrap: wrap;
     row-gap: 0.4rem;
   }
 
-  nav {
-    flex-basis: 100%;
+  h1 {
+    order: 1;
+  }
+
+  .lang-switch {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .ask-btn {
+    order: 3;
+  }
+
+  .activity-bell {
+    order: 4;
+  }
+
+  .view-toggle {
     order: 5;
+  }
+
+  nav {
+    order: 6;
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   header {
