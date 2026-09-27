@@ -329,6 +329,8 @@ export const ro = {
       socExpansion: "Extensie",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
+    phases: "L1·L2·L3",
+    phasesTip: "vedere pe faze — cele trei linii de fază în locul împărțirii pe surse",
     reset: "Resetează",
     resetTitle: "Înapoi la ultimele 24 de ore",
     avgRes: "medie {avg} {unit} · rez. {res}",

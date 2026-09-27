@@ -333,6 +333,8 @@ export const de = {
       socExpansion: "Erweiterung",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
+    phases: "L1·L2·L3",
+    phasesTip: "Phasenansicht — die drei Phasenlinien statt der Quellenaufteilung",
     reset: "Zurücksetzen",
     resetTitle: "Zurück zu den letzten 24 Stunden",
     avgRes: "Ø {avg} {unit} · {res} Auflösung",

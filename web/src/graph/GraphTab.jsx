@@ -163,18 +163,32 @@ function rowValue(key, r) {
 
 export default function GraphTab() {
   const t = useT();
+  // Per-phase view for the Home Power Usage graph (2026-09-27, long-standing
+  // ideas item): the timeseries rows already carry l1/l2/l3 — this toggle
+  // swaps G1's source series (grid/PV/battery/home) for the three phase
+  // lines. The phases are SIGNED (the single-phase inverter feeds L1 while
+  // the loads sit on L3 — that's also why the meter's net jitters).
+  const [phasesOn, setPhasesOn] = useState(false);
   // Resolved (translated) graph definitions — re-resolved on language change,
   // which also re-inits the charts below so legend/series names follow.
   const graphs = useMemo(
     () =>
-      GRAPHS.map((def) => ({
+      GRAPHS.map((def, gi) => ({
         ...def,
         title: t(def.titleKey),
-        legend: def.legendKeys.map((k) => t(k)),
-        series: def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
+        legend:
+          gi === 0 && phasesOn ? ["L1", "L2", "L3"] : def.legendKeys.map((k) => t(k)),
+        series:
+          gi === 0 && phasesOn
+            ? [
+                { key: "l1", name: "L1", color: "#f7a44f", width: 2 },
+                { key: "l2", name: "L2", color: "#5fce80", width: 2 },
+                { key: "l3", name: "L3", color: "#c084fc", width: 2 },
+              ]
+            : def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
         unit: def.unit ?? "W",
       })),
-    [t],
+    [t, phasesOn],
   );
   const containerRefs = graphs.map(() => useRef(null));
   const apiRefs = useRef(graphs.map(() => null)); // per-graph { setSpan(ms) }
@@ -532,6 +546,15 @@ export default function GraphTab() {
                 {t(s.labelKey)}
               </button>
             ))}
+            {i === 0 && (
+              <button
+                className={phasesOn ? "span-active" : ""}
+                onClick={() => setPhasesOn((v) => !v)}
+                title={t("graph.phasesTip")}
+              >
+                {t("graph.phases")}
+              </button>
+            )}
             <button
               onClick={() => apiRefs.current[i]?.setSpan(24 * 3600 * 1000)}
               title={t("graph.resetTitle")}

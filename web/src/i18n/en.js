@@ -318,6 +318,8 @@ export const en = {
       socExpansion: "Expansion",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
+    phases: "L1·L2·L3",
+    phasesTip: "per-phase view — the three phase lines instead of the source split",
     reset: "Reset",
     resetTitle: "Back to the last 24 hours",
     avgRes: "avg {avg} {unit} · {res} res",
