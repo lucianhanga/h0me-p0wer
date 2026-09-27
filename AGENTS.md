@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.100, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.101, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4724,3 +4724,16 @@ side recovers — no action needed unless it persists for days.
   view toggle + nav (nav takes the remaining width and scrolls).
   Verified via CDP at real 390px emulation in BOTH modes: 102px header
   in full, 97px in simple, scrollW == 390, no overflow anywhere.
+
+## Spartan top bar (2026-09-27, user: "the languages make it only one button, the notification something more spartan, tabs on a second line")
+
+- Language switcher is now ONE cycling flag button (tap cycles EN → DE →
+  RO) instead of three buttons — .lang-btn replaces .lang-switch (dead
+  CSS removed; base + ≤600px ordering rules consolidated).
+- Activity notification: the loud red count bubble is now a small,
+  spartan orange dot in the bell's corner (.activity-dot), no number.
+- Phone header final layout (verified at real 390px): row 1 = title +
+  flag + mic + bell + view-toggle (fits again thanks to the single flag
+  button); row 2 = the tab names, full width, own line (user: "the tabs
+  selection names should be on a second line under the title line").
+  Header 102px, scrollW == 390, desktop unchanged (single row).

@@ -70,7 +70,7 @@ export default function ActivityBell() {
         aria-label={t("activity.panelTitle")}
       >
         🔔
-        {unseen > 0 && !open && <span className="activity-badge">{unseen}</span>}
+        {unseen > 0 && !open && <span className="activity-dot" />}
       </button>
       {open && (
         <div className="ask-backdrop" onClick={() => setOpen(false)}>
