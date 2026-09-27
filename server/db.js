@@ -674,6 +674,22 @@ export function getCloudPvDaySum(type, start) {
   return selectCloudPvDaySum.get(type, start)?.s ?? 0;
 }
 
+// Cleanup (idempotent, runs every boot — cheap no-op after the first):
+// delete "HH:MM"-labelled ZERO rows that shadow a nonzero sibling at the
+// same 20-min interval (the recreated site's label format vs. the repair's
+// — see getCloudPvDayPower's dedupe). Night/idle zero rows have no nonzero
+// sibling and stay.
+db.exec(`
+  DELETE FROM cloud_pv_history WHERE length(label) = 5 AND power = 0 AND EXISTS (
+    SELECT 1 FROM cloud_pv_history b
+    WHERE b.period_type = cloud_pv_history.period_type
+      AND b.period_start = cloud_pv_history.period_start
+      AND substr(b.label, 1, 5) = substr(cloud_pv_history.label, 1, 5)
+      AND b.label != cloud_pv_history.label
+      AND b.power > 0
+  )
+`);
+
 export function saveCloudPvTrend(type, start, dataTrend) {
   const now = Date.now();
   // Zero-clobber guard (2026-09-26): the h-solar SITE was recreated during
@@ -691,7 +707,13 @@ export function saveCloudPvTrend(type, start, dataTrend) {
   db.exec("BEGIN"); // one transaction per trend — see saveCloudTrend
   try {
     for (const t of dataTrend) {
-      upsertCloudPvRow.run(type, start, t.time, num(t.power), now);
+      // Normalize labels to "HH:MM:SS" (2026-09-27): the recreated site
+      // returns "HH:MM" while older syncs + the repair wrote "HH:MM:SS" —
+      // mixed formats create duplicate rows per interval (see
+      // getCloudPvDayPower's dedupe). Normalizing on write makes upserts
+      // REPLACE instead of duplicating.
+      const label = String(t.time).length === 5 ? `${t.time}:00` : String(t.time);
+      upsertCloudPvRow.run(type, start, label, num(t.power), now);
     }
     db.exec("COMMIT");
   } catch (err) {
@@ -706,7 +728,19 @@ const selectCloudPvDayRows = db.prepare(`
 `);
 
 export function getCloudPvDayPower(fromDate, toDate) {
-  return selectCloudPvDayRows.all(fromDate, toDate).map((r) => ({
+  // Dedupe per 20-min interval, preferring NONZERO (2026-09-27): the
+  // recreated h-solar site returns solar_production labels as "HH:MM" while
+  // earlier syncs + the PV-history repair wrote "HH:MM:SS" — so affected
+  // days hold BOTH rows per interval (145 rows/day), and the plain query's
+  // first row per bucket (the zero one) shadowed the real repaired values
+  // on production. Keep the max-power row per normalized interval.
+  const byInterval = new Map();
+  for (const r of selectCloudPvDayRows.all(fromDate, toDate)) {
+    const key = `${r.period_start}T${String(r.label).slice(0, 5)}`;
+    const cur = byInterval.get(key);
+    if (cur == null || (r.power ?? 0) > (cur.power ?? 0)) byInterval.set(key, r);
+  }
+  return [...byInterval.values()].map((r) => ({
     ts: new Date(`${r.period_start}T${r.label}`).getTime(),
     power: r.power,
   }));
