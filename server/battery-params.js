@@ -71,6 +71,24 @@ export function resolveConstants(pn, expansionPacks = 0) {
   };
 }
 
+// Whole-SYSTEM capacity for the aggregate battery object (dock era
+// 2026-09-27): b.pn/b.expansionPacks describe the PRIMARY unit, but
+// expansionPacks on the aggregate is the SUM of every member's packs — so
+// resolveConstants(b.pn, b.expansionPacks) on an aggregate double-miscounts
+// (a Pro + BP5000 member next to a 5 kWh SB4 read as 6.6 kWh total instead
+// of 11.6). Sum resolveConstants per member instead; falls back to the
+// primary-only resolution when no member list exists (single-unit sites).
+export function systemCapacityKwh(b) {
+  if (!b) return null;
+  const members = (b.members ?? []).filter((m) => m?.sn);
+  if (!members.length) return resolveConstants(b.pn, b.expansionPacks ?? 0).capacityKwh;
+  const total = members.reduce(
+    (a, m) => a + resolveConstants(m.pn, m.expansionPacks ?? 0).capacityKwh,
+    0,
+  );
+  return Math.round(total * 100) / 100;
+}
+
 const numOrNull = (v) => (v === "" || v == null || Number.isNaN(Number(v)) ? null : Number(v));
 
 // Derived flow split (2026-09-16 bugfix): `outputW` is the TOTAL inverter AC
@@ -299,6 +317,11 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
       const b = getLiveBattery() ?? null;
       const flow = b ? deriveBatteryFlow(b) : null;
       const constants = resolveConstants(b?.pn, b?.expansionPacks);
+      // Dock era: the aggregate card's capacity is the whole SYSTEM's (sum
+      // over members), not the primary unit's — storedKwh/ETA/"X of Y kWh"
+      // all derive from it.
+      const sysCap = systemCapacityKwh(b);
+      if (sysCap != null) constants.capacityKwh = sysCap;
       const live = b
         ? {            ts: b.ts ?? null,
             name: b.name ?? "Solarbank",

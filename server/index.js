@@ -12,7 +12,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, resolveConstants } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, resolveConstants, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -322,50 +322,46 @@ function getGridLive() {
 
 // Single source of truth for "how much is the house drawing right now" —
 // used by BOTH /api/flow (Live tab) and the power-plan controller/Strategy
-// tab, refreshed once per 10 s tick below (2026-09-17 fix, user report: the
-// Strategy tab's "house W" swung 600 -> 1000 -> 200 -> 600 across two
-// strategy switches, and the Live tab's flow diagram showed a matching
-// too-low Home reading). Root cause was two-fold: (1) power-plan.js ALWAYS
-// read the battery's own cloud-reported homeLoadW, while /api/flow
-// preferred the fast local grid meter + battery output when available —
-// two different formulas for the exact same physical quantity, computed
-// independently, occasionally disagreeing; (2) neither was despiked, so a
-// single bad cloud reading right after a preset change (the device is
-// mid-transition — same class of lag as the Home Power Usage chart
-// artifact, but here feeding the CONTROLLER's target computation directly,
-// not just a display) showed up as a real, visible swing. Fix: one
-// function, used everywhere, computed once per tick and despiked with a
-// median-of-3 (rejects an isolated bad reading without lagging behind a
-// genuine, sustained demand change the way an averaging filter would).
-// Prefers grid (meter, or any independently-sourced grid reading) +
-// battery output; falls back to the battery's own reported homeLoadW only
-// when grid itself came FROM the battery (cloud-live) — combining two
-// battery-derived numbers there would double up on the same lag source
-// instead of adding information.
+// tab. History: 2026-09-17 unified two drifting formulas (power-plan read
+// homeLoadW, /api/flow computed meter+outputW) into one despiked function;
+// 2026-09-27 flipped the preference to the battery system's OWN
+// home_load_power channel (user: "the Anker app shows ~500, ours ~300 and
+// oscillates") — the Anker app's own Home Load, from ONE feed with ONE
+// timestamp, conditioned device-side, and in the dock era verified live to
+// satisfy the physical identity exactly (home_load_power == grid_to_home +
+// total_output_power − pv_to_grid on every sample). The meter + outputW
+// sum (fast local meter, lagged cloud outputW) oscillated by exactly the
+// transition delta at every inverter-output change (the 2026-09-17
+// cross-feed artifact class); it stays ONLY as the fallback when the
+// battery feed is down, and never when grid itself came FROM the battery
+// (cloud-live) — two battery-derived numbers would double up the same lag.
 const homeLoadHistory = [];
 function despikeHomeLoad(raw) {
   if (raw == null) return raw;
-  homeLoadHistory.push(raw);
-  if (homeLoadHistory.length > 3) homeLoadHistory.shift();
-  const sorted = [...homeLoadHistory].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  // Sample on CHANGE only (2026-09-27): this used to push a sample on every
+  // WS push, so after each REST refresh the median-of-3 was still dominated
+  // by duplicates of the PREVIOUS value for ~2 push cycles — a pure-lag
+  // artifact that made Home trail the Anker app by up to ~20 s. A short
+  // history is padded with its oldest sample so a lone transient misreport
+  // (the 2026-09-17 incident class) is still rejected by the median.
+  if (homeLoadHistory[homeLoadHistory.length - 1] !== raw) {
+    homeLoadHistory.push(raw);
+    if (homeLoadHistory.length > 3) homeLoadHistory.shift();
+  }
+  const padded =
+    homeLoadHistory.length >= 3
+      ? homeLoadHistory
+      : Array(3 - homeLoadHistory.length).fill(homeLoadHistory[0]).concat(homeLoadHistory);
+  const sorted = [...padded].sort((a, b) => a - b);
+  return sorted[1];
 }
 let latestHomeConsumptionW = null;
 function refreshHomeConsumption() {
   const gl = getGridLive();
-  // Prefer the battery's OWN home_load_power (2026-09-27, user: "the Anker
-  // app shows ~500, ours ~300 and oscillates"). It is the Anker app's own
-  // Home Load formula (grid_to_home + to_home_load — validated identical,
-  // 442 = 254 + 188 live) from ONE feed with ONE timestamp, already
-  // conditioned device-side. Our previous formula (fast meter + lagged
-  // cloud outputW) produced phantom swings at every inverter-output
-  // transition: the meter reacts in 1 s while outputW lags 3-60 s, so the
-  // sum oscillated by exactly the transition delta (the 2026-09-17
-  // cross-feed artifact class, at its worst around the floor).
   // homeLoadW can transiently misreport (2026-09-17 incident) — the
-  // median-of-3 despike below covers that; the meter path stays for
-  // graphs/stats/watchdog, and is the fallback when the battery feed is
-  // down or homeLoadW is missing.
+  // change-sampled median-of-3 despike above covers that; the meter path
+  // stays for graphs/stats/watchdog, and is the fallback when the battery
+  // feed is down or homeLoadW is missing.
   const raw =
     latestBattery?.homeLoadW != null
       ? latestBattery.homeLoadW
@@ -457,9 +453,10 @@ async function computeFlowPayload() {
           // floorPct is the EFFECTIVE floor (account discharge floor +
           // the controller's safety margin), not the bare account value —
           // "including the extra amount" per the user's request. Capacity
-          // resolves per device (pn) + expansion packs (2026-09-26: Pro +
-          // BP5000 = 6.6 kWh).
-          capacityKwh: resolveConstants(b.pn, b.expansionPacks).capacityKwh,
+          // is the whole SYSTEM's (2026-09-27 dock era: sum over all units
+          // + packs — SB4 5.0 + Pro 6.6 = 11.6 kWh; resolving from the
+          // aggregate's primary pn + summed pack count read 6.6).
+          capacityKwh: systemCapacityKwh(b),
           maxPct: chargeCeilingPct,
           floorPct: dischargeFloorPct + dischargeTolerancePct,
         }
@@ -1552,6 +1549,15 @@ function recomputeAggregate() {
     temperatureC: primary.temperatureC ?? null,
     mainSoc: primary.mainSoc ?? null,
     expansions: primary.expansions ?? null,
+    // Single-unit site: the unit's MQTT c4 (home_demand ≈ home_load_power,
+    // verified on the standalone Pro) refreshes the aggregate's homeLoadW at
+    // MQTT cadence, pre-dock behavior. NEVER do this with ≥2 units: behind a
+    // dock c4 tracks the unit's OWN output instead (verified live
+    // 2026-09-27: c4=183 while the house drew 443), so the whole-house
+    // figure stays REST-only (scen_info home_load_power, 3 s fast path).
+    ...(members.length === 1 && members[0].homeLoadW != null
+      ? { homeLoadW: members[0].homeLoadW }
+      : {}),
   };
 }
 
@@ -1751,7 +1757,16 @@ setInterval(() => {
   // stalls — polling scen_info at ~20/min ON TOP of healthy MQTT is zero
   // informational gain for double the rate-limit exposure. The 10 s
   // baseline keeps running either way (SN discovery + cloud-grid channel).
-  if (primaryMqtt()?.isFresh?.()) return;
+  // DOCK ERA exception (2026-09-27, user report: Live-tab Home stale/wrong
+  // vs the Anker app): a healthy MQTT stream only covers the UNIT it's
+  // attached to. The aggregate's homeLoadW (scen_info home_load_power —
+  // the whole-house figure) has NO MQTT equivalent anymore: the Pro's c4
+  // (home_demand ≈ home_load_power on a standalone unit) now tracks the
+  // unit's OWN output behind the dock (verified live: c4=183 while the
+  // house drew 443). With ≥2 units on the site, REST is the only source of
+  // home_load_power, so the Anker-app-parity 3 s cadence must run whenever
+  // a UI watches, regardless of MQTT freshness.
+  if (primaryMqtt()?.isFresh?.() && latestBatteries.size <= 1) return;
   syncBatteryThrottled(2500);
 }, 1000).unref();
 

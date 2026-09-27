@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.103, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.104, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4816,3 +4816,49 @@ side recovers — no action needed unless it persists for days.
   Verified: 3 modules in the legends, dynamic fields in the payload
   (legacy main/exp1 keys orphan silently for 48h — invisible since the
   series come from the meta list, not the fields).
+
+## Dock-era Home consumption + system capacity fixes (2026-09-27, user report)
+
+- User: "in the live tab, you have again problems calculating the house
+  consumption — check the Anker app and compare." Root cause found by
+  sampling our /api/flow and raw scen_info simultaneously: our Home
+  (flow.home.consumption) lagged/wandered up to ~150 W off the real
+  house load while scen_info's home_load_power matched the physical
+  identity EXACTLY on every sample (home_load_power == grid_to_home +
+  total_output_power − pv_to_grid). Three compounding causes:
+  1. **The aggregate's homeLoadW lost its fast refresh.** Pre-dock, the
+     Pro's MQTT c4 (home_demand ≈ home_load_power) merged straight onto
+     latestBattery at 3-5 s cadence. The dock-era upsertMember keeps
+     MQTT fields member-local, so the aggregate's homeLoadW refreshed
+     only via REST every 10 s.
+  2. **c4 is NOT whole-house demand behind a dock** (verified live via
+     temporary instrumentation: Pro's c4=183 while the house drew 443 —
+     it tracks the unit's OWN output). So MQTT can never refresh the
+     whole-house figure in a multi-unit site; scen_info's
+     home_load_power is the only correct channel.
+  3. **The 3 s REST fast path (Anker-app parity) was gated OFF whenever
+     the Pro's MQTT was fresh** — always — so home_load_power never got
+     the fast cadence. Gate now: skip the fast path only when MQTT is
+     fresh AND the site has ≤ 1 solarbank (single-unit sites DO get a
+     fast home via MQTT c4, promoted to the aggregate again in
+     recomputeAggregate). Dock-era sites run scen_info at ~3 s whenever
+     a UI watches (~20 req/min, the documented on-demand precedent).
+  4. **The despike lagged by design**: it pushed a sample on every WS
+     push, so duplicates of the stale REST value dominated the
+     median-of-3 for ~2 push cycles after each refresh (up to ~20 s of
+     pure lag). Now samples on CHANGE only, padding a short history
+     with its oldest value so a lone transient misreport (the
+     2026-09-17 incident class) is still rejected.
+- **System capacity was wrong everywhere the aggregate is shown**:
+  resolveConstants(b.pn, b.expansionPacks) on the aggregate used the
+  PRIMARY unit's pn with the SUM of all members' packs → 6.6 kWh
+  instead of 11.6 (SB4 5.0 + Pro 1.6 + BP5000 5.0). New
+  systemCapacityKwh() (battery-params.js) sums resolveConstants per
+  member; used by /api/flow (battery.capacityKwh — drives the Live
+  tab's ETA), /api/battery/params (constants.capacityKwh — storedKwh,
+  the gauge's "X of Y kWh") and welcome.js's batteryModules.capacity.
+- Verified live: ours vs scene_home tracks within ~10-40 W transiently
+  and converges (was 100-150 W off for 15+ s stretches); /api/flow cap
+  11.6; /api/battery/params aggregate 11.6/stored 1.16@10%, members
+  5.0/6.6. Meter-2 Modbus still hangs (user-side power-cycle pending),
+  so grid stays cloud-live — unaffected by this fix.
