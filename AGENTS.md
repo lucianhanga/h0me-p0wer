@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.98, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.99, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4694,3 +4694,22 @@ side recovers — no action needed unless it persists for days.
   (registration ✓, MQTT verified via the raw 0405 capture, expansion
   ✓); only multi-solarbank solarbank_list handling remains, moved to
   the #216 switchover context.
+
+## Simple view toggle ("Tesla way") (2026-09-27, user request)
+
+- A view-mode toggle (◉ full / ◑ simple) in the header next to the
+  language flags, persisted like the language (new ViewProvider,
+  localStorage h0mep0wer.view). Simple mode = ONE calm screen: the
+  animated flow diagram at hero size, the upright segmented battery
+  stack underneath, a quiet updated stamp — no nav, no cards, no
+  decision panels; the important values live ON the visuals.
+- Reused controls, as requested ("reuse the current controls maybe in a
+  simple configuration"): FlowDiagram unchanged; BatteryModules was
+  EXTRACTED from BatteryTab.jsx into web/src/battery/BatteryModules.jsx
+  (BatteryTab imports it back — no duplication) so SimpleHome can render
+  it standalone. Data: same /api/flow + /api/battery/params polls as the
+  Live tab, WS pushes merged for instant updates. i18n tooltips
+  (en/de/ro). Header keeps mic/bell/view-toggle/flags/version in both
+  modes; nav hides only in simple mode.
+- Verified via CDP: toggle swaps nav→SimpleHome, flow + modules render,
+  screenshot shows the minimal Tesla-like layout.

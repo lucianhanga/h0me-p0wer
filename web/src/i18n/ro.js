@@ -17,6 +17,10 @@ export const ro = {
     noData: "încă nu sunt date",
     live: "live",
   },
+  view: {
+    simpleTip: "Vedere simplă — un singur ecran calm",
+    fullTip: "Vedere completă — toate taburile și detaliile",
+  },
   header: {
     voiceCommand: "Comandă vocală",
     voiceUnsupported: "Comenzile vocale nu sunt suportate în acest browser",

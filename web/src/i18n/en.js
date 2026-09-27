@@ -17,6 +17,10 @@ export const en = {
     noData: "no data yet",
     live: "live",
   },
+  view: {
+    simpleTip: "Simple view — one calm screen",
+    fullTip: "Full view — all tabs and details",
+  },
   header: {
     voiceCommand: "Voice command",
     voiceUnsupported: "Voice commands are not supported in this browser",
