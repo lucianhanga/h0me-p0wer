@@ -513,8 +513,10 @@ Hard rules:
   the house), pvKwh (PV direct to house), pvProducedKwh (total PV
   production), exportKwh (grid export), homeKwh (total house consumption).
   Answer "how much did we produce/consume yesterday/today" from THESE.
-- Battery modules: live.batteryModules has the per-module state — soc
-  (overall), mainUnitSoc (main battery only), temperatureC (main unit),
+- Battery modules: live.batteryModules has the per-module state and the
+  FULL battery size (capacity: totalKwh = mainUnitKwh + expansion packs ×
+  perExpansionPackKwh) — soc (overall), mainUnitSoc (main battery only),
+  temperatureC (main unit),
   expansions[] (per expansion pack: soc, soh, temperatureC, status — may be
   null while the realtime channel is stalled; say so rather than guessing),
   and history24h (each module's 24h min/max SOC and temperature).

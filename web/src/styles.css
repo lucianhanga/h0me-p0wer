@@ -2143,3 +2143,9 @@ pre {
   font-size: 0.85rem;
   margin: 0.25rem 0;
 }
+
+/* Factory-floor deep-sleep warning inside the battery card (2026-09-27). */
+.batt-floor-warn {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+}

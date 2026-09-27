@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.86, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.87, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4435,3 +4435,28 @@ side recovers — no action needed unless it persists for days.
   supplied through the battery unit from PV, 0.48 from battery
   discharge; nothing was exported." — all exact, and correctly
   inverter-routed per the flow-model rule.
+
+## Ask context: full battery size + factory-floor deep-sleep warning (2026-09-27, user requests)
+
+- **Full battery size in the Ask context** (user: "put in the context
+  also the full battery size: the one from solarbank + the extension"):
+  live.batteryModules.capacity = {totalKwh, mainUnitKwh,
+  perExpansionPackKwh} via the existing resolveConstants (1.6 + 5.0 =
+  6.6 kWh); ASK prompt documents it. Verified: "Wie groß ist unsere
+  Batterie insgesamt und wie ist sie aktuell geladen?" → "Die Batterie
+  hat insgesamt 6,6 Kilowattstunden Kapazität. Aktuell ist sie zu 5
+  Prozent geladen."
+- **The 5% deep-sleep question** (user's Anker-app screenshot: "Device
+  sleeping due to low battery. It will wake up automatically when solar
+  power is available", battery 5%): the device behaved exactly as
+  configured — native self-consumption honors its OWN Anker-app cutoff,
+  which is the FACTORY 5% on the new Pro (the user's 8% died with the
+  old Plus; flagged on swap day). It wakes with solar, it's not stuck —
+  but the way to AVOID it is raising the discharge lower limit in the
+  Anker app (8–10%). This is the documented 2026-09-23 decision: in
+  native mode the device's own cutoff is the single honest knob, we
+  deliberately don't run a margin watchdog. To keep it VISIBLE instead
+  of decided-in-a-thread: BatteryCard now shows a warning whenever the
+  account's discharge floor is ≤ 5% ("Discharge floor is at the factory
+  5% — the battery can drain into deep sleep overnight… raise it in the
+  Anker app (e.g. 8–10%)", en/de/ro), verified rendering live at 390px.
