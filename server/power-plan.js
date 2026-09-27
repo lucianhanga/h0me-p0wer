@@ -444,19 +444,25 @@ export class PowerPlanController {
   // to the house, the rest comes from the grid. Used by the manual "don't
   // discharge" toggle only.
   passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
+    // Hysteresis (2026-09-27, user-observed oscillation): the guard used to
+    // block at soc <= floor and release at soc > floor — with the
+    // whole-point SOC jittering 8↔9 at the floor, the preset flip-flopped
+    // 0 ↔ full PV every minute or two (PV swinging battery↔house, Home
+    // consumption visibly oscillating without any consumer changing).
+    // Same DISCHARGE_RESUME_HYSTERESIS_PCT the discharge path already had:
+    // blocked until soc has REALLY recovered (floor + 3 points).
     if (soc <= dischargeFloorPct) {
-      // At/below the account floor ALL output stops so PV recharges first —
-      // a major, user-visible decision; log the transition (once per latch).
       if (!this.passthroughBlocked) {
-        this.passthroughBlocked = true;
         this.logActivity("floor_guard", { phase: "enter", soc, floor: dischargeFloorPct });
       }
-      return 0;
-    }
-    if (this.passthroughBlocked) {
+      this.passthroughBlocked = true;
+    } else if (soc >= dischargeFloorPct + DISCHARGE_RESUME_HYSTERESIS_PCT) {
+      if (this.passthroughBlocked) {
+        this.logActivity("floor_guard", { phase: "exit", soc, floor: dischargeFloorPct });
+      }
       this.passthroughBlocked = false;
-      this.logActivity("floor_guard", { phase: "exit", soc, floor: dischargeFloorPct });
     }
+    if (this.passthroughBlocked) return 0;
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
