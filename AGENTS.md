@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.95, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.96, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4625,3 +4625,15 @@ side recovers — no action needed unless it persists for days.
   smoother is REVERTED (pure lag on a single conditioned feed).
   Verified live: home reads ~386-425 tracking homeLoadW (≈ the Anker
   app's display), no more ±30 W phase jitter, no transition lag.
+
+## PV→Home arc: sticky visibility (2026-09-27, display-only)
+
+- User: "the PV power sent to house oscillates between being displayed
+  and not displayed" (Home itself was fine by then). The flow diagram's
+  Edge hid the active arc the moment its tweened value hit exactly 0 —
+  and pvToHome (gated on outputW > 0, pvW − chargeW) hits 0 transiently
+  during regulation (momentary output clamp, one charge≥PV report).
+  Display-only fix: the pv-home edge is now STICKY — it stays active as
+  long as the flow was positive within a ~12 s hold window and hides
+  only after a sustained zero (a genuinely off flow, e.g. night).
+  Other edges unchanged (the grid edges already have their deadband).

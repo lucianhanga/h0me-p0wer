@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useTweenedValue, useTweenedWatts } from "./useTweenedValue.js";
 import { useT } from "./i18n/LanguageProvider.jsx";
 
@@ -67,7 +68,7 @@ export default function FlowDiagram({ flow }) {
   // grid-charging).
   const edges = [
     [N.pv, N.batt, pv.toBattery ?? 0, "#5fce80", "pv-batt"],
-    [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home"],
+    [N.pv, N.home, pv.toHome ?? 0, "#5fce80", "pv-home", true],
     [N.grid, N.home, g != null && g > 0 ? g : 0, "#f7a44f", "grid-home"],
     [N.home, N.grid, g != null && g < 0 ? -g : 0, "#f7a44f", "home-grid"],
     [N.batt, N.home, battToHome, "#c084fc", "batt-home"],
@@ -76,8 +77,8 @@ export default function FlowDiagram({ flow }) {
 
   return (
     <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label={t("flow.ariaLabel")}>
-      {edges.map(([a, b, w, color, id]) => (
-        <Edge key={id} a={a} b={b} watts={w} color={color} />
+      {edges.map(([a, b, w, color, id, sticky]) => (
+        <Edge key={id} a={a} b={b} watts={w} color={color} sticky={sticky} />
       ))}
       {Object.values(N).map((n) => (
         <g key={n.label}>
@@ -103,9 +104,17 @@ export default function FlowDiagram({ flow }) {
   );
 }
 
-function Edge({ a, b, watts, color }) {
+function Edge({ a, b, watts, color, sticky = false }) {
   const w = useTweenedWatts(watts ?? 0); // arcs glide with the values too
-  if (!w) {
+  // Sticky visibility (2026-09-27, display-only fix: the PV→Home arc blinked
+  // on transient zeros during regulation — a momentary output clamp or one
+  // charge≥PV sample hid it for a beat). While sticky, the arc stays active
+  // as long as the flow was positive within the hold window; it hides only
+  // after a SUSTAINED ~12 s of zeros (a genuinely off flow, e.g. night).
+  const lastPositiveAt = useRef(w > 0 ? Date.now() : 0);
+  if (w > 0) lastPositiveAt.current = Date.now();
+  const visible = w > 0 || (sticky && Date.now() - lastPositiveAt.current < 12000);
+  if (!visible) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
   const mx = (a.x + b.x) / 2;
