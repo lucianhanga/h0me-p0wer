@@ -91,18 +91,14 @@ function Shell() {
         >
           {isSimple ? "◑" : "◉"}
         </button>
-        <div className="lang-switch" title={t("header.languageTip")} role="group" aria-label={t("header.language")}>
-          {LANGUAGES.map((l) => (
-            <button
-              key={l}
-              className={language === l ? "nav-active" : ""}
-              onClick={() => setLanguage(l)}
-              aria-label={l.toUpperCase()}
-            >
-              {{ en: "🇬🇧", de: "🇩🇪", ro: "🇷🇴" }[l]}
-            </button>
-          ))}
-        </div>
+        <button
+          className="lang-btn"
+          onClick={() => setLanguage(LANGUAGES[(LANGUAGES.indexOf(language) + 1) % LANGUAGES.length])}
+          title={t("header.languageTip")}
+          aria-label={t("header.language")}
+        >
+          {{ en: "🇬🇧", de: "🇩🇪", ro: "🇷🇴" }[language]}
+        </button>
         {!isSimple && (
           <nav>
             {PAGES.map((p) => (

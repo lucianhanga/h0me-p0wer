@@ -121,24 +121,20 @@ nav::-webkit-scrollbar {
   align-self: center;
 }
 
-/* Language switcher (EN/DE/RO) — same button idiom as the nav, compact. */
-.lang-switch {
-  display: flex;
-  gap: 0.25rem;
+/* Language switcher — ONE cycling flag button (2026-09-27, user: "the
+   languages make it only one button"): taps cycle EN → DE → RO. */
+.lang-btn {
   align-self: center;
   flex-shrink: 0;
-}
-
-.lang-switch button {
   padding: 0.2rem 0.45rem;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
 }
 
 nav button {
   flex-shrink: 0; /* never compress tabs to fit — scroll instead (one row) */
 }
 
-.lang-switch button.nav-active {
+.lang-btn.nav-active {
   border-color: #f7a44f;
   color: #f7a44f;
 }
@@ -196,7 +192,10 @@ nav button.nav-active {
     order: 1;
   }
 
-  .lang-switch {
+  /* The single cycling flag button (2026-09-27, user: "the languages make
+     it only one button") — row 1 fits title + flag + mic + bell + toggle
+     again, so the tabs go back to their own full-width row. */
+  .lang-btn {
     order: 2;
     margin-left: auto;
   }
@@ -215,8 +214,7 @@ nav button.nav-active {
 
   nav {
     order: 6;
-    flex: 1 1 0;
-    min-width: 0;
+    flex-basis: 100%;
   }
 
   header {
@@ -2184,20 +2182,14 @@ pre {
   font-size: 0.9rem;
 }
 
-.activity-badge {
+.activity-dot {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  background: #e05c5c;
-  color: #fff;
-  font-size: 0.65rem;
-  font-weight: 700;
-  line-height: 16px;
-  text-align: center;
+  top: 3px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f7a44f;
 }
 
 @keyframes activity-pulse {
