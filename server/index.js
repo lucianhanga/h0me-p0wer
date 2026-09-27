@@ -352,6 +352,28 @@ function refreshHomeConsumption() {
   return latestHomeConsumptionW;
 }
 
+// Home DISPLAY smoothing (2026-09-27, user report: the flow diagram's Home
+// oscillates ±30 W with no consumer changing while the Anker app is
+// steady). home = raw meter net + inverter output — and the meter's net
+// value jitters (single-phase inverter on L1 while loads sit on L3, see
+// GRID_DISPLAY_SMOOTH_MS; the 5 s grid smoothing covers the grid node but
+// not this sum, and is too short anyway). The Anker app conditions its
+// Home Load device-side; a ~25 s rolling mean on the DISPLAYED value
+// matches that feel. Display-only: the power plan keeps the despiked
+// median-of-3 from refreshHomeConsumption().
+const homeDisplayHistory = []; // {ts, v}
+const HOME_DISPLAY_SMOOTH_MS = 25000;
+function getSmoothedHomeConsumption() {
+  const v = latestHomeConsumptionW;
+  if (v == null) return null;
+  const now = Date.now();
+  homeDisplayHistory.push({ ts: now, v });
+  while (homeDisplayHistory.length && now - homeDisplayHistory[0].ts > HOME_DISPLAY_SMOOTH_MS) {
+    homeDisplayHistory.shift();
+  }
+  return Math.round(homeDisplayHistory.reduce((a, r) => a + r.v, 0) / homeDisplayHistory.length);
+}
+
 // Per-string PV kWh for today, memoized for 30 s — /api/flow is polled every
 // 5 s per client and the trapezoid scans the whole day's battery_snapshots.
 let pvStringKwhCache = { date: null, at: 0, result: { pv1Kwh: 0, pv2Kwh: 0 } };
@@ -456,8 +478,12 @@ async function computeFlowPayload() {
       // for why (2026-09-17: this used to be computed inline here with a
       // DIFFERENT formula than the power-plan controller used, and
       // un-despiked, so the two could disagree and both could show a
-      // transient bad reading right after a preset change).
-      consumption: latestHomeConsumptionW,
+      // transient bad reading right after a preset change). 2026-09-27:
+      // the DISPLAYED value is additionally smoothed over ~25 s
+      // (getSmoothedHomeConsumption) — the raw sum jitters ±30 W from the
+      // meter's phase artifact and visibly oscillated; the controller
+      // still uses the unsmoothed despiked value.
+      consumption: getSmoothedHomeConsumption(),
     },
   };
 }
