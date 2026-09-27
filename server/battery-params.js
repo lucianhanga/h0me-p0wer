@@ -27,9 +27,12 @@ export const CONSTANTS = {
   maxPvInputW: 1200, // max PV DC input
 };
 
-// Per-model base specs (2026-09-26: the A17C1 Pro replaced the Plus). Both
-// are 1.6 kWh base units with the same 800 W AC cap; the Pro takes 4 MPPT /
-// 2400 W PV. Unknown pn → the A17C3 defaults (previous behavior).
+// Per-model base specs (2026-09-26: the A17C1 Pro replaced the Plus;
+// 2026-09-27: AE103 Solarbank 4 joined the docked system). The A17C1
+// doubles PV input (4 MPPT). AE103 (E5000 Pro) base capacity is 5 kWh —
+// maxAcOutputW/maxPvInputW are datasheet-approximate (verified exactly only
+// for capacity; refine when the AE103 map is validated, ticket #210).
+// Unknown pn → the A17C3 defaults (previous behavior).
 const BASE_BY_PN = {
   A17C3: CONSTANTS,
   A17C1: {
@@ -38,6 +41,13 @@ const BASE_BY_PN = {
     capacityKwh: 1.6,
     maxAcOutputW: 800,
     maxPvInputW: 2400,
+  },
+  AE103: {
+    model: "AE103",
+    product: "Solarbank 4 E5000 Pro",
+    capacityKwh: 5.0,
+    maxAcOutputW: 1200,
+    maxPvInputW: 3600,
   },
 };
 
@@ -279,7 +289,7 @@ export async function getBatteryLimits(anker, getLiveBattery) {
   };
 }
 
-export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSecondBattery }) {
+export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMembers }) {
   app.get("/api/battery/params", async (req, res) => {
     // try/catch REQUIRED on every async Express 4 handler (2026-09-22 code
     // review): Express 4 doesn't forward rejected handler promises to its
@@ -346,36 +356,78 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getSeco
       // SEPARATE site — monitored read-only (REST scen_info, memory only, no
       // control/config/history). Live-only payload; config/features/constants
       // are null because none of those endpoints are verified for AE103.
-      const b2 = getSecondBattery?.() ?? null;
-      const flow2 = b2 ? deriveBatteryFlow(b2) : null;
-      const secondary = b2
-        ? {
-            live: {
-              ts: b2.ts ?? null,
-              name: b2.name ?? "Solarbank",
-              sn: b2.sn ?? null,
-              soc: b2.soc ?? null,
-              outputW: b2.outputW ?? 0,
-              chargeW: b2.chargeW ?? 0,
-              cellsW: flow2.cellsW,
-              pvW: b2.pvW ?? 0,
-              pv1W: b2.pv1W ?? 0,
-              pv2W: b2.pv2W ?? 0,
-              chargingStatus: b2.chargingStatus ?? null,
-              gridToBatteryW: flow2.gridChargeW,
-              storedKwh: null, // capacity unknown for this hardware
-            },
-            config: null,
-            features: null,
-            constants: null,
-          }
-        : null;
+      // Dock era (2026-09-27): every solarbank on the site gets its own
+      // live-only card. batteries[0] stays the AGGREGATE (the system view:
+      // full config, summed flows, capacity-weighted SOC); members carry
+      // their own per-unit live values incl. expansion packs, with their
+      // capacity resolved per model.
+      const members = (getMembers?.() ?? []).filter((m) => m?.sn);
+      const memberCards = members.map((m) => {
+        const mc = resolveConstants(m.pn, m.expansionPacks ?? 0);
+        const flowM = deriveBatteryFlow(m);
+        return {
+          member: true,
+          live: {
+            ts: m.ts ?? null,
+            name: m.name ?? "Solarbank",
+            sn: m.sn,
+            pn: m.pn ?? null,
+            expansionPacks: m.expansionPacks ?? 0,
+            soc: m.soc ?? null,
+            outputW: m.outputW ?? 0,
+            chargeW: m.chargeW ?? 0,
+            cellsW: flowM.cellsW,
+            pvW: m.pvW ?? 0,
+            pv1W: m.pv1W ?? 0,
+            pv2W: m.pv2W ?? 0,
+            pv3W: m.pv3W ?? null,
+            pv4W: m.pv4W ?? null,
+            temperatureC: m.temperatureC ?? null,
+            mainSoc: m.mainSoc ?? null,
+            expansions: m.expansions ?? null,
+            chargingStatus: m.chargingStatus ?? null,
+            gridToBatteryW: flowM.gridChargeW,
+            storedKwh: m.soc != null ? Math.round((m.soc / 100) * mc.capacityKwh * 100) / 100 : null,
+          },
+          config: null,
+          features: null,
+          constants: mc,
+        };
+      });
+
+      // The aggregate's capacity is the SUM of its units' capacities (its own
+      // pn/expansionPacks alone would undercount the other units).
+      // The aggregate's capacity is the SUM of its units' capacities (its own
+      // pn/expansionPacks alone would undercount the other units) — and its
+      // storedKwh must be recomputed against that sum (it was derived from
+      // the pre-override constants above).
+      let primaryOut = primary;
+      if (members.length) {
+        const totalCap =
+          Math.round(
+            members.reduce((a, m) => a + resolveConstants(m.pn, m.expansionPacks ?? 0).capacityKwh, 0) * 100,
+          ) / 100;
+        primaryOut = {
+          ...primary,
+          aggregate: true,
+          constants: { ...primary.constants, capacityKwh: totalCap },
+          live: primary.live
+            ? {
+                ...primary.live,
+                storedKwh:
+                  primary.live.soc != null
+                    ? Math.round((primary.live.soc / 100) * totalCap * 100) / 100
+                    : null,
+              }
+            : primary.live,
+        };
+      }
 
       res.json({
         ok: true,
         data: {
-          ...primary,
-          batteries: secondary ? [primary, secondary] : [primary],
+          ...primaryOut,
+          batteries: [primaryOut, ...memberCards],
         },
       });
     } catch (err) {

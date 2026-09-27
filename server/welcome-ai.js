@@ -3,7 +3,7 @@
 // AI (welcome-ai call below) only interprets these numbers, never invents
 // them.
 import {
-  getCloudTrend,
+  getCloudTrend, getCloudTrendMulti,
   getSnapshotRows,
   getFirstBatteryAfter,
   getBatteryHistory,
@@ -27,7 +27,7 @@ function dailyImportRows(sn, monthsBack = 2) {
   for (let i = monthsBack; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const ym = localDate(d).slice(0, 7);
-    for (const r of getCloudTrend(sn, "month", ym).rows) {
+    for (const r of getCloudTrendMulti(meterSns, "month", ym).rows) {
       if (r.time && r.import_energy != null) rows.push({ date: r.time, importKwh: r.import_energy });
     }
   }
@@ -130,7 +130,10 @@ function avgImportByWeekday(rows, firstDate) {
 
 export function buildContext({ config, geo, weather, pvgis, statsOverview, deps }) {
   const now = new Date();
+  // Meter swap continuity (2026-09-27): consumption averages aggregate
+  // across all meter SNs — the meter-1 history belongs to the new system too.
   const sn = deps.getMeterSn();
+  const meterSns = deps.getMeterSns?.() ?? [sn].filter(Boolean);
   const daily = weather.daily;
   const dayRows = daily.time.map((t, i) => ({
     date: t,
@@ -174,7 +177,7 @@ export function buildContext({ config, geo, weather, pvgis, statsOverview, deps 
     .filter((r) => r.date < localDate() && WEEKDAYS[new Date(`${r.date}T12:00:00`).getDay()] === todayWeekday)
     .sort((a, b) => (a.date < b.date ? 1 : -1))[0] ?? null;
   const yearRows = sn
-    ? getCloudTrend(sn, "year", String(now.getFullYear())).rows
+    ? getCloudTrendMulti(meterSns, "year", String(now.getFullYear())).rows
         .map((r) => ({ label: r.time, importKwh: round1(r.import_energy) }))
         .filter((r) => r.importKwh > 0)
     : [];

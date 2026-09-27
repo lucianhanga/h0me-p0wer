@@ -3,7 +3,7 @@
 // the fixed basis for payback/projections/forecast — it must NOT drift with
 // the noisy measured average. Recomputed only on first initialization or an
 // explicit POST /api/roi/baseline/refresh — never on a schedule.
-import { kvGet, kvSet, getCloudTrend, getAnyDeviceSn } from "./db.js";
+import { kvGet, kvSet, getCloudTrendMulti, getAnyDeviceSn, getMeterSns } from "./db.js";
 import {
   parseWelcomeConfig,
   geocode,
@@ -57,15 +57,17 @@ Hard rules:
 // Average daily grid import from the cloud month rows (same source as the
 // welcome context): last 2 months + current, 0-filled pre-link days and the
 // partial linking/current day excluded.
-function avgDailyImportKwh(sn) {
-  if (!sn) return null;
+function avgDailyImportKwh(sns) {
+  const snList = (Array.isArray(sns) ? sns : [sns]).filter(Boolean);
+  if (!snList.length) return null;
   const now = new Date();
   const today = localDate();
   const rows = [];
   for (let i = 2; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const ym = localDate(d).slice(0, 7);
-    for (const r of getCloudTrend(sn, "month", ym).rows) {
+    // Meter swap continuity (2026-09-27): merge across meter SNs.
+    for (const r of getCloudTrendMulti(snList, "month", ym).rows) {
       if (r.time && r.import_energy > 0 && r.time < today) {
         rows.push({ date: r.time, kwh: r.import_energy });
       }
@@ -177,7 +179,9 @@ export async function computeBaseline(deps = {}, measured = null) {
         battery: "Anker Solarbank 2 E1600 Plus, 1.6 kWh capacity, inverter AC output capped at 800 W",
         pvgisClimatology: pvgis,
         tariffEurPerKwh: tariff,
-        consumption: { avgImportKwhPerDay: avgDailyImportKwh(deps.getMeterSn?.() ?? getAnyDeviceSn()) },
+        consumption: {
+          avgImportKwhPerDay: avgDailyImportKwh(deps.getMeterSns?.() ?? [deps.getMeterSn?.() ?? getAnyDeviceSn()]),
+        },
         measuredSavings: measured && measured.measuredDays > 0
           ? { days: measured.measuredDays, avgDailySavingsEur: measured.avgDailySavingsEur, note: "short noisy window — weak signal only" }
           : null,

@@ -26,6 +26,7 @@ import {
   getSnapshotBuckets,
   getCloudDayPower,
   getAnyDeviceSn,
+  getMeterSns,
   getBatterySns,
   saveBatterySnapshot,
   getLatestBattery,
@@ -113,8 +114,16 @@ anker.getMeterSn = () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
 // 2026-09-26 Plus→Pro swap — pre-swap days live under the old SN, so stats
 // and ROI must query both.
 function batterySns() {
-  const meterSn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
-  return [...new Set([latestBattery?.sn, ...getBatterySns(meterSn)].filter(Boolean))];
+  // All battery SNs ever seen (db.js now excludes meter SNs by shape, so no
+  // meter arg needed — 2026-09-27 meter swap).
+  return [...new Set([latestBattery?.sn, ...getBatterySns()].filter(Boolean))];
+}
+
+// All meter SNs ever seen (2026-09-27 meter swap, meter-1 → meter-2):
+// history aggregates across both (like the battery swap) — they never
+// measured the house simultaneously.
+function meterSns() {
+  return [...new Set([poller.snapshot?.meter?.sn, ...getMeterSns()].filter(Boolean))];
 }
 
 const app = express();
@@ -207,11 +216,11 @@ app.get("/api/health", (req, res) => {
       // the session while routing ZERO messages — Anker-side stall, seen
       // 2026-09-11 and again 2026-09-22; isFresh() distinguishes
       // connected-but-silent from actually-streaming).
-      batteryMqtt: batteryMqtt
+      batteryMqtt: primaryMqtt()
         ? {
-            connected: batteryMqtt.connected,
-            fresh: batteryMqtt.isFresh(),
-            lastDataAt: batteryMqtt.lastDataAt,
+            connected: primaryMqtt().connected,
+            fresh: primaryMqtt().isFresh(),
+            lastDataAt: primaryMqtt().lastDataAt,
           }
         : null,
     },
@@ -597,14 +606,21 @@ app.get("/api/timeseries", (req, res) => {
   // (grid AND battery) silently dies whenever Modbus is unreachable, which
   // is exactly when cloud anchors matter most (dev instances never see them
   // at all while production holds the meter's single connection).
-  const sn = poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
-  if (sn) {
-    const cloudRows = [];
-    for (const r of getCloudDayPower(sn, fromDate, toDate)) {
-      if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
-      if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // interval not closed
-      cloudRows.push(r);
+  const sns = meterSns();
+  if (sns.length) {
+    // Meter swap continuity (2026-09-27): merge all meter SNs' cloud rows
+    // per timestamp, preferring nonzero — same pattern as the battery
+    // anchors below.
+    const byTs = new Map();
+    for (const msn of sns) {
+      for (const r of getCloudDayPower(msn, fromDate, toDate)) {
+        if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
+        if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // interval not closed
+        const cur = byTs.get(r.ts);
+        if (!cur || (cur.power === 0 && r.power !== 0)) byTs.set(r.ts, r);
+      }
     }
+    const cloudRows = [...byTs.values()].sort((a, b) => a.ts - b.ts);
     // The cloud occasionally reports a 20-min average of EXACTLY 0 between
     // two healthy intervals (seen 2026-09-11 23:40: ~581 → 0 → ~595) — a
     // bogus anchor that V-dips the interpolated line toward zero. Drop a
@@ -913,6 +929,7 @@ app.get("/api/cloud/bind-devices", cloudRoute(() => anker.getBindDevices()));
 registerWelcomeRoute(app, {
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getMeterSns: () => meterSns(),
   getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
   getPowerPlanState: () => powerPlan.getState(),
   // Single source of truth for week/month production-so-far (2026-09-18,
@@ -929,6 +946,7 @@ registerWelcomeRoute(app, {
 // ROI tab: payback of the BOM investment from measured savings, DB only.
 registerRoiRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getMeterSns: () => meterSns(),
   // ALL battery SNs (live one first) — history spans the 2026-09-26
   // Plus→Pro swap; pre-swap days live under the old SN.
   getBatterySns: () => batterySns(),
@@ -940,6 +958,7 @@ registerRoiRoute(app, {
 // battery-params.js already use for that.
 registerStatsRoute(app, {
   getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getMeterSns: () => meterSns(),
   getBatterySns: () => batterySns(),
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
 });
@@ -949,7 +968,7 @@ registerStatsRoute(app, {
 registerBatteryParamsRoute(app, {
   anker,
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
-  getSecondBattery: () => latestBattery2,
+  getMembers: () => [...latestBatteries.values()],
 });
 app.get(
   "/api/cloud/energy",
@@ -1108,22 +1127,26 @@ const BACKFILL_DAYS = 30;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function catchUpCloudHistory() {
-  const sn = poller.snapshot?.meter?.sn;
-  if (!sn || !anker.configured) return;
+  if (!anker.configured) return;
+  // Meter swap continuity (2026-09-27): backfill EVERY known meter SN — a
+  // freshly-swapped meter starts with no history of its own.
+  const sns = meterSns();
+  if (!sns.length) return;
   let completed = true;
 
-  const stored = getStoredPeriodStarts(sn, "day");
-  const missing = [];
-  for (let i = BACKFILL_DAYS; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const start = localDate(d);
-    // Today is always refreshed — its trend grows during the day.
-    if (!stored.has(start) || i === 0) missing.push(start);
-  }
+  for (const sn of sns) {
+    const stored = getStoredPeriodStarts(sn, "day");
+    const missing = [];
+    for (let i = BACKFILL_DAYS; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const start = localDate(d);
+      // Today is always refreshed — its trend grows during the day.
+      if (!stored.has(start) || i === 0) missing.push(start);
+    }
 
-  if (missing.length) {
-    console.log(`[cloud-sync] backfilling ${missing.length} day(s) of history…`);
+    if (!missing.length) continue;
+    console.log(`[cloud-sync] backfilling ${missing.length} day(s) of history for meter ${sn}…`);
     for (const start of missing) {
       try {
         const data = await anker.getDeviceEnergyAnalysis({
@@ -1140,6 +1163,7 @@ async function catchUpCloudHistory() {
       }
       await sleep(6000);
     }
+    if (!completed) break; // stop at the first rate-limited meter, not per-day
   }
 
   // Re-arm on incomplete backfill (2026-09-22 code review): the loop used
@@ -1460,62 +1484,142 @@ setInterval(() => {
 // Battery (Solarbank) live data: MQTT push (~3-5 s, same channel as the Anker
 // app) is the primary source once connected; the 30 s REST scen_info sync is
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
-let latestBattery = null;
+let latestBattery = null; // the AGGREGATE of all solarbanks on the site
 let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
-let batteryMqtt = null;
+// DOCK ERA (2026-09-27): the site carries multiple solarbanks (SB4 on dock
+// socket A + SB2 Pro on socket B). latestBatteries holds each unit's own
+// live state (REST sync + its own MQTT channel); latestBattery is the
+// recomputed aggregate that the flow/power-plan/UI consume unchanged.
+const latestBatteries = new Map(); // SN -> per-unit live object
+const batteryMqtts = new Map(); // SN -> AnkerMqtt (one client per unit)
 
-function startBatteryMqtt() {
-  if (!latestBattery?.sn) return;
-  // Battery hardware swap (happened 2026-09-26, Plus → Pro): the SN — and
-  // possibly the pn — changed under a running process. Rebind instead of
-  // watchdog-looping against the old device forever.
-  if (batteryMqtt && batteryMqtt.sn !== latestBattery.sn) {
-    console.log(`[mqtt] battery changed ${batteryMqtt.sn} -> ${latestBattery.sn}, rebinding`);
-    activity("battery_swapped", { from: batteryMqtt.sn, to: latestBattery.sn, name: latestBattery.name });
-    batteryMqtt.stop();
-    batteryMqtt = null;
+// MQTT-only fields (temperature, mainSoc, expansions) survive REST syncs —
+// REST has no equivalent and must not blank them (same rule as before,
+// now per unit).
+function upsertMember(m) {
+  const prev = latestBatteries.get(m.sn);
+  latestBatteries.set(m.sn, {
+    ...(prev ?? {}),
+    ...m,
+    temperatureC: m.temperatureC ?? prev?.temperatureC ?? null,
+    mainSoc: m.mainSoc ?? prev?.mainSoc ?? null,
+    expansions: m.expansions ?? prev?.expansions ?? null,
+  });
+}
+
+// Capacity-weighted mean SOC across units (a plain mean misweights the
+// 1.6 kWh Pro against the 5 kWh+ units — resolveConstants knows each unit's
+// size incl. expansion packs).
+function weightedSoc(members) {
+  let ws = 0;
+  let wc = 0;
+  for (const m of members) {
+    const cap = resolveConstants(m.pn, m.expansionPacks ?? 0).capacityKwh;
+    ws += (m.soc ?? 0) * cap;
+    wc += cap;
   }
-  if (batteryMqtt) return;
-  batteryMqtt = new AnkerMqtt(anker, latestBattery.sn, latestBattery.pn ?? "A17C3");
-  batteryMqtt.onData = (d) => {
-    // Same shape as the REST sync payload, preserving name/siteId.
-    latestBattery = { ...latestBattery, ...d };
-    lastCloudOkAt = Date.now();
-    try {
-      saveBatterySnapshot(latestBattery);
-      // Per-module history (Graph tab): the main unit's own SOC/temp.
-      if (d.mainSoc != null || d.temperatureC != null) {
-        saveModuleSnapshot(d.ts, "main", d.mainSoc ?? latestBattery.mainSoc ?? null, d.temperatureC ?? null);
+  if (!wc) return 0;
+  return Math.round(ws / wc);
+}
+
+// Rebuild the aggregate's fast fields after an MQTT merge — sums satisfy
+// the same flow invariants per unit (pvW = chargeW + pvThrough holds for
+// sums of units where it holds per unit).
+function recomputeAggregate() {
+  if (!latestBattery || !latestBatteries.size) return;
+  const members = [...latestBatteries.values()];
+  const sum = (k) => members.reduce((a, m) => a + (m[k] ?? 0), 0);
+  const primary = members.find((m) => m.sn === latestBattery.sn) ?? members[0];
+  latestBattery = {
+    ...latestBattery,
+    ts: Date.now(),
+    members,
+    outputW: sum("outputW"),
+    chargeW: sum("chargeW"),
+    pvW: sum("pvW"),
+    soc: weightedSoc(members),
+    temperatureC: primary.temperatureC ?? null,
+    mainSoc: primary.mainSoc ?? null,
+    expansions: primary.expansions ?? null,
+  };
+}
+
+// MQTT telemetry maps are verified only for the Solarbank 2 family
+// (A17C0-C3). The AE103 (Solarbank 4) streams a different map — decoding it
+// with ours produced garbage (soc=0 while REST read 17%, seen 2026-09-27),
+// so unknown models run REST-only instead of writing wrong values into the
+// aggregate. Add AE103 here once its map is verified (ticket #210).
+const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3"]);
+
+function startBatteryMqtts() {
+  if (!latestBatteries.size) return;
+  for (const m of latestBatteries.values()) {
+    if (!MQTT_KNOWN_PN.has(m.pn)) {
+      if (!startBatteryMqtts.skipped?.has(m.sn)) {
+        (startBatteryMqtts.skipped ??= new Set()).add(m.sn);
+        console.log(`[mqtt] ${m.name} (${m.pn}) — no verified telemetry map; REST-only`);
       }
-    } catch (err) {
-      console.warn("[db] failed to persist battery snapshot:", err.message);
+      continue;
     }
-    broadcastLive({ batteryTriggered: true }); // MQTT cadence ~3-5 s, throttled inside
-  };
-  // 040a expansion messages: per-pack SOC/SOH/temperature for the attached
-  // expansion batteries (BP5000 etc.) — merged into latestBattery and
-  // carried forward across REST syncs (see syncBatteryInner).
-  batteryMqtt.onExpansion = (d) => {
-    latestBattery = {
-      ...latestBattery,
-      mainSoc: d.mainSoc ?? latestBattery?.mainSoc ?? null,
-      expansions: d.packs,
+    let client = batteryMqtts.get(m.sn);
+    // A unit's pn changing under a running process (hardware swap) → rebind.
+    if (client && client.pn !== (m.pn ?? "A17C3")) {
+      client.stop();
+      batteryMqtts.delete(m.sn);
+      client = null;
+    }
+    if (client) continue;
+    if (batteryMqtts.size > 0) activity("battery_swapped", { from: [...batteryMqtts.keys()].join(","), to: m.sn, name: m.name });
+    client = new AnkerMqtt(anker, m.sn, m.pn ?? "A17C3");
+    client.onData = (d) => {
+      upsertMember({ sn: m.sn, pn: m.pn, name: m.name, ...d });
+      recomputeAggregate();
+      lastCloudOkAt = Date.now();
+      try {
+        saveBatterySnapshot(latestBattery);
+        // Per-module history (Graph tab): the main unit's own SOC/temp.
+        if (d.mainSoc != null || d.temperatureC != null) {
+          saveModuleSnapshot(d.ts, "main", d.mainSoc ?? null, d.temperatureC ?? null);
+        }
+      } catch (err) {
+        console.warn("[db] failed to persist battery snapshot:", err.message);
+      }
+      broadcastLive({ batteryTriggered: true }); // MQTT cadence ~3-5 s, throttled inside
     };
-    lastCloudOkAt = Date.now();
-    try {
-      // Per-module history (Graph tab): main + every reported pack.
-      if (d.mainSoc != null) saveModuleSnapshot(d.ts, "main", d.mainSoc, latestBattery.temperatureC ?? null);
-      d.packs.forEach((p, i) => saveModuleSnapshot(d.ts, `exp${i + 1}`, p.soc ?? null, p.temperatureC ?? null));
-    } catch (err) {
-      console.warn("[db] failed to persist module snapshot:", err.message);
+    // 040a expansion messages: per-pack SOC/SOH/temperature for the attached
+    // expansion batteries (BP5000 etc.) — merged into the unit and the
+    // aggregate, carried forward across REST syncs (see upsertMember).
+    client.onExpansion = (d) => {
+      upsertMember({ sn: m.sn, mainSoc: d.mainSoc ?? undefined, expansions: d.packs });
+      recomputeAggregate();
+      lastCloudOkAt = Date.now();
+      try {
+        if (d.mainSoc != null) saveModuleSnapshot(d.ts, "main", d.mainSoc, latestBattery.temperatureC ?? null);
+        d.packs.forEach((p, i) => saveModuleSnapshot(d.ts, `exp${i + 1}`, p.soc ?? null, p.temperatureC ?? null));
+      } catch (err) {
+        console.warn("[db] failed to persist module snapshot:", err.message);
+      }
+      if (d.packs.length > 0 && !client.expansionLogged) {
+        client.expansionLogged = true;
+        activity("expansion_detected", { n: d.packs.length, sn: d.packs[0]?.sn ?? null });
+      }
+      broadcastLive({ batteryTriggered: true });
+    };
+    client.start(); // never rejects — retries internally with backoff
+    batteryMqtts.set(m.sn, client);
+  }
+  // Units that disappeared from the site (swap/removal): stop their clients.
+  for (const [sn, client] of batteryMqtts) {
+    if (!latestBatteries.has(sn)) {
+      client.stop();
+      batteryMqtts.delete(sn);
     }
-    if (d.packs.length > 0 && !batteryMqtt.expansionLogged) {
-      batteryMqtt.expansionLogged = true;
-      activity("expansion_detected", { n: d.packs.length, sn: d.packs[0]?.sn ?? null });
-    }
-    broadcastLive({ batteryTriggered: true });
-  };
-  batteryMqtt.start(); // never rejects — retries internally with backoff
+  }
+}
+
+// Health reporting + the fresh/stalled watcher use the PRIMARY unit's client.
+function primaryMqtt() {
+  return batteryMqtts.get(latestBattery?.sn) ?? batteryMqtts.values().next().value ?? null;
 }
 
 let syncBatteryInFlight = false;
@@ -1539,6 +1643,9 @@ async function syncBatteryInner() {
   try {
     const info = await anker.getBatteryInfo();
     if (info) {
+      // Per-unit state first (dock era: multiple solarbanks per site) —
+      // upsertMember preserves each unit's MQTT-only fields across REST.
+      for (const m of info.members ?? []) upsertMember(m);
       // REST has no temperature field — carry the last MQTT-sourced value
       // forward instead of blanking it on every 10 s REST sync. Same for
       // mainSoc/expansions (MQTT 0405/040a only, no REST equivalent).
@@ -1560,7 +1667,7 @@ async function syncBatteryInner() {
           console.warn("[db] failed to persist cloud grid sample:", err.message);
         }
       }
-      startBatteryMqtt();
+      startBatteryMqtts();
     }
   } catch (err) {
     console.warn(`[battery] sync failed: ${err.message}`);
@@ -1579,61 +1686,7 @@ async function syncBatteryThrottled(minGapMs) {
 setTimeout(syncBattery, 10 * 1000);
 setInterval(() => syncBatteryThrottled(10 * 1000), 10 * 1000).unref();
 
-// Second-battery live monitoring — READ-ONLY (2026-09-24): the account
-// gained a Solarbank 4 (AE103) on a SEPARATE site ("h-power", with its own
-// meter + a Power Dock). It's not part of the house system, so: no control,
-// no MQTT (the AE103 field map is unverified), no DB persistence (the
-// battery_snapshots PK is `ts` — two batteries would collide). Just a 30 s
-// scen_info against the non-primary site, kept in memory for
-// /api/battery/params' `batteries[1]`.
-let latestBattery2 = null;
-let secondarySiteId = null;
-let syncSecondBatteryInFlight = false;
-async function syncSecondBattery() {
-  if (!anker.configured || syncSecondBatteryInFlight) return;
-  syncSecondBatteryInFlight = true;
-  try {
-    if (!secondarySiteId) {
-      const primaryId = await anker.resolveSiteId();
-      if (!primaryId) return;
-      const sites = await anker.getSiteList();
-      const other = (sites?.site_list ?? []).find(
-        (s) =>
-          s.site_id !== primaryId &&
-          (s.site_device_list ?? []).some((d) => d.device_type === 3),
-      );
-      if (!other) return; // single-site account — nothing else to monitor
-      secondarySiteId = other.site_id;
-      console.log(
-        `[battery] second site "${other.site_name}" (${secondarySiteId}) — monitoring its solarbank read-only`,
-      );
-    }
-    const scene = await anker.getSceneInfo(secondarySiteId);
-    const sbInfo = scene?.solarbank_info;
-    const sb = sbInfo?.solarbank_list?.[0];
-    if (!sb) return;
-    const num = (v) => (v === "" || v == null ? 0 : Number(v));
-    latestBattery2 = {
-      ts: Date.now(),
-      sn: sb.device_sn,
-      name: sb.device_name,
-      soc: num(sb.battery_power),
-      outputW: num(sb.output_power),
-      chargeW: num(sb.bat_charge_power),
-      pvW: num(sb.photovoltaic_power),
-      pv1W: num(sbInfo?.solar_power_1),
-      pv2W: num(sbInfo?.solar_power_2),
-      chargingStatus: sb.charging_status ?? null,
-    };
-    lastCloudOkAt = Date.now();
-  } catch (err) {
-    console.warn(`[battery2] sync failed: ${err.message}`);
-  } finally {
-    syncSecondBatteryInFlight = false;
-  }
-}
-setTimeout(syncSecondBattery, 20 * 1000); // after the primary battery sync
-setInterval(syncSecondBattery, 30 * 1000).unref();
+
 
 // Activity: infrastructure transitions worth seeing (meter direct up/down,
 // MQTT fresh/stalled). Transient dev mode flaps by design — meter events
@@ -1646,7 +1699,7 @@ setInterval(() => {
     activity("meter", { state: mc ? "up" : "down" });
   }
   lastMeterConnected = mc;
-  const mf = batteryMqtt?.isFresh() ?? false;
+  const mf = primaryMqtt()?.isFresh() ?? false;
   if (lastMqttFresh != null && mf !== lastMqttFresh) {
     activity("mqtt", { state: mf ? "fresh" : "stalled" });
   }
@@ -1677,7 +1730,7 @@ setInterval(() => {
   // stalls — polling scen_info at ~20/min ON TOP of healthy MQTT is zero
   // informational gain for double the rate-limit exposure. The 10 s
   // baseline keeps running either way (SN discovery + cloud-grid channel).
-  if (batteryMqtt?.isFresh?.()) return;
+  if (primaryMqtt()?.isFresh?.()) return;
   syncBatteryThrottled(2500);
 }, 1000).unref();
 
@@ -1776,7 +1829,7 @@ function gracefulShutdown() {
   shuttingDown = true;
 
   poller.stop();
-  batteryMqtt?.stop();
+  for (const client of batteryMqtts.values()) client.stop();
   // WebSocket clients would keep server.close() waiting forever — kill them.
   for (const ws of wss.clients) ws.terminate();
   wss.close();

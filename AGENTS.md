@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.101, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.102, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4737,3 +4737,54 @@ side recovers — no action needed unless it persists for days.
   button); row 2 = the tab names, full width, own line (user: "the tabs
   selection names should be on a second line under the title line").
   Header 102px, scrollW == 390, desktop unchanged (single row).
+
+## Dock era: h-power is the system — dual solarbanks + meter swap + site-bind via API (2026-09-27)
+
+- The user commissioned the Power Dock (AE100) and moved everything to
+  h-power (recreated AGAIN as d2cb5b1b-…): SB4 (socket A) + SB2 Pro
+  (socket B) + meter-2. Self-consumption initially produced ZERO output:
+  the meter was missing from the recreated site. Fixed VIA THE API (user
+  asked "can't you do it through API?"): get_addable_site_list confirmed
+  meter-2 addable, then `POST power_service/v1/site/add_site_devices`
+  with `{site_id, grid_list: [{device_sn, device_pn}]}` bound it —
+  grid_to_home_power went live immediately. (The repeater/LAN-discovery
+  limitation the app complained about is bypassed by the site binding —
+  the cloud relays the meter's data.) Lesson: Anker's 10000 "Failed to
+  request" means the BODY SHAPE is wrong; grid_list is the meter list.
+- **App adaptations shipped**: getBatteryInfo() returns the AGGREGATE of
+  ALL solarbanks on the site (summed outputW/chargeW/pvW — sums of valid
+  per-unit flow invariants stay valid; SOC = the site's capacity-weighted
+  total_battery_power) + members[] per unit; index.js keeps a
+  latestBatteries map (SN → unit, MQTT-only fields preserved per unit)
+  with one AnkerMqtt client PER unit (batteryMqtts map; the AE103 is
+  REST-ONLY — its 0405 map is NOT ours: decoded soc=0 vs real 17% —
+  gated via MQTT_KNOWN_PN until its map is verified, ticket #210);
+  battery-params batteries[] = [aggregate(aggregate:true, capacity = Σ
+  members), ...members(member:true, per-model capacity + storedKwh)];
+  BatteryTab renders ALL of them again (the v1.5.73 slice(0,1) predated
+  the dock), aggregate card never shows the per-module view, members show
+  theirs; member note text replaces "not part of the house system".
+  syncSecondBattery/second-site machinery REMOVED (the second battery is
+  a member now; epic #215 will rebuild multi-site properly if ever
+  needed). AE103 added to BASE_BY_PN (5.0 kWh base; AC/PV caps
+  datasheet-approximate until #210 verifies).
+- **Meter swap continuity (user: "reuse the house consumption, grid, PV,
+  battery history for the new system")**: meters are the cloud_history
+  devices with month/year rows (batteries only have day) — new
+  getMeterSns() + getCloudTrendMulti() (energy sums per label across
+  meters; day power prefers fresher nonzero) + getBatterySns() now
+  EXCLUDES meter SNs by that shape (meter-1 would otherwise read as a
+  battery!). stats.js (monthKwh/monthRows/dayGrid/top-days/earliest),
+  roi-baseline avgDailyImportKwh, welcome-ai consumption averages,
+  energy-day dayGridImportKwh, and the timeseries meter anchors all
+  aggregate across meter SNs; catchUpCloudHistory backfills every meter
+  SN (meter-2's own history starts at its link date). grid_daily/
+  snapshots are date/ts-keyed — already continuous.
+- Live data verified on dev against the docked system: aggregate
+  "Battery system" 14% / 1.62 of 11.6 kWh / 477 W discharge; members
+  SB4 (5 kWh) + Pro (6.6 kWh, modules main 19% / exp 12%) each with
+  their own card; flow Home == Anker's home_load; MQTT per-unit fresh.
+- PRODUCTION config step (user's deploy): METER_IP=192.168.1.15
+  (meter-2) in the server .env + Modbus TCP re-enabled on meter-2 (its
+  reads currently hang — power-cycle/re-toggle fixes it). The site
+  anchor then resolves h-power via meter-2's SN automatically.

@@ -7,6 +7,8 @@ import {
   integrateBatteryEnergy,
   getPvDaily,
   getAnyDeviceSn,
+  getMeterSns,
+  getCloudTrendMulti,
   getBatterySns,
   getEarliestCloudDay,
   getCloudTrend,
@@ -82,6 +84,9 @@ function pvStoredTotals(fromDate, toDate) {
 export function registerStatsRoute(app, deps) {
   app.get("/api/stats/overview", (req, res) => {
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
+    // Meter swap continuity (2026-09-27): all meter SNs — history aggregates
+    // across the meter-1 → meter-2 swap exactly like the battery swap.
+    const meterSns = deps.getMeterSns?.() ?? getMeterSns();
     const now = Date.now();
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
@@ -247,8 +252,8 @@ export function registerStatsRoute(app, deps) {
   
     // --- Week (last 7 days) & month: daily kWh from cloud_history month rows.
     function monthKwh(yearMonth) {
-      if (!sn) return [];
-      return getCloudTrend(sn, "month", yearMonth).rows.map((r) => ({
+      if (!meterSns.length) return [];
+      return getCloudTrendMulti(meterSns, "month", yearMonth).rows.map((r) => ({
         label: r.time,
         importKwh: r.import_energy ?? 0,
         exportKwh: r.export_energy ?? 0,
@@ -593,11 +598,15 @@ export function registerStatsRoute(app, deps) {
     const type = ["day", "week", "month", "year"].includes(req.query.type) ? req.query.type : "day";
     const offset = Math.max(1, Math.min(Number(req.query.offset ?? 1) || 1, 400));
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
+    // Meter swap continuity (2026-09-27): all meter SNs — history aggregates
+    // across the meter-1 → meter-2 swap exactly like the battery swap.
+    const meterSns = deps.getMeterSns?.() ?? getMeterSns();
     const battSns = deps.getBatterySns?.() ?? getBatterySns(sn);
     const tariff = getTariff();
     const r2 = (v) => Math.round(v * 100) / 100;
     const eur = (kwh) => r2(kwh * tariff);
-    const earliest = getEarliestCloudDay(sn);
+    // Earliest day across ALL meter SNs (meter swap continuity).
+    const earliest = meterSns.map((m) => getEarliestCloudDay(m)).filter(Boolean).sort()[0] ?? null;
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     // Residual grid export per period (2026-09-23, user request): grid_daily
@@ -625,7 +634,15 @@ export function registerStatsRoute(app, deps) {
     // directly (which would double-count against the "batt" cells bar for
     // whatever charged the battery that day).
     function dayGrid(dateStr) {
-      const gridH = hourlyKwhFromRows(getCloudDayPower(sn, dateStr, dateStr));
+      // Meter swap continuity: merge all meter SNs preferring nonzero per ts.
+      const byTs = new Map();
+      for (const msn of meterSns) {
+        for (const r of getCloudDayPower(msn, dateStr, dateStr)) {
+          const cur = byTs.get(r.ts);
+          if (!cur || (cur.power === 0 && r.power !== 0)) byTs.set(r.ts, r);
+        }
+      }
+      const gridH = hourlyKwhFromRows([...byTs.values()]);
       const battH = battSns.length ? hourlyKwhFromRows(battSns.flatMap((s) => getCloudDayPower(s, dateStr, dateStr))) : new Array(24).fill(0);
       const pvProdH = hourlyKwhFromRows(getCloudPvDayPower(dateStr, dateStr));
       const pvProdTotal = pvProdH.reduce((a, v) => a + v, 0);
@@ -643,8 +660,8 @@ export function registerStatsRoute(app, deps) {
       return { imp, bars };
     }
     function monthRows(ym) {
-      if (!sn) return [];
-      return getCloudTrend(sn, "month", ym).rows.map((r) => ({
+      if (!meterSns.length) return [];
+      return getCloudTrendMulti(meterSns, "month", ym).rows.map((r) => ({
         label: r.time,
         importKwh: r.import_energy ?? 0,
         exportKwh: r.export_energy ?? 0,
@@ -782,13 +799,16 @@ export function registerStatsRoute(app, deps) {
   // see welcome-ai.js's pvKwhForDay) is used for battInKwh below instead.
   app.get("/api/stats/top-days", (req, res) => {
     const sn = deps.getMeterSn?.() ?? getAnyDeviceSn();
+    // Meter swap continuity (2026-09-27): all meter SNs — history aggregates
+    // across the meter-1 → meter-2 swap exactly like the battery swap.
+    const meterSns = deps.getMeterSns?.() ?? getMeterSns();
     const battSns = deps.getBatterySns?.() ?? getBatterySns(sn);
     const r2 = (v) => Math.round(v * 100) / 100;
     const todayDs = localDate();
     const days = getPvDaily("2000-01-01", todayDs)
       .filter((r) => r.date < todayDs && r.produced > 0)
       .map((r) => {
-        const gridKwh = r2(dayGridImportKwh(sn, r.date));
+        const gridKwh = r2(dayGridImportKwh(meterSns, r.date));
         const battKwh = r2(dayBattery(battSns, r.date).dischargedKwh);
         const pvKwh = r2(r.to_home);
         return {
