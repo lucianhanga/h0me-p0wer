@@ -78,28 +78,27 @@ const GRAPHS = [
     ],
   },
   {
-    // Per-module temperature (MQTT 0405/040a — exists from 2026-09-26 on).
+    // Per-module temperature — EVERY battery + extension (2026-09-27): the
+    // series are built dynamically from the site's module list (dynamicSeries
+    // marks the bucket field prefix: temp__<sn>). REST-only units (SB4) have
+    // no temperature channel — they just don't draw a line.
     titleKey: "graph.title.battTemp",
-    legendKeys: ["graph.series.tempMain", "graph.series.tempExpansion"],
     unit: "°C",
-    avgKey: "tempMain",
-    series: [
-      { key: "tempMain", nameKey: "graph.series.tempMain", color: "#f7a44f", width: 2 },
-      { key: "tempExp1", nameKey: "graph.series.tempExpansion", color: "#6bb8f5", width: 2 },
-    ],
+    dynamicSeries: "temp",
+    series: [],
   },
   {
-    // Per-module charge level (SOC %) — main unit vs. expansion pack.
+    // Per-module charge level (SOC %) — every battery + extension.
     titleKey: "graph.title.battSoc",
-    legendKeys: ["graph.series.socMain", "graph.series.socExpansion"],
     unit: "%",
-    avgKey: "socMain",
-    series: [
-      { key: "socMain", nameKey: "graph.series.socMain", color: "#5fce80", width: 2, area: true },
-      { key: "socExp1", nameKey: "graph.series.socExpansion", color: "#c084fc", width: 2, area: true },
-    ],
+    dynamicSeries: "soc",
+    series: [],
   },
 ];
+
+// Palette for the dynamic per-module series (one color per module, in the
+// module list's order — unit 1, unit 2, then expansions).
+const MODULE_COLORS = ["#5fce80", "#c084fc", "#6bb8f5", "#f7a44f", "#e5544b", "#8ee3a8"];
 
 // Remembers each graph's selected span across tab switches — GraphTab
 // unmounts when the user leaves the tab (see App.jsx's conditional render),
@@ -163,6 +162,29 @@ function rowValue(key, r) {
 
 export default function GraphTab() {
   const t = useT();
+  // The physical module list (every solarbank + expansion pack, keyed by
+  // physical SN) for the two dynamic per-module charts — fetched once from
+  // /api/battery/params (the same place the Strategy tab's cards read).
+  const [modules, setModules] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/battery/params")
+      .then((r) => r.json())
+      .then((res) => {
+        if (cancelled || !res.ok) return;
+        const list = (res.data.batteries ?? [])
+          .filter((b) => b.member && b.live?.sn)
+          .flatMap((b) => [
+            { sn: b.live.sn, name: b.live.name ?? b.live.sn },
+            ...(b.live.expansions ?? [])
+              .filter((e) => e.sn)
+              .map((e, i) => ({ sn: e.sn, name: `${b.live.name ?? b.live.sn} ext ${i + 1}` })),
+          ]);
+        setModules(list);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   // Per-phase view for the Home Power Usage graph (2026-09-27, long-standing
   // ideas item): the timeseries rows already carry l1/l2/l3 — this toggle
   // swaps G1's source series (grid/PV/battery/home) for the three phase
@@ -173,22 +195,37 @@ export default function GraphTab() {
   // which also re-inits the charts below so legend/series names follow.
   const graphs = useMemo(
     () =>
-      GRAPHS.map((def, gi) => ({
-        ...def,
-        title: t(def.titleKey),
-        legend:
-          gi === 0 && phasesOn ? ["L1", "L2", "L3"] : def.legendKeys.map((k) => t(k)),
-        series:
-          gi === 0 && phasesOn
-            ? [
-                { key: "l1", name: "L1", color: "#f7a44f", width: 2 },
-                { key: "l2", name: "L2", color: "#5fce80", width: 2 },
-                { key: "l3", name: "L3", color: "#c084fc", width: 2 },
-              ]
-            : def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
-        unit: def.unit ?? "W",
-      })),
-    [t, phasesOn],
+      GRAPHS.map((def, gi) => {
+        const dynamic = def.dynamicSeries
+          ? modules.map((m, i) => ({
+              key: `${def.dynamicSeries}__${m.sn}`,
+              name: m.name,
+              color: MODULE_COLORS[i % MODULE_COLORS.length],
+              width: 2,
+            }))
+          : null;
+        return {
+          ...def,
+          title: t(def.titleKey),
+          legend:
+            gi === 0 && phasesOn
+              ? ["L1", "L2", "L3"]
+              : dynamic
+                ? dynamic.map((d) => d.name)
+                : def.legendKeys.map((k) => t(k)),
+          series:
+            gi === 0 && phasesOn
+              ? [
+                  { key: "l1", name: "L1", color: "#f7a44f", width: 2 },
+                  { key: "l2", name: "L2", color: "#5fce80", width: 2 },
+                  { key: "l3", name: "L3", color: "#c084fc", width: 2 },
+                ]
+              : dynamic ?? def.series.map((s) => ({ ...s, name: t(s.nameKey) })),
+          avgKey: dynamic ? dynamic[0]?.key : def.avgKey,
+          unit: def.unit ?? "W",
+        };
+      }),
+    [t, phasesOn, modules],
   );
   const containerRefs = graphs.map(() => useRef(null));
   const apiRefs = useRef(graphs.map(() => null)); // per-graph { setSpan(ms) }

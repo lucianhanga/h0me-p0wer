@@ -1580,16 +1580,22 @@ pre {
 }
 
 
-/* --- Battery tab: animated SOC gauge + parameter grid -------------------- */
+/* --- Battery tab: upright per-unit cards + parameter grid --------------- */
 
-/* Stacks one card per battery vertically (2026-09-21, user request, ahead
-   of a second physical battery) — see BatteryTab.jsx's comment for why
-   vertical rather than side-by-side. A single battery is just one item in
-   this list, so nothing changes visually until there's a second. */
+/* Side-by-side per-unit cards (2026-09-27, user request: "both solarbanks
+   vertical, one near the other") — each card is a vertical segmented battery
+   with its metrics underneath; wraps to stacked on narrow screens. */
 .battery-list {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  flex-wrap: wrap;
   gap: 1rem;
+  align-items: flex-start;
+}
+
+.battery-list > * {
+  flex: 1 1 300px;
+  min-width: 0;
 }
 
 .batt-gauge-card {
@@ -1618,174 +1624,6 @@ pre {
   font-weight: 400;
   font-size: 0.75rem;
   color: #8b98a5;
-}
-
-/* The wrap is the positioning context for the min/max tick labels that sit
-   just below the gauge. Extra bottom margin fits the second (floor) label
-   row when the discharge-tolerance marker is shown. */
-.batt-gauge-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-  margin: 0.5rem 0 2.2rem;
-}
-
-.batt-gauge-body {
-  position: relative;
-  flex: 1;
-  height: 92px;
-  border: 2px solid #2a3238;
-  border-radius: 12px;
-  background: #101418;
-  overflow: hidden;
-  transition: background 1s ease, border-color 1s ease;
-}
-
-/* Meter spec: the unfilled track is a lighter step of the SAME ramp as the
-   fill, not a flat neutral — so the current level reads across the whole
-   bar, not just the filled portion (2026-09-21 beautification pass). */
-.batt-gauge-body.lvl-full {
-  background: linear-gradient(180deg, rgba(107, 184, 245, 0.14), rgba(61, 143, 224, 0.05));
-  border-color: rgba(107, 184, 245, 0.35);
-}
-
-.batt-gauge-body.lvl-high {
-  background: linear-gradient(180deg, rgba(116, 218, 146, 0.14), rgba(95, 206, 128, 0.05));
-  border-color: rgba(116, 218, 146, 0.35);
-}
-
-.batt-gauge-body.lvl-mid {
-  background: linear-gradient(180deg, rgba(249, 180, 104, 0.14), rgba(247, 164, 79, 0.05));
-  border-color: rgba(249, 180, 104, 0.35);
-}
-
-.batt-gauge-body.lvl-low {
-  background: linear-gradient(180deg, rgba(230, 116, 116, 0.16), rgba(224, 92, 92, 0.06));
-  border-color: rgba(230, 116, 116, 0.4);
-}
-
-.batt-gauge-cap {
-  width: 8px;
-  height: 30px;
-  margin-left: 2px;
-  border-radius: 0 4px 4px 0;
-  background: #2a3238;
-  flex: none;
-  transition: background 1s ease;
-}
-
-.batt-gauge-cap.lvl-full {
-  background: #3d8fe0;
-}
-
-.batt-gauge-cap.lvl-high {
-  background: #5fce80;
-}
-
-.batt-gauge-cap.lvl-mid {
-  background: #f7a44f;
-}
-
-.batt-gauge-cap.lvl-low {
-  background: #e05c5c;
-}
-
-.batt-gauge-fill {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 4px;
-  border-radius: 8px;
-  transition: width 1s ease;
-}
-
-/* Near-full (>90%, 2026-09-17 user request) gets its own color, distinct
-   from "just healthy" (lvl-high), so a topped-up battery reads at a glance. */
-.batt-gauge-fill.lvl-full {
-  background: linear-gradient(180deg, #6bb8f5, #3d8fe0);
-}
-
-.batt-gauge-fill.lvl-high {
-  background: linear-gradient(180deg, #74da92, #5fce80);
-}
-
-.batt-gauge-fill.lvl-mid {
-  background: linear-gradient(180deg, #f9b468, #f7a44f);
-}
-
-.batt-gauge-fill.lvl-low {
-  background: linear-gradient(180deg, #e67474, #e05c5c);
-}
-
-/* Shimmer band sweeping through the fill while power flows: forward into
-   the battery when charging, reversed when discharging. */
-.batt-gauge-fill::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    105deg,
-    transparent 35%,
-    rgba(255, 255, 255, 0.22) 50%,
-    transparent 65%
-  );
-  background-size: 250% 100%;
-  opacity: 0;
-}
-
-.batt-gauge-fill.charging::after {
-  opacity: 1;
-  animation: batt-shimmer 1.8s linear infinite;
-}
-
-.batt-gauge-fill.discharging::after {
-  opacity: 1;
-  animation: batt-shimmer 1.8s linear infinite reverse;
-}
-
-@keyframes batt-shimmer {
-  from {
-    background-position: 160% 0;
-  }
-  to {
-    background-position: -60% 0;
-  }
-}
-
-/* Configured min-discharge / max-charge limits as markers ON the gauge. */
-.batt-tick {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  margin-left: -1px;
-  background: #c084fc;
-  opacity: 0.85;
-}
-
-.batt-tick-label {
-  position: absolute;
-  top: 100%;
-  transform: translateX(-50%);
-  margin-top: 0.2rem;
-  font-size: 0.7rem;
-  color: #c084fc;
-  white-space: nowrap;
-}
-
-/* Effective discharge floor (account floor + DISCHARGE_TOLERANCE_PCT safety
-   margin, see power-plan.js) — a second marker close to the account's raw
-   min-discharge tick, so it gets its own color and a second label row
-   instead of overlapping "min N%" (2026-09-17, user question: "why does it
-   stop at 14%, not 10%?"). */
-.batt-tick.batt-tick-floor {
-  background: #f7a44f;
-  opacity: 0.9;
-}
-
-.batt-tick-label.batt-tick-label-floor {
-  top: calc(100% + 0.95rem);
-  color: #f7a44f;
 }
 
 .batt-gauge-center {
@@ -1929,7 +1767,6 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .batt-gauge-fill::after,
   .batt-chevs span {
     animation: none;
   }
@@ -1973,10 +1810,6 @@ pre {
 }
 
 @media (max-width: 600px) {
-  .batt-gauge-body {
-    height: 76px;
-  }
-
   .batt-gauge-pct {
     font-size: 2.1rem;
   }
@@ -2095,10 +1928,13 @@ pre {
   margin-top: 2px;
 }
 
+/* Legend rows always stack name-over-detail (2026-09-27): the detail line
+   ("5 kWh · 10 % · SOH 100 % · 25 °C") is too long for a side-by-side row
+   inside a ~330px unit card — it used to wrap mid-phrase. */
 .batt-modules-row {
   display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0;
   font-size: 0.85rem;
 }
 
@@ -2109,7 +1945,7 @@ pre {
 
 .batt-modules-detail {
   color: #8b98a5;
-  text-align: right;
+  text-align: left; /* stacked under the name — left-aligned */
 }
 
 .batt-modules-note {
@@ -2128,17 +1964,6 @@ pre {
     height: 150px;
   }
 
-  /* Phone: the legend row's name+detail don't fit side by side (seen live:
-     "Expansion 1" and "· 25 °C" wrapped onto their own lines) — stack the
-     detail under the module name instead. */
-  .batt-modules-row {
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .batt-modules-detail {
-    text-align: left;
-  }
 }
 
 /* Strategy PIN modal (reuses the .ask-* overlay chrome). */
