@@ -186,6 +186,7 @@ export const en = {
       usableWindow: "usable window ≈ {kwh} kWh",
     },
     liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
+    lowFloorWarn: "Discharge floor is at the factory 5% — the battery can drain into deep sleep overnight (it only wakes with solar). Raise it in the Anker app (e.g. 8–10%) to keep a reserve.",
     infoToggle: "Battery information",
     config: {
       title: "Configuration",

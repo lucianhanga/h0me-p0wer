@@ -197,6 +197,7 @@ export const ro = {
       usableWindow: "fereastră utilizabilă ≈ {kwh} kWh",
     },
     liveOnlyNote: "doar monitorizare live — nu face parte din sistemul casei, fără control sau istoric",
+    lowFloorWarn: "Pragul de descărcare e la valoarea din fabrică de 5% — bateria se poate descărca până la deep sleep peste noapte (se trezește doar cu solar). Crește-l în aplicația Anker (de ex. 8–10%) pentru a păstra o rezervă.",
     infoToggle: "Informații baterie",
     config: {
       title: "Configurație",

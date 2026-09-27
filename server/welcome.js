@@ -17,6 +17,7 @@ import {
   buildStrategyContext,
 } from "./welcome-ai.js";
 import { savedEur } from "./savings.js";
+import { resolveConstants } from "./battery-params.js";
 
 // Fixed briefing times (local clock): every 2 h from 6:00 to 22:00 — 9 AI
 // calls/day, each updated with the day's actuals so far. Stale = cache older
@@ -362,6 +363,7 @@ export function registerWelcomeRoute(app, deps) {
       // SOC/temp, each expansion pack's SOC/SOH/temp (MQTT-only — null while
       // the push channel stalls), and each module's 24h min/max SOC/temp.
       const lb = deps.getLiveBattery?.() ?? null;
+      const caps = lb ? resolveConstants(lb.pn, lb.expansionPacks) : null;
       const history24h = {};
       for (const r of getModuleHistory(Date.now() - 24 * 3600 * 1000, Date.now())) {
         const m = (history24h[r.module] ??= { minSoc: null, maxSoc: null, minTempC: null, maxTempC: null, samples: 0 });
@@ -386,6 +388,15 @@ export function registerWelcomeRoute(app, deps) {
               temperatureC: lb.temperatureC ?? null,
               expansionPacks: lb.expansionPacks ?? 0,
               expansions: lb.expansions ?? null,
+              // Full battery size (2026-09-27, user request): base unit +
+              // expansion packs — e.g. 1.6 + 5.0 = 6.6 kWh total.
+              capacity: caps
+                ? {
+                    totalKwh: caps.capacityKwh,
+                    mainUnitKwh: caps.baseCapacityKwh,
+                    perExpansionPackKwh: caps.expansionPackKwh,
+                  }
+                : null,
               history24h,
             }
           : null,
