@@ -115,11 +115,6 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   // suppressed below to avoid two overlapping ticks/labels.
   const effectiveFloorPct =
     minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : null;
-  const showFloorTick = effectiveFloorPct != null && effectiveFloorPct !== minPct;
-  // The aggregate (system) card never shows the per-module view — its
-  // "modules" are the site members, which have their own cards below
-  // (2026-09-27, dock era). Member cards DO show their own expansions.
-  const hasModules = !aggregate && (constants?.expansionPacks ?? 0) > 0;
   const usableKwh =
     minPct != null && maxPct != null && constants?.capacityKwh != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
@@ -141,7 +136,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
       <div className="card batt-gauge-card">
         <div className="batt-card-head">
           <span className="batt-card-name">{live.name ?? t("battery.fallbackName")}</span>
-          {live.pn && <span className="batt-card-sn">{live.pn}</span>}
+          {/* The aggregate is the SYSTEM, not one device — its pn/SN are the
+              primary unit's and would mislead on the system card. */}
+          {live.pn && !aggregate && <span className="batt-card-sn">{live.pn}</span>}
           {live.expansionPacks > 0 && (
             <span
               className="badge ok"
@@ -153,78 +150,21 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
               {t("battery.expansionBadge", { n: live.expansionPacks })}
             </span>
           )}
-          {live.sn && <span className="batt-card-sn">{live.sn}</span>}
+          {live.sn && !aggregate && <span className="batt-card-sn">{live.sn}</span>}
         </div>
-        {hasModules ? (
-          // Vertical segmented view replaces the horizontal gauge entirely
-          // (2026-09-26, user request: "show only the vertical, not the
-          // horizontal") — it carries the overall hero SOC + kWh + limits
-          // itself, so nothing is lost with the gauge.
-          <BatteryModules
-            live={live}
-            constants={constants}
-            limits={{ minPct, floorPct: effectiveFloorPct, maxPct }}
-            heroLvlClass={lvlClass}
-            heroZoneLabel={zoneLabel}
-          />
-        ) : (
-          <div className="batt-gauge-wrap">
-          <div className={`batt-gauge-body ${lvlClass}`}>
-            <div className={`batt-gauge-fill ${lvlClass} ${mode}`} style={{ width: `${soc}%` }} />
-            {minPct != null && (
-              <div
-                className="batt-tick"
-                style={{ left: `${minPct}%` }}
-                title={t("battery.gauge.minTip", { pct: minPct })}
-              />
-            )}
-            {showFloorTick && (
-              <div
-                className="batt-tick batt-tick-floor"
-                style={{ left: `${effectiveFloorPct}%` }}
-                title={t("battery.gauge.floorTip", {
-                  floor: effectiveFloorPct,
-                  min: minPct,
-                  margin: dischargeTolerancePct,
-                })}
-              />
-            )}
-            {maxPct != null && (
-              <div
-                className="batt-tick"
-                style={{ left: `${maxPct}%` }}
-                title={t("battery.gauge.maxTip", { pct: maxPct })}
-              />
-            )}
-            <div className="batt-gauge-center">
-              <span className="batt-gauge-pct">
-                {soc} %{zoneLabel && <span className={`batt-gauge-zone ${lvlClass}`}>{zoneLabel}</span>}
-              </span>
-              <span className="batt-gauge-kwh">
-                {live.storedKwh != null && constants?.capacityKwh != null
-                  ? t("battery.storedKwh", { stored: live.storedKwh, total: constants.capacityKwh })
-                  : t("battery.capacityNa")}
-              </span>
-            </div>
-          </div>
-          <div className={`batt-gauge-cap ${lvlClass}`} />
-          {minPct != null && (
-            <span className="batt-tick-label" style={{ left: `${minPct}%` }}>
-              {t("battery.gauge.min", { pct: minPct })}
-            </span>
-          )}
-          {showFloorTick && (
-            <span className="batt-tick-label batt-tick-label-floor" style={{ left: `${effectiveFloorPct}%` }}>
-              {t("battery.gauge.floor", { pct: effectiveFloorPct })}
-            </span>
-          )}
-          {maxPct != null && (
-            <span className="batt-tick-label" style={{ left: `${maxPct}%` }}>
-              {t("battery.gauge.max", { pct: maxPct })}
-            </span>
-          )}
-          </div>
-        )}
+        {/* Vertical segmented view for EVERY unit (2026-09-27, user
+            request: "get rid of the horizontal views... remove the
+            horizontal code for good") — carries the hero SOC + kWh +
+            limits itself; single-module units get one full-height segment
+            (BatteryModules handles it). */}
+        <BatteryModules
+          live={live}
+          constants={constants}
+          limits={{ minPct, floorPct: effectiveFloorPct, maxPct }}
+          heroLvlClass={lvlClass}
+          heroZoneLabel={zoneLabel}
+          single={aggregate}
+        />
         <div className={`batt-status ${mode}`}>
           {mode === "charging" && (
             <>
@@ -370,26 +310,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   );
 }
 
-// Battery section: one card per battery, stacked VERTICALLY (2026-09-21,
-// user request — "it will soon come a second one"). Vertical, not side by
-// side, for two reasons found researching multi-device battery dashboards:
-// (1) each card already needs real width for its gauge's three threshold
-// labels (min/floor/max) plus the collapsible parameter cards below it —
-// squeezing two side by side on anything but a wide desktop would crowd
-// both; (2) fleet/multi-battery UI guidance favors a clear per-device
-// identity (name visible on ITS OWN card, not a shared header) over
-// density, since users scan "which battery is doing what" one at a time,
-// not comparing two gauges side by side at a glance the way you would two
-// KPI numbers.
-//
-// The endpoint (GET /api/battery/params) returns a `batteries` array:
-// batteries[0] is the primary (house-system) battery with full
-// {live, config, features, constants}; batteries[1] (since 2026-09-24) is
-// the Solarbank 4 on the separate "h-power" site — live-only payload with
-// null config/features/constants, which BatteryCard handles by hiding the
-// details section (see its own comment). Single-battery deployments just
-// get a one-item array; the fallback to treating the bare payload as one
-// item stays for older servers.
+// Battery section: one UPRIGHT segmented card per unit, side by side
+// (2026-09-27, user request) — metrics underneath each unit; wraps on
+// narrow screens. The horizontal gauge is gone for good (same request).
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const t = useT();
   const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });

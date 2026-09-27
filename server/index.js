@@ -585,10 +585,8 @@ app.get("/api/timeseries", (req, res) => {
   // the MQTT subtopic fix onward, 48h retention.
   for (const r of getModuleHistory(from - CLOUD_INTERVAL_MS, to)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-    const socKey = r.module === "main" ? "socMain" : r.module === "exp1" ? "socExp1" : null;
-    const tempKey = r.module === "main" ? "tempMain" : r.module === "exp1" ? "tempExp1" : null;
-    if (socKey && r.soc != null) add(bt, socKey, r.soc);
-    if (tempKey && r.temperature_c != null) add(bt, tempKey, r.temperature_c);
+    if (r.soc != null) add(bt, `soc__${r.module}`, r.soc);
+    if (r.temperature_c != null) add(bt, `temp__${r.module}`, r.temperature_c);
   }
 
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
@@ -824,10 +822,13 @@ app.get("/api/timeseries", (req, res) => {
       battOut: b ? round(b.battOut) : null,
       battChg: b ? round(b.battChg) : null,
       pv: b ? round(b.pv) : null,
-      socMain: b ? round(b.socMain) : null,
-      socExp1: b ? round(b.socExp1) : null,
-      tempMain: b ? round(b.tempMain) : null,
-      tempExp1: b ? round(b.tempExp1) : null,
+      ...Object.fromEntries(
+        // Per-module series (2026-09-27): soc__<sn> / temp__<sn> per physical
+        // module — dynamic, so every battery + expansion gets its own line.
+        Object.entries(b ?? {})
+          .filter(([k]) => k.startsWith("soc__") || k.startsWith("temp__"))
+          .map(([k, cell]) => [k, round(cell)]),
+      ),
     });
   }
 
@@ -890,7 +891,17 @@ app.get("/api/timeseries", (req, res) => {
     r.l3 = Math.round(r.grid * sh[2] * 100) / 100;
   }
 
-  res.json({ ok: true, bucketMs, data });
+  // Per-module metadata for the Graph tab's module charts (2026-09-27):
+  // every solarbank + every expansion pack, keyed by their physical SNs —
+  // matching the soc__<sn>/temp__<sn> fields emitted per bucket above.
+  const modules = [...latestBatteries.values()].flatMap((m) => [
+    { sn: m.sn, name: m.name ?? m.sn },
+    ...(m.expansions ?? [])
+      .filter((e) => e.sn)
+      .map((e, i) => ({ sn: e.sn, name: `${m.name ?? m.sn} ext ${i + 1}` })),
+  ]);
+
+  res.json({ ok: true, bucketMs, data, modules });
 });
 
 
@@ -1577,9 +1588,10 @@ function startBatteryMqtts() {
       lastCloudOkAt = Date.now();
       try {
         saveBatterySnapshot(latestBattery);
-        // Per-module history (Graph tab): the main unit's own SOC/temp.
+        // Per-module history (Graph tab): keyed by the PHYSICAL module's SN
+        // (unit SN for each solarbank, pack SN for expansions — 2026-09-27).
         if (d.mainSoc != null || d.temperatureC != null) {
-          saveModuleSnapshot(d.ts, "main", d.mainSoc ?? null, d.temperatureC ?? null);
+          saveModuleSnapshot(d.ts, m.sn, d.mainSoc ?? d.soc ?? null, d.temperatureC ?? null);
         }
       } catch (err) {
         console.warn("[db] failed to persist battery snapshot:", err.message);
@@ -1594,8 +1606,8 @@ function startBatteryMqtts() {
       recomputeAggregate();
       lastCloudOkAt = Date.now();
       try {
-        if (d.mainSoc != null) saveModuleSnapshot(d.ts, "main", d.mainSoc, latestBattery.temperatureC ?? null);
-        d.packs.forEach((p, i) => saveModuleSnapshot(d.ts, `exp${i + 1}`, p.soc ?? null, p.temperatureC ?? null));
+        if (d.mainSoc != null) saveModuleSnapshot(d.ts, m.sn, d.mainSoc, latestBattery.temperatureC ?? null);
+        d.packs.forEach((p) => saveModuleSnapshot(d.ts, p.sn ?? `${m.sn}-exp`, p.soc ?? null, p.temperatureC ?? null));
       } catch (err) {
         console.warn("[db] failed to persist module snapshot:", err.message);
       }
@@ -1645,7 +1657,16 @@ async function syncBatteryInner() {
     if (info) {
       // Per-unit state first (dock era: multiple solarbanks per site) —
       // upsertMember preserves each unit's MQTT-only fields across REST.
-      for (const m of info.members ?? []) upsertMember(m);
+      for (const m of info.members ?? []) {
+        upsertMember(m);
+        // Per-module SOC history for REST-only units too (the SB4's map is
+        // unverified so it gets no MQTT — its SOC comes from this sync).
+        try {
+          saveModuleSnapshot(info.ts, m.sn, m.soc ?? null, m.temperatureC ?? null);
+        } catch {
+          /* non-fatal */
+        }
+      }
       // REST has no temperature field — carry the last MQTT-sourced value
       // forward instead of blanking it on every 10 s REST sync. Same for
       // mainSoc/expansions (MQTT 0405/040a only, no REST equivalent).

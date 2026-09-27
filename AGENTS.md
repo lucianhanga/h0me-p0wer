@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.102, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.103, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4788,3 +4788,31 @@ side recovers — no action needed unless it persists for days.
   (meter-2) in the server .env + Modbus TCP re-enabled on meter-2 (its
   reads currently hang — power-cycle/re-toggle fixes it). The site
   anchor then resolves h-power via meter-2's SN automatically.
+
+## Battery display rework: all-vertical Strategy cards + per-module graphs (2026-09-27, user requests)
+
+- **Strategy tab** (user: "both solarbanks vertical one near the other
+  with extensions if they exist; get rid of the horizontal views; remove
+  the horizontal code for good; metrics underneath each unit"): the
+  horizontal gauge JSX AND its CSS (batt-gauge-body/fill/cap/tick*,
+  batt-shimmer) are DELETED from git, not just hidden. BatteryModules
+  handles single-module units (one full-height segment — the SB4 and the
+  aggregate) so EVERY card is vertical; .battery-list is now a wrapping
+  side-by-side row (cards flex 1 1 300px); the metrics legend rows stack
+  name-over-detail everywhere (the side-by-side detail wrapped
+  mid-phrase inside the narrower unit cards); the aggregate card drops
+  the misleading inherited pn/SN and renders as ONE system segment
+  (BatteryModules `single` prop) instead of the Pro's modules.
+- **Graph tab** (user: "Battery, Battery temperature, charge per module
+  — all batteries and their extensions; Home/Production/Battery stay
+  united"): module_snapshots are now keyed by each PHYSICAL module's SN
+  (unit SN per solarbank, pack SN per expansion) — written from MQTT
+  0405/040a AND from the REST sync (the SB4 is REST-only but its SOC now
+  lands in history too); legacy "main"/"exp1" keys age out with the 48h
+  retention, no migration needed. /api/timeseries emits dynamic
+  soc__<sn>/temp__<sn> bucket fields + a `modules` meta list; GraphTab's
+  two module charts build their series dynamically from the module list
+  (MODULE_COLORS palette), i18n keys for the dead fixed series removed.
+  Verified: 3 modules in the legends, dynamic fields in the payload
+  (legacy main/exp1 keys orphan silently for 48h — invisible since the
+  series come from the meta list, not the fields).

@@ -10,32 +10,48 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // "≈ overall" estimate was tried for a day and rejected — identical fills
 // looked fabricated). Extracted from BatteryTab.jsx 2026-09-27 so the
 // simple view can render it standalone.
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false }) {
   const t = useT();
-  const packs = constants?.expansionPacks ?? 0;
-  if (!packs) return null;
-  const modules = [
-    {
-      key: "main",
-      name: t("battery.modules.mainUnit"),
-      kwh: constants.baseCapacityKwh,
-      soc: live.mainSoc ?? null,
-      tempC: live.temperatureC ?? null,
-      soh: null,
-    },
-    ...Array.from({ length: packs }, (_, i) => {
-      const exp = live.expansions?.[i] ?? null;
-      return {
-        key: `exp${i}`,
-        name: t("battery.modules.expansion", { n: i + 1 }),
-        kwh: constants.expansionPackKwh,
-        soc: exp?.soc ?? null,
-        tempC: exp?.temperatureC ?? null,
-        soh: exp?.soh ?? null,
-      };
-    }),
-  ];
-  const totalKwh = modules.reduce((a, m) => a + m.kwh, 0);
+  // single: the aggregate system card renders ONE segment for the whole
+  // system — its "modules" are the member units, shown on their own cards.
+  const packs = single ? 0 : (constants?.expansionPacks ?? 0);
+  // Single-module units (no expansion packs — the aggregate system card and
+  // the SB4) render as ONE full-height segment with the unit's own SOC —
+  // the vertical view is the only view since 2026-09-27 (the horizontal
+  // gauge was deleted).
+  const modules = packs
+    ? [
+        {
+          key: "main",
+          name: t("battery.modules.mainUnit"),
+          kwh: constants.baseCapacityKwh,
+          soc: live.mainSoc ?? null,
+          tempC: live.temperatureC ?? null,
+          soh: null,
+        },
+        ...Array.from({ length: packs }, (_, i) => {
+          const exp = live.expansions?.[i] ?? null;
+          return {
+            key: `exp${i}`,
+            name: t("battery.modules.expansion", { n: i + 1 }),
+            kwh: constants.expansionPackKwh,
+            soc: exp?.soc ?? null,
+            tempC: exp?.temperatureC ?? null,
+            soh: exp?.soh ?? null,
+          };
+        }),
+      ]
+    : [
+        {
+          key: "unit",
+          name: live.name ?? t("battery.modules.mainUnit"),
+          kwh: constants?.capacityKwh ?? 1,
+          soc: live.soc ?? null,
+          tempC: live.temperatureC ?? null,
+          soh: null,
+        },
+      ];
+  const totalKwh = modules.reduce((a, m) => a + m.kwh, 0) || 1;
   const lvlOf = (soc) =>
     soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
   const anyUnknown = modules.some((m) => m.soc == null);
