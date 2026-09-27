@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.93, `main`, working tree clean, nothing pending.**
+**As of 2026-09-27, v1.5.94, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4590,3 +4590,18 @@ side recovers — no action needed unless it persists for days.
   DEVICE itself routes PV into charging the low module (~110 W) and
   lets the grid carry the house even while our passthrough target is
   nonzero — device-level pack protection until the expansion recovers.
+
+## Home display smoothing ~25 s (2026-09-27, user: "Home still oscillates, the Anker app looks fine")
+
+- After the floor-guard hysteresis (v1.5.93), the remaining Home
+  oscillation was the MEASUREMENT itself: home = raw meter net +
+  inverter output, and the meter's net jitters ±25-35 W from the
+  documented phase artifact (single-phase inverter on L1, loads on L3).
+  Evidence over 2 min with outW=0: grid 183→240 W, home tracking it
+  exactly (173→243). The 5 s GRID_DISPLAY_SMOOTH_MS covers only the
+  grid NODE, not the sum; the Anker app conditions its Home Load
+  device-side and looks steady. Fix: getSmoothedHomeConsumption() — a
+  ~25 s time-windowed rolling mean applied ONLY to the displayed
+  flow.home.consumption (both /api/flow and the WS push share it); the
+  power plan keeps the unsmoothed despiked median-of-3 (reaction speed
+  is the controller's, display steadiness is the user's).
