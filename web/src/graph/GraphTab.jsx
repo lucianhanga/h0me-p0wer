@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
+import { battCellsOf, battChgNetOf, rowValue } from "./derive.js";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -21,18 +22,8 @@ const SHORTCUTS = [
 
 const LIVE_EDGE_MS = 2 * 60 * 1000; // consider "live" when right edge within 2 min of now
 
-// Row derivations, validated 2026-09-13 (inverter output includes the PV
-// pass-through; PV splits exactly into charge + pass-through).
-const pvHomeOf = (r) => ((r.battOut ?? 0) > 0 ? Math.max(0, (r.pv ?? 0) - (r.battChg ?? 0)) : 0);
-const pvBattOf = (r) => Math.min(r.pv ?? 0, r.battChg ?? 0);
-// NET cells power: inverter out minus the PV pass-through, minus charge.
-// A battery can't charge and discharge its cells at once — bucket averages
-// over oscillating states must net, or the graphs show both at once
-// (reported 2026-09-15: battery graph showed charging AND discharging).
-const cellsNetOf = (r) => (r.battOut ?? 0) - pvHomeOf(r) - (r.battChg ?? 0);
-const battCellsOf = (r) => Math.max(0, cellsNetOf(r)); // discharging cells
-const battChgNetOf = (r) => Math.min(0, cellsNetOf(r)); // charging cells (neg)
-const homeOf = (r) => (r.grid == null ? null : (r.grid ?? 0) + Math.max(r.battOut ?? 0, 0));
+// Row derivations live in ./derive.js — shared with the simple view's
+// charts (2026-09-28) so the two can never compute these differently.
 
 // Series per graph. `key` is either a raw row field or one of the derived
 // names above; negated series render as sinks below zero. titleKey/nameKey/
@@ -139,25 +130,6 @@ function robustCap(values) {
     rawMax - p98 >= MIN_OUTLIER_DELTA_W &&
     (p98 <= 0 || rawMax >= p98 * MIN_OUTLIER_RATIO);
   return isOutlier ? { cap, rawMax } : null;
-}
-
-function rowValue(key, r) {
-  switch (key) {
-    case "pvHome":
-      return pvHomeOf(r);
-    case "pvBatt":
-      return pvBattOf(r);
-    case "battCells":
-      return battCellsOf(r);
-    case "battChgNeg":
-      return battChgNetOf(r);
-    case "home":
-      return homeOf(r);
-    case "gridExp": // residual export below zero — negative part of grid
-      return r.grid != null ? Math.min(r.grid, 0) : null;
-    default:
-      return r[key];
-  }
 }
 
 export default function GraphTab() {

@@ -5196,3 +5196,36 @@ side recovers — no action needed unless it persists for days.
   (LOW/FULL) computed per unit.
 - Verified: desktop (two parallel stacks, centered texts) + 390px phone
   (side by side, scrollW == 390).
+
+## Simple view: per-unit status+ETA, three charts, Today tile, proportional stacks, default view (2026-09-28, user requests)
+
+- **Status + ETA per unit** (replacing the per-module legend in the simple
+  view, user request): each stack shows the same charging/discharging/idle
+  StatusBadge + "empty/full in ≈ …" as the Strategy cards — StatusBadge is
+  now EXPORTED from BatteryTab.jsx; batteryEtaHours targets the SYSTEM's
+  ceiling/floor (members carry no config; aggregate's config = primary's
+  account limits). `mode` is now also passed so the cylinder's flow streak
+  animates. BatteryModules gained `legend` (false in simple view) and
+  `heightPx` props.
+- **Three read-only charts** (`web/src/simple/SimpleCharts.jsx`): Home
+  Power Usage (grid/PV/battery stacked + home line), Power Production
+  (total), Battery charge/discharge — the Graph tab's G1–G3 definitions,
+  but interaction-free: fixed trailing 24h window, no zoom/span buttons,
+  60 s refresh. The row derivations (pvHomeOf/cellsNetOf/homeOf/…) moved
+  to `web/src/graph/derive.js`, imported by BOTH GraphTab and SimpleCharts
+  — one definition, no drift.
+- **Today tile at the end** (user: "but just for today!"): Dashboard's
+  SourceCard is now exported and rendered with type="day" — flip side
+  (hourly bars) and ‹ › day navigation work unchanged.
+- **Default view is SIMPLE** for fresh visitors (ViewProvider loadView —
+  an explicit stored choice still wins).
+- **Cylinders proportional to capacity**: SB4 (10 kWh) renders visibly
+  taller than the Pro (6.6 kWh) — heightPx = base(260/200px) × cap/maxCap,
+  floored at 55% so small units stay legible; cylinders are BOTTOM-aligned
+  (margin-top: auto) so they "stand" on the same line and the
+  name/%/status texts align across columns. `.batt-gauge-pct` is nowrap
+  ("13 %" never splits in narrow columns).
+- Verified: fresh profile lands in simple view; phone (390px, scrollW
+  390) + desktop screenshots; Today tile flip verified via CDP click;
+  SB4 "idle" state confirmed correct against live data (it hit its own
+  10% cutoff — outputW 0 while the Pro carried the house).

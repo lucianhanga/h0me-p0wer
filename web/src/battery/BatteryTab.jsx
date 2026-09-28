@@ -65,7 +65,7 @@ function ParamRow({ k, v }) {
    glyphs (2026-09-28, user request): MDI battery-charging / battery-arrow-
    down / power-standby icons (StateIcon), tinted per state, gently pulsing
    while energy actually flows. */
-function StatusBadge({ mode }) {
+export function StatusBadge({ mode }) {
   return (
     <span className={`batt-state-icon ${mode}`}>
       <StateIcon mode={mode} />
