@@ -28,33 +28,52 @@ export default function SimpleHome() {
   }, [flowRest]);
 
   const primary = params?.batteries?.[0] ?? params;
-  const live = primary?.live ?? null;
-  const soc = live?.soc ?? null;
-  const lvlClass =
-    soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
-  const zoneLabel =
-    lvlClass === "lvl-full" ? t("battery.zone.full") : lvlClass === "lvl-low" ? t("battery.zone.low") : null;
+  // Both batteries as parallel vertical stacks (2026-09-28, user request):
+  // one column per UNIT (solarbank + its extensions as segments), texts
+  // underneath. Falls back to the aggregate for single-battery setups.
+  const units = (params?.batteries ?? []).filter((b) => b.member && b.live);
+  const stacks = units.length ? units : primary?.live ? [primary] : [];
 
   return (
     <div className="simple-home">
       <div className="simple-flow">
         <FlowDiagram flow={flow} />
       </div>
-      {live && (
-        <div className="simple-batt">
-          <BatteryModules
-            live={live}
-            constants={primary?.constants}
-            limits={{
-              minPct: primary?.config?.dischargeLowerLimitPct,
-              maxPct: primary?.config?.chargeUpperLimitPct,
-            }}
-            heroLvlClass={lvlClass}
-            heroZoneLabel={zoneLabel}
-          />
+      {stacks.length > 0 && (
+        <div className="simple-batt-row">
+          {stacks.map((u) => {
+            const uSoc = u.live?.soc ?? null;
+            const uLvl =
+              uSoc == null ? null : uSoc > 90 ? "lvl-full" : uSoc > 50 ? "lvl-high" : uSoc >= 20 ? "lvl-mid" : "lvl-low";
+            return (
+              <div className="simple-batt" key={u.live.sn ?? "aggregate"}>
+                <BatteryModules
+                  live={u.live}
+                  constants={u.constants}
+                  limits={
+                    u.member
+                      ? {}
+                      : {
+                          minPct: u.config?.dischargeLowerLimitPct,
+                          maxPct: u.config?.chargeUpperLimitPct,
+                        }
+                  }
+                  heroLvlClass={uLvl}
+                  heroZoneLabel={
+                    uLvl === "lvl-full"
+                      ? t("battery.zone.full")
+                      : uLvl === "lvl-low"
+                        ? t("battery.zone.low")
+                        : null
+                  }
+                  stacked
+                />
+              </div>
+            );
+          })}
         </div>
       )}
-      <UpdatedStamp at={flow?.ts ?? live?.ts ?? null} />
+      <UpdatedStamp at={flow?.ts ?? primary?.live?.ts ?? null} />
     </div>
   );
 }
