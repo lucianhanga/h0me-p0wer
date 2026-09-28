@@ -5040,3 +5040,21 @@ side recovers — no action needed unless it persists for days.
   Verified post-fix: one-line legend details EN+DE on both unit cards,
   legible pill labels on all segments, simple view fixed the same way,
   desktop 1280px unaffected, scrollW == 390 everywhere.
+
+## Battery status badges: expressive icons replace chevron stack + ⏏ (2026-09-28, user request)
+
+- The charge/discharge status lines carried a TRIPLE-symbol clutter:
+  cascading ▲▲▲/▼▼▼ chevron spans PLUS an in-text ⚡/⏏ glyph from the
+  i18n strings — and ⏏ reads as "eject", not "battery out". Replaced
+  with one `StatusBadge` (BatteryTab.jsx): a round tinted badge holding
+  a single emoji — ⚡ charging (green tint) / 🔋 discharging (purple
+  tint) / 💤 idle (grey) — with a gentle scale+brightness pulse only
+  while energy actually flows (prefers-reduced-motion disables it).
+  Used by both the unit cards and the Battery-system tile status lines;
+  the i18n `battery.status.*` strings lost their emoji prefixes (the
+  icon is JSX now, not text). `.batt-chevs` CSS deleted.
+- Same symbol swap for consistency in the two other live surfaces:
+  Live tab's Battery tile value (⏏ −NW → 🔋 −NW, idle gets 💤) and the
+  flow diagram's battery node label.
+- Verified by screenshot at 390px and 1280px with live discharging
+  data; scrollW == 390 unchanged.

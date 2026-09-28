@@ -233,8 +233,8 @@ export const ro = {
       mqttNote: "SOC-ul pe modul sosește automat când canalul push al Anker (MQTT) livrează — momentan blocat de partea Anker",
     },
     status: {
-      charging: "⚡ se încarcă {w}",
-      discharging: "⏏ se descarcă {w}",
+      charging: "se încarcă {w}",
+      discharging: "se descarcă {w}",
       idle: "inactivă",
       fullIn: "plină în ≈ {eta}",
       emptyIn: "goală în ≈ {eta}",

@@ -222,8 +222,8 @@ export const en = {
       mqttNote: "per-module SOC arrives automatically when Anker's push channel (MQTT) delivers — currently stalled on Anker's side",
     },
     status: {
-      charging: "⚡ charging {w}",
-      discharging: "⏏ discharging {w}",
+      charging: "charging {w}",
+      discharging: "discharging {w}",
       idle: "idle",
       fullIn: "full in ≈ {eta}",
       emptyIn: "empty in ≈ {eta}",

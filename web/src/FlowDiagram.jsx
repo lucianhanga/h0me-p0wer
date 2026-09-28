@@ -35,7 +35,7 @@ export default function FlowDiagram({ flow }) {
     ? charging
       ? ` ⚡ ${battW ?? 0} W`
       : cells > 0
-        ? ` ⏏ ${battW ?? 0} W`
+        ? ` 🔋 ${battW ?? 0} W`
         : ""
     : "";
   const g = gridSigned == null ? null : Math.round(gridSigned);

@@ -237,8 +237,8 @@ export const de = {
       mqttNote: "Der SOC pro Modul kommt automatisch an, sobald Ankers Push-Kanal (MQTT) liefert — aktuell auf Ankers Seite gestört",
     },
     status: {
-      charging: "⚡ lädt {w}",
-      discharging: "⏏ entlädt {w}",
+      charging: "lädt {w}",
+      discharging: "entlädt {w}",
       idle: "inaktiv",
       fullIn: "voll in ≈ {eta}",
       emptyIn: "leer in ≈ {eta}",

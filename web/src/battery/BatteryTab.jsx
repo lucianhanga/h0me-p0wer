@@ -60,6 +60,14 @@ function ParamRow({ k, v }) {
   );
 }
 
+/* One expressive state badge instead of the old chevron stack + in-text
+   glyphs (2026-09-28, user request): ⚡ charging / 🔋 discharging / 💤 idle,
+   tinted per state, gently pulsing while energy actually flows. */
+function StatusBadge({ mode }) {
+  const icon = mode === "charging" ? "⚡" : mode === "discharging" ? "🔋" : "💤";
+  return <span className={`batt-state-icon ${mode}`}>{icon}</span>;
+}
+
 // One battery: animated SOC gauge (with the configured min/max markers right
 // on it) + every battery parameter. Split out of BatteryTab (2026-09-21,
 // user request) so a second physical battery is a data change, not a
@@ -161,24 +169,15 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           mode={mode}
         />
         <div className={`batt-status ${mode}`}>
+          <StatusBadge mode={mode} />
           {mode === "charging" && (
             <>
-              <span className="batt-chevs">
-                <span>▲</span>
-                <span>▲</span>
-                <span>▲</span>
-              </span>
               <span className="batt-status-main">{t("battery.status.charging", { w: fmtW(chargeW) })}</span>
               {etaLabel && <span className="batt-status-eta">{t("battery.status.fullIn", { eta: etaLabel })}</span>}
             </>
           )}
           {mode === "discharging" && (
             <>
-              <span className="batt-chevs">
-                <span>▼</span>
-                <span>▼</span>
-                <span>▼</span>
-              </span>
               <span className="batt-status-main">{t("battery.status.discharging", { w: fmtW(cellsW) })}</span>
               {etaLabel && <span className="batt-status-eta">{t("battery.status.emptyIn", { eta: etaLabel })}</span>}
             </>
@@ -479,6 +478,7 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
             </div>
           </div>
           <div className={`batt-sys-status ${mode}`}>
+            <StatusBadge mode={mode} />
             {mode === "charging" && t("battery.status.charging", { w: fmtW(chargeW) })}
             {mode === "discharging" && t("battery.status.discharging", { w: fmtW(cellsW) })}
             {mode === "idle" && t("battery.status.idle")}
