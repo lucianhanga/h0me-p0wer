@@ -5058,3 +5058,37 @@ side recovers — no action needed unless it persists for days.
   flow diagram's battery node label.
 - Verified by screenshot at 390px and 1280px with live discharging
   data; scrollW == 390 unchanged.
+
+## Live tab: all PV strings per unit, connected vs disconnected (2026-09-28, user request)
+
+- User: "now there are more PVs installed and there is the possibility to
+  have even more... display in the expanded Solar PV all the PVs, enabled
+  = connected, disabled = disconnected." scen_info carries per-UNIT
+  per-channel PV: each solarbank entry has `pv_power` {pv1..pv4, total}
+  and `pv_name` {pvN_name, user-renamable} — every MPPT channel,
+  wired or not. There is NO connection flag in the payload.
+- `getBatteryInfo()` members now carry `pvChannels: [{n, name, watts}]`
+  (channel count taken from pv_power's own keys, not hardcoded to 4).
+- **Connected = "ever seen producing"**: `decoratePvChannels()` (index.js,
+  on every REST sync) marks a channel connected when watts > 5, recorded
+  STICKY in kv (`pvSeen:<unitSn>:<n>`) — at night every channel reads 0 W,
+  so only a persistent marker distinguishes "wired" from "empty". A newly
+  wired string lights up with its first sunny hour. NOTE: no bootstrap
+  from history — markers accumulate from first deploy of this version, so
+  on a fresh DB everything shows "not connected" until the next sunny
+  period (battery_snapshots' pv1_w/pv2_w are the SITE-level solar_power
+  fields and don't map cleanly onto per-unit channels under the dock —
+  today they read 0 all day while the SB4 produced 4.61 kWh).
+- `/api/flow` battery gains `pvUnits: [{sn, name, channels}]`; the
+  aggregate's members now come from the upserted (decorated +
+  MQTT-preserved) map, not raw REST members.
+- Live tab Details → Solar PV: Total card + one channel group PER UNIT
+  (unit name label only when > 1 unit). Connected channels are normal
+  flippable phase-cards with live watts; disconnected ones are dimmed,
+  dashed, non-flippable "not connected" cards (i18n en/de/ro). Old
+  aggregate PV1/PV2 cards remain as a fallback when no pvUnits exist
+  (DB-fallback battery). Per-channel kWh-today sublabels dropped — the
+  pv1_w/pv2_w integration no longer maps to identifiable unit channels.
+- Verified: pvUnits payload live; sticky markers flip channels to
+  connected; screenshots phone (390px, full-width stacked cards) +
+  desktop (side-by-side), scrollW == 390.

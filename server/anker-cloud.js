@@ -300,20 +300,34 @@ export class AnkerClient {
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
     const info = scene.solarbank_info;
     const gridInfo = scene.grid_info ?? {};
-    const members = list.map((sb) => ({
-      sn: sb.device_sn,
-      name: sb.device_name,
-      pn: sb.device_pn ?? null,
-      soc: num(sb.battery_power),
-      outputW: num(sb.output_power),
-      chargeW: num(sb.bat_charge_power),
-      pvW: num(sb.photovoltaic_power),
-      expansionPacks: Number(sb.sub_package_num ?? 0),
-      featureSwitch: sb.feature_switch ?? null,
-      chargingStatus: sb.charging_status ?? null,
-      errCode: sb.err_code ?? null,
-      heatingPower: num(sb.heating_power),
-    }));
+    const members = list.map((sb) => {
+      // Per-unit PV strings (2026-09-28): pv_power {pv1..pvN, total} + pv_name
+      // {pvN_name} — every MPPT channel the unit has, connected or not.
+      const pvNames = sb.pv_name ?? {};
+      const pvPower = sb.pv_power ?? {};
+      const pvChannels = Object.keys(pvPower)
+        .filter((k) => /^pv\d+$/.test(k))
+        .sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)))
+        .map((k) => {
+          const n = Number(k.slice(2));
+          return { n, name: pvNames[`${k}_name`] || `PV${n}`, watts: num(pvPower[k]) };
+        });
+      return {
+        sn: sb.device_sn,
+        name: sb.device_name,
+        pn: sb.device_pn ?? null,
+        soc: num(sb.battery_power),
+        outputW: num(sb.output_power),
+        chargeW: num(sb.bat_charge_power),
+        pvW: num(sb.photovoltaic_power),
+        pvChannels,
+        expansionPacks: Number(sb.sub_package_num ?? 0),
+        featureSwitch: sb.feature_switch ?? null,
+        chargingStatus: sb.charging_status ?? null,
+        errCode: sb.err_code ?? null,
+        heatingPower: num(sb.heating_power),
+      };
+    });
     // The Pro (A17C1) carries the expansion-pack MQTT channel (040a) and the
     // verified telemetry map — prefer it as the primary; else first member.
     const primary = members.find((m) => m.pn === "A17C1") ?? members[0];

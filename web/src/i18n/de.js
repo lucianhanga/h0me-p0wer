@@ -117,6 +117,7 @@ export const de = {
     },
     details: "Details",
     pvTotal: "PV gesamt",
+    pvNotConnected: "nicht angeschlossen",
     kwhToday: "{kwh} kWh heute",
     meterInfo: "{model} · {type} · SW {sw} · letztes Update {time}",
     noDataToday: "heute noch keine Daten",

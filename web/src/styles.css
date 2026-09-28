@@ -356,6 +356,19 @@ section {
   margin-left: auto;
 }
 
+/* PV channel that has never produced (no string wired to it) — dimmed,
+   dashed, not flippable (2026-09-28, "show disconnected PVs as disabled"). */
+.phase-card.off {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.pv-unit-label {
+  margin: 0.5rem 0 -0.25rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 @media (max-width: 600px) {
   .cards {
     grid-template-columns: repeat(2, 1fr);
