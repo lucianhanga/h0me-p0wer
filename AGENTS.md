@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-28, v1.5.105, `main`, working tree clean, nothing pending.**
+**As of 2026-09-28, v1.5.106, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4920,3 +4920,32 @@ side recovers — no action needed unless it persists for days.
   query to the BASE header rule; the media query keeps only
   phone-specific sizing. nav scrolls horizontally rather than producing
   a third row. Verified by screenshot at 1280px and 390px.
+
+## Outside temperature overlay on the battery-temperature chart (2026-09-28, user request)
+
+- User: "Graph tab — battery temperature: add also the outside
+  temperature, obtained by scraping the website which gives the
+  temperature for the current address from the config file."
+  Implemented via Open-Meteo's hourly API instead of HTML scraping —
+  same HOME_ADDRESS from .env (geocoded via the Welcome tab's existing
+  Nominatim + KV-cache path), but a stable API rather than markup that
+  breaks on every redesign. Free, keyless.
+- `fetchHourlyTemperatures()` (welcome-sources.js): Open-Meteo forecast
+  endpoint with `past_days=31&forecast_days=1&hourly=temperature_2m` —
+  one call covers every chart window up to 30d. `getOutsideTempSeries()`
+  (index.js) KV-caches the hourly series for 60 min (key
+  `outsideTempHourlyV1`) so the Graph tab's constant zoom/pan refetches
+  never hit Open-Meteo; a failed refresh serves the stale cache; no
+  HOME_ADDRESS → feature silently off.
+- /api/timeseries merged `outsideTempC` per bucket (nearest hourly
+  sample) — the handler became async (wrapped with a .catch → 500
+  envelope; everything else inside stays synchronous).
+- GraphTab: the battery-temperature chart appends a static "Outside"
+  series after the dynamic module series — dashed, neutral grey
+  (#90a4ae), width 1, so it reads as a reference line, not a fifth
+  module. i18n: graph.series.outsideTemp (en "Outside" / de "Außen" /
+  ro "Exterior"). lineStyle gained a `dashed` prop.
+- Verified: all 721 buckets of a 24h window carry outsideTempC
+  (6.7-26.7 °C, plausible late-September); screenshot shows the dashed
+  line tracing the overnight dip under the four module-temperature
+  lines with the Outside legend entry.

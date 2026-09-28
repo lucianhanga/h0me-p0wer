@@ -91,6 +91,19 @@ export function fetchWeather(lat, lon) {
   return fetchJson(url);
 }
 
+// Hourly outside temperature series for chart overlays (2026-09-28, user
+// request: Graph tab's battery-temperature chart gets an outside-temp line).
+// The forecast endpoint's past_days (max 92) covers history + today in ONE
+// call — a single request serves every chart window up to 30d. Free/keyless,
+// same provider as the Welcome tab's weather.
+export function fetchHourlyTemperatures(lat, lon, pastDays = 31) {
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
+    `&timezone=${encodeURIComponent("Europe/Berlin")}` +
+    `&past_days=${pastDays}&forecast_days=1&hourly=temperature_2m`;
+  return fetchJson(url);
+}
+
 export async function fetchPvgis(lat, lon, pv) {
   const key = `pvgis:${lat},${lon},${pv.peakKwp},${pv.aspect},${pv.tiltDeg}`;
   const hit = kvGet(key);

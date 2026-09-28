@@ -197,12 +197,32 @@ export default function GraphTab() {
     () =>
       GRAPHS.map((def, gi) => {
         const dynamic = def.dynamicSeries
-          ? modules.map((m, i) => ({
-              key: `${def.dynamicSeries}__${m.sn}`,
-              name: m.name,
-              color: MODULE_COLORS[i % MODULE_COLORS.length],
-              width: 2,
-            }))
+          ? modules
+              .map((m, i) => ({
+                key: `${def.dynamicSeries}__${m.sn}`,
+                name: m.name,
+                color: MODULE_COLORS[i % MODULE_COLORS.length],
+                width: 2,
+              }))
+              // Outside temperature as context on the battery-temperature
+              // chart (2026-09-28, user request) — hourly Open-Meteo at the
+              // HOME_ADDRESS location, merged into timeseries buckets
+              // server-side. Dashed neutral grey so it reads as a reference
+              // line, not a fifth module. All-null (no HOME_ADDRESS
+              // configured / fetch failed) just draws nothing.
+              .concat(
+                def.dynamicSeries === "temp"
+                  ? [
+                      {
+                        key: "outsideTempC",
+                        name: t("graph.series.outsideTemp"),
+                        color: "#90a4ae",
+                        width: 1,
+                        dashed: true,
+                      },
+                    ]
+                  : [],
+              )
           : null;
         return {
           ...def,
@@ -315,7 +335,7 @@ export default function GraphTab() {
           connectNulls: false,
           silent: !!s.silent,
           stack: s.stack,
-          lineStyle: { color: s.color, width: s.width },
+          lineStyle: { color: s.color, width: s.width, type: s.dashed ? "dashed" : "solid" },
           itemStyle: { color: s.color },
           areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
           emphasis: { disabled: true },

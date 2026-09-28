@@ -328,6 +328,7 @@ export const ro = {
       pvToHome: "PV spre casă",
       discharging: "Descărcare",
       charging: "Încărcare",
+      outsideTemp: "Exterior",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
     phases: "L1·L2·L3",
