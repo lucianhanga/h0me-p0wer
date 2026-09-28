@@ -172,7 +172,7 @@ const BATT_IN_ROW = { key: "battInKwh", labelKey: "dashboard.rows.toBattery", co
 // slipped past zero-export.
 const EXPORT_ROW = { key: "exportKwh", labelKey: "dashboard.rows.toGrid", color: "#e5544b" };
 
-function SourceCard({ type, title, data, formatLabel }) {
+export function SourceCard({ type, title, data, formatLabel }) {
   const t = useT();
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
   const [past, setPast] = useState(null); // /api/stats/period response (offset ≥ 1)

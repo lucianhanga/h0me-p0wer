@@ -10,9 +10,13 @@ const VIEW_STORAGE_KEY = "h0mep0wer.view";
 function loadView() {
   try {
     const v = localStorage.getItem(VIEW_STORAGE_KEY);
-    return v === "simple" ? "simple" : "full";
+    if (v === "simple" || v === "full") return v;
+    // Default is the SIMPLE view (2026-09-28, user request: "when you start
+    // the app start it in the simple view") — an explicit stored choice
+    // always wins; only a never-set preference lands on simple.
+    return "simple";
   } catch {
-    return "full";
+    return "simple";
   }
 }
 

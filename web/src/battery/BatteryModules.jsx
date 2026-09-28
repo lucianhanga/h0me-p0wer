@@ -28,7 +28,7 @@ const SEG_LEVELS = [
 const segLevel = (soc) =>
   soc == null ? null : SEG_LEVELS.find(([min]) => soc >= min)[1];
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
   // name, hero %, kWh, per-module legend) centered underneath — units sit
@@ -75,6 +75,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
     <div className={`batt-modules${stacked ? " stacked" : ""}`}>
       <div
         className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
+        style={heightPx ? { height: `${heightPx}px` } : undefined}
         title={t("battery.modules.tip")}
       >
         {modules.map((m) => (
@@ -108,6 +109,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             </span>
           )}
         </div>
+        {legend && (
         <div className="batt-modules-legend">
           {modules.map((m) => (
             <div key={m.key} className="batt-modules-row">
@@ -128,6 +130,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );
