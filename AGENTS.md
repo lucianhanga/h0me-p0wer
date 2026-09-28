@@ -5163,3 +5163,19 @@ side recovers — no action needed unless it persists for days.
   width 2.4em, same padding/font-size/line-height — all four measure
   exactly 38×29px (44px min-height on coarse pointers still applies to
   all equally).
+
+## Strategy decision card: full-width on phones + label-over-value metrics (2026-09-28, user screenshot)
+
+- User screenshot: the native-mode decision card rendered HALF-width on
+  the phone with the "last write" timestamp overlapping the SOC metric.
+  Root cause: the ≤600px media rule `.cards { repeat(2, 1fr) }` comes
+  AFTER the base `.cards-single { 1fr }` and wins the equal-specificity
+  tie — the lone card got a half-width cell (same tie-break class as the
+  2026-09-13 min-width bug: media-query overrides must come after or
+  out-specify). Fixed with `.cards.cards-single { 1fr }` inside the media
+  query. The metrics chips are now label-ABOVE-value cells (same pattern
+  as the Dashboard's top-days metric grid), so they stack cleanly instead
+  of scattering into the corner timestamp's space.
+- Verified via a static harness page (the card needs a live power-plan
+  decision, which POWER_PLAN_DISABLE=true on dev never produces):
+  full-width 366px at 390px, no timestamp overlap.
