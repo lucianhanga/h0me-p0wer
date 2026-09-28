@@ -11,6 +11,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // collapse by default (same .details-toggle pattern as PowerPlanCard.jsx).
 
 const fmtW = (v) => (v == null ? "—" : `${Math.round(v)} W`);
+const fmtKwh = (v) => (v == null ? "—" : `${v} kWh`);
 const fmtPct = (v) => (v == null ? "—" : `${v} %`);
 const fmtTemp = (v) => (v == null ? "—" : `${Math.round(v)} °C`);
 const onOff = (t, v) => (v == null ? "—" : v ? t("battery.on") : t("battery.off"));
@@ -157,6 +158,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           heroLvlClass={lvlClass}
           heroZoneLabel={zoneLabel}
           single={aggregate}
+          mode={mode}
         />
         <div className={`batt-status ${mode}`}>
           {mode === "charging" && (
@@ -224,22 +226,57 @@ function BatteryDetails({ live, config, features, constants, member = false, onR
     onRefresh().finally(() => setRefreshing(false));
   };
 
+  const usableWindowKwh =
+    config?.dischargeLowerLimitPct != null &&
+    config?.chargeUpperLimitPct != null &&
+    constants?.capacityKwh != null
+      ? Math.round(
+          (((config.chargeUpperLimitPct - config.dischargeLowerLimitPct) / 100) * constants.capacityKwh) * 100,
+        ) / 100
+      : null;
+
   return (
     <>
-      {config == null && features == null ? (
-        // Secondary battery (e.g. the Solarbank 4, 2026-09-24): monitored
-        // live-only — its config endpoints aren't verified for this hardware,
-        // so there is no Configuration/Status detail to expand.
-        <p className="muted" style={{ marginTop: 8 }}>
-          {member ? t("battery.memberNote") : t("battery.liveOnlyNote")}
+      {/* Collapsible per-unit details (2026-09-28, user request): capacity
+          breakdown for EVERY unit, plus the config card only where the
+          account limits are actually known (the primary unit). */}
+      <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        {t("battery.infoToggle")} <span className="chevron">{open ? "▾" : "▸"}</span>
+      </button>
+      {member && (
+        <p className="muted" style={{ marginTop: 4 }}>
+          {t("battery.memberNote")}
         </p>
-      ) : (
-        <>
-          <button className="details-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-            {t("battery.infoToggle")} <span className="chevron">{open ? "▾" : "▸"}</span>
-          </button>
-          {open && (
+      )}
+      {open && (
         <div className="param-cards">
+          <div className="card">
+            <div className="card-label">{t("battery.details.capacityTitle")}</div>
+            <ParamRow k={t("battery.details.totalCap")} v={fmtKwh(constants?.capacityKwh)} />
+            {(constants?.expansionPacks ?? 0) > 0 && (
+              <ParamRow k={t("battery.modules.mainUnit")} v={fmtKwh(constants?.baseCapacityKwh)} />
+            )}
+            {Array.from({ length: constants?.expansionPacks ?? 0 }, (_, i) => (
+              <ParamRow
+                key={`cap-exp${i}`}
+                k={t("battery.modules.expansion", { n: i + 1 })}
+                v={fmtKwh(constants?.expansionPackKwh)}
+              />
+            ))}
+            {usableWindowKwh != null && (
+              <ParamRow
+                k={t("battery.system.window", {
+                  min: config.dischargeLowerLimitPct,
+                  max: config.chargeUpperLimitPct,
+                })}
+                v={fmtKwh(usableWindowKwh)}
+              />
+            )}
+            <ParamRow k={t("battery.details.maxAc")} v={fmtW(constants?.maxAcOutputW)} />
+            <ParamRow k={t("battery.details.maxPv")} v={fmtW(constants?.maxPvInputW)} />
+          </div>
+
+          {(config != null || features != null) && (
           <div className="card">
             <div className="card-label">
               {t("battery.config.title")}
@@ -285,6 +322,7 @@ function BatteryDetails({ live, config, features, constants, member = false, onR
               {t("battery.info.configAppliesNote")}
             </div>
           </div>
+          )}
 
           <div className="card">
             <div className="card-label">
@@ -324,8 +362,6 @@ function BatteryDetails({ live, config, features, constants, member = false, onR
             );
           })}
         </div>
-          )}
-        </>
       )}
     </>
   );

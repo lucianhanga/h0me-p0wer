@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-28, v1.5.108, `main`, working tree clean, nothing pending.**
+**As of 2026-09-28, v1.5.109, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4987,3 +4987,29 @@ side recovers — no action needed unless it persists for days.
   aggregate is summary-only now; per-unit details live on the unit cards.
   BatteryDetails is back to being BatteryCard-only; BatterySystemTile's
   onRefresh prop dropped. Verified by screenshot.
+
+## Unit battery tiles: glass-cylinder restyle + per-unit details (2026-09-28, user request + reference pictures)
+
+- User provided two reference images (liquid-fill battery cylinders with
+  lightning arcs; 5-step red→orange→yellow→lime→green level ramp) and
+  asked the unit tiles (solarbank + extension) to follow that language.
+  BatteryModules.jsx restyled accordingly: dark glass tube with metallic
+  terminal nub + base band, per-module "liquid" fills with a glossy
+  surface ellipse (radial-gradient ::before), the 5-step ramp computed
+  from EACH module's own SOC (seg-crit/low/mid/good/full), and a soft
+  light streak flowing UP while charging / DOWN while discharging
+  (.flow-up/.flow-down on the container, driven by the card's existing
+  dominant-direction mode) — the reference's lightning extrapolated into
+  an animation our flat style can carry; prefers-reduced-motion disables
+  it. Each segment now also shows its stored kWh under the SOC %, and the
+  legend rows carry "stored / capacity kWh · soc % · SOH · temp".
+- **Collapsible details on every unit card** (BatteryDetails restructured):
+  a Capacity card for every unit (total / main / per-expansion / max AC
+  output / max PV input, plus the usable window only where the account
+  limits are actually known — the primary unit), the config card only
+  when config exists, the status card, and one card per expansion pack.
+  Members previously got only the "per-unit live view" note (kept, under
+  the toggle). i18n battery.details.* in en/de/ro.
+- Verified by screenshot (desktop + phone): SB4 main 8 % red / ext 35 %
+  yellow with kWh labels, Pro main 16 % / ext 15 %, toggles present,
+  layout intact.

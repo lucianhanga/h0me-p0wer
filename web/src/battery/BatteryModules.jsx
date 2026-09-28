@@ -10,15 +10,29 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // "≈ overall" estimate was tried for a day and rejected — identical fills
 // looked fabricated). Extracted from BatteryTab.jsx 2026-09-27 so the
 // simple view can render it standalone.
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false }) {
+//
+// Visual language (2026-09-28, user-provided reference pictures): a glass
+// cylinder with a metallic terminal nub, each module a LIQUID fill rising
+// from the bottom of its segment with a glossy surface ellipse, colored on
+// the classic 5-step ramp (red → orange → yellow → lime → green) by THAT
+// module's own SOC. While the unit charges/discharges, a soft light streak
+// flows upward/downward through the fills (the reference's lightning arcs,
+// extrapolated into an animation our flat style can carry).
+const SEG_LEVELS = [
+  [80, "seg-full"], // green
+  [55, "seg-good"], // lime
+  [35, "seg-mid"], // yellow
+  [15, "seg-low"], // orange
+  [0, "seg-crit"], // red
+];
+const segLevel = (soc) =>
+  soc == null ? null : SEG_LEVELS.find(([min]) => soc >= min)[1];
+
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle" }) {
   const t = useT();
   // single: the aggregate system card renders ONE segment for the whole
   // system — its "modules" are the member units, shown on their own cards.
   const packs = single ? 0 : (constants?.expansionPacks ?? 0);
-  // Single-module units (no expansion packs — the aggregate system card and
-  // the SB4) render as ONE full-height segment with the unit's own SOC —
-  // the vertical view is the only view since 2026-09-27 (the horizontal
-  // gauge was deleted).
   const modules = packs
     ? [
         {
@@ -52,16 +66,21 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         },
       ];
   const totalKwh = modules.reduce((a, m) => a + m.kwh, 0) || 1;
-  const lvlOf = (soc) =>
-    soc == null ? null : soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  const storedOf = (m) => (m.soc != null ? Math.round(((m.soc / 100) * m.kwh) * 100) / 100 : null);
   const anyUnknown = modules.some((m) => m.soc == null);
   return (
     <div className="batt-modules">
-      <div className="batt-seg" title={t("battery.modules.tip")}>
+      <div
+        className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
+        title={t("battery.modules.tip")}
+      >
         {modules.map((m) => (
           <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
-            <div className={`batt-seg-fill ${lvlOf(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
+            <div className={`batt-seg-fill ${segLevel(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
             <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>
+            <span className="batt-seg-kwh">
+              {storedOf(m) != null ? `${storedOf(m)} kWh` : ""}
+            </span>
           </div>
         ))}
       </div>
@@ -90,9 +109,10 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             <div key={m.key} className="batt-modules-row">
               <span className="batt-modules-name">{m.name}</span>
               <span className="batt-modules-detail">
-                {/* \u00a0 between a number and its unit — the line may wrap
+                {/*  between a number and its unit — the line may wrap
                     at the " · " separators but never split "100 %". */}
-                {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
+                {storedOf(m) != null ? `${storedOf(m)} / ${m.kwh} kWh` : `${m.kwh} kWh`} ·{" "}
+                {m.soc != null ? `${m.soc} %` : "—"}
                 {m.soh != null && ` · SOH ${m.soh} %`}
                 {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
               </span>

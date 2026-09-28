@@ -1873,40 +1873,64 @@ pre {
   margin-top: 0.9rem;
 }
 
+/* Glass-cylinder battery (2026-09-28, user-provided reference pictures):
+   the tube is a dark glass column with a metallic terminal nub and base
+   band; each module segment holds a "liquid" fill rising from its bottom
+   with a glossy surface ellipse; while charging/discharging a soft light
+   streak flows up/down through the fills (the reference's lightning arcs
+   adapted to our flat style). */
 .batt-seg {
   position: relative;
   width: 84px;
   height: 180px;
   flex-shrink: 0;
-  border: 2px solid #2a3441;
-  border-radius: 10px;
+  border: 2px solid #3a4550;
+  border-radius: 8px 8px 12px 12px;
   padding: 3px;
   display: flex;
   flex-direction: column;
   gap: 3px;
+  background: linear-gradient(90deg, #151b21 0%, #0d1114 55%, #131a20 100%);
+  box-shadow: inset 0 0 12px #00000088;
 }
 
-/* the little positive-terminal nub on top, like the horizontal gauge's cap */
+/* metallic positive-terminal nub on top */
 .batt-seg::before {
   content: "";
   position: absolute;
-  top: -9px;
+  top: -10px;
   left: 50%;
   transform: translateX(-50%);
   width: 30px;
-  height: 7px;
-  background: #2a3441;
+  height: 8px;
+  background: linear-gradient(180deg, #9aa7b2, #55616c 55%, #39434c);
   border-radius: 3px 3px 0 0;
+}
+
+/* metallic base band at the bottom */
+.batt-seg::after {
+  content: "";
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  height: 7px;
+  background: linear-gradient(180deg, #6b7884, #39434c);
+  border-radius: 0 0 10px 10px;
+  pointer-events: none;
 }
 
 .batt-seg-mod {
   position: relative;
-  border-radius: 6px;
-  background: #101418;
+  border-radius: 5px;
+  background: #0b0f12;
   overflow: hidden;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* faint glass seam between segments */
+  box-shadow: inset 0 0 0 1px #ffffff08;
 }
 
 .batt-seg-fill {
@@ -1917,20 +1941,66 @@ pre {
   transition: height 1s ease;
 }
 
-.batt-seg-fill.lvl-full {
-  background: linear-gradient(180deg, #6bb8f5, #3d8fe0);
+/* glossy "liquid surface" ellipse at the fill's top edge */
+.batt-seg-fill::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 7px;
+  background: radial-gradient(ellipse at 50% 0%, #ffffff70 0%, #ffffff18 60%, transparent 75%);
 }
 
-.batt-seg-fill.lvl-high {
-  background: linear-gradient(180deg, #74da92, #5fce80);
+/* energy streak flowing through the fill while charging/discharging */
+.batt-seg-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 15%, #ffffff33 45%, #ffffff66 50%, #ffffff33 55%, transparent 85%);
+  background-size: 100% 250%;
+  opacity: 0;
 }
 
-.batt-seg-fill.lvl-mid {
-  background: linear-gradient(180deg, #f9b468, #f7a44f);
+.flow-up .batt-seg-fill::after {
+  opacity: 1;
+  animation: batt-flow-up 2.4s linear infinite;
 }
 
-.batt-seg-fill.lvl-low {
-  background: linear-gradient(180deg, #e67474, #e05c5c);
+.flow-down .batt-seg-fill::after {
+  opacity: 1;
+  animation: batt-flow-down 2.4s linear infinite;
+}
+
+@keyframes batt-flow-up {
+  from { background-position-y: 130%; }
+  to { background-position-y: -130%; }
+}
+
+@keyframes batt-flow-down {
+  from { background-position-y: -130%; }
+  to { background-position-y: 130%; }
+}
+
+/* 5-step level ramp per segment SOC (from the reference pictures) */
+.batt-seg-fill.seg-full {
+  background: linear-gradient(180deg, #4ee06b, #27ae60);
+}
+
+.batt-seg-fill.seg-good {
+  background: linear-gradient(180deg, #b8e62e, #8bc34a);
+}
+
+.batt-seg-fill.seg-mid {
+  background: linear-gradient(180deg, #f5d33c, #d4ac0d);
+}
+
+.batt-seg-fill.seg-low {
+  background: linear-gradient(180deg, #f39c12, #d35400);
+}
+
+.batt-seg-fill.seg-crit {
+  background: linear-gradient(180deg, #e05c5c, #b03a3a);
 }
 
 .batt-seg-soc {
@@ -1938,6 +2008,15 @@ pre {
   z-index: 1;
   font-weight: 600;
   font-size: 0.8rem;
+  text-shadow: 0 1px 2px #000000aa;
+}
+
+.batt-seg-kwh {
+  position: relative;
+  z-index: 1;
+  font-size: 0.62rem;
+  color: #c9d3db;
+  text-shadow: 0 1px 2px #000000aa;
 }
 
 .batt-modules-legend {
@@ -1997,6 +2076,12 @@ pre {
 @media (prefers-reduced-motion: reduce) {
   .batt-seg-fill {
     transition: none;
+  }
+
+  .flow-up .batt-seg-fill::after,
+  .flow-down .batt-seg-fill::after {
+    animation: none;
+    opacity: 0;
   }
 }
 

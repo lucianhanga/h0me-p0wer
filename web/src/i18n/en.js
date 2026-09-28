@@ -231,7 +231,12 @@ export const en = {
     },
     liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
     memberNote: "part of the battery system — per-unit live view",
-    lowFloorWarn: "Discharge floor is at the factory 5% — the battery can drain into deep sleep overnight (it only wakes with solar). Raise it in the Anker app (e.g. 8–10%) to keep a reserve.",
+    details: {
+      capacityTitle: "Capacity",
+      totalCap: "Total",
+      maxAc: "Max AC output",
+      maxPv: "Max PV input",
+    },    lowFloorWarn: "Discharge floor is at the factory 5% — the battery can drain into deep sleep overnight (it only wakes with solar). Raise it in the Anker app (e.g. 8–10%) to keep a reserve.",
     infoToggle: "Battery information",
     info: {
       controllerTag: "Solarbank (controller)",
