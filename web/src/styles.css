@@ -1222,9 +1222,11 @@ pre {
     height: calc(100dvh - 100px);
   }
 
+  /* Five stacked charts can't share one landscape viewport; give each a
+     usable fixed height and let the page scroll (was /3 of the viewport —
+     ~70px strips, unreadable). */
   .chart-box-sm {
-    height: calc((100dvh - 220px) / 3);
-    min-height: 70px;
+    height: 210px;
   }
 
   /* The hint line under the chart costs height the landscape phone
@@ -1234,15 +1236,18 @@ pre {
   }
 }
 
-/* Smaller boxes for the three-graph layout (Graph tab). */
+/* Boxes for the per-topic graphs (Graph tab). Taller than the original
+   220/140px (2026-09-28, user request: "make the graphs higher so we can
+   see better the components represented") — with five stacked charts the
+   small boxes flattened short swings into unreadable noise. */
 .chart-box-sm {
   width: 100%;
-  height: 220px;
+  height: 320px;
 }
 
 @media (max-width: 600px) {
   .chart-box-sm {
-    height: 140px;
+    height: 210px;
   }
 }
 
@@ -1820,6 +1825,12 @@ pre {
 .batt-state-icon.idle {
   background: #8b98a51c;
   box-shadow: inset 0 0 0 1px #8b98a533;
+}
+
+/* Inline state icon in the Live tab's Battery tile value line. */
+.batt-card-value svg {
+  vertical-align: -0.12em;
+  margin-right: 0.12em;
 }
 
 .batt-state-icon.charging,

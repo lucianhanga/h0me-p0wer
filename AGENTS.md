@@ -5092,3 +5092,30 @@ side recovers — no action needed unless it persists for days.
 - Verified: pvUnits payload live; sticky markers flip channels to
   connected; screenshots phone (390px, full-width stacked cards) +
   desktop (side-by-side), scrollW == 390.
+
+## Battery state icons: MDI SVG paths replace emoji (2026-09-28, user request)
+
+- User: the charging/discharging/idle status deserves "some kind of icon —
+  search the best representation". Emoji render platform-dependently and
+  clash with the spartan style; the reference set for home-energy
+  dashboards is MDI (Home Assistant's family). New
+  `web/src/components/StateIcon.jsx` inlines three MDI paths
+  (Apache-2.0, no dependency): battery-charging (bolt) / battery-arrow-down
+  (draining) / power-standby (idle). `fill: currentColor` — the icons
+  inherit the state colors (green/purple/grey).
+- Used by BatteryTab's StatusBadge (unit cards + system tile; badge tint
+  + pulse unchanged) and the Live tab's Battery tile value line
+  (`.batt-card-value svg` alignment). The flow diagram's battery node
+  keeps its emoji — it's SVG <text>, embedding paths there is a layout
+  change for near-zero gain.
+
+## Graph tab: taller charts (2026-09-28, user request)
+
+- `.chart-box-sm` 220→320px desktop, 140→210px phone — with five stacked
+  charts the small boxes flattened short swings into noise ("make the
+  graphs higher so we can see better the components"). The landscape-phone
+  rule (`(100dvh - 220px)/3`, ~70px strips, written when there were three
+  charts) replaced with a fixed 210px — five charts can't share one
+  landscape viewport, the page scrolls instead.
+- Verified: desktop + 390px screenshots, all five charts legible,
+  scrollW == 390.

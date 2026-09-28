@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import FlowDiagram from "../FlowDiagram.jsx";
 import FlipTile from "../components/FlipTile.jsx";
+import StateIcon from "../components/StateIcon.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
@@ -231,14 +232,24 @@ export default function LiveTab() {
         >
           <div className="card">
             <div className="card-label">{t("live.tiles.battery")}</div>
-            <div className="card-value" style={{ color: "#c084fc" }}>
-              {battery
-                ? (battery.cells ?? 0) > 0
-                  ? `🔋 −${battW ?? 0} W`
-                  : battery.charge > 0
-                    ? `⚡ +${battW ?? 0} W`
-                    : `💤 ${t("live.battery.idle")}`
-                : "—"}
+            <div className="card-value batt-card-value" style={{ color: "#c084fc" }}>
+              {battery ? (
+                (battery.cells ?? 0) > 0 ? (
+                  <>
+                    <StateIcon mode="discharging" size={18} /> −{battW ?? 0} W
+                  </>
+                ) : battery.charge > 0 ? (
+                  <>
+                    <StateIcon mode="charging" size={18} /> +{battW ?? 0} W
+                  </>
+                ) : (
+                  <>
+                    <StateIcon mode="idle" size={18} /> {t("live.battery.idle")}
+                  </>
+                )
+              ) : (
+                "—"
+              )}
             </div>
             <div className="card-label">
               {battery

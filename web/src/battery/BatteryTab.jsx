@@ -4,6 +4,7 @@ import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
 import BatteryModules from "./BatteryModules.jsx";
+import StateIcon from "../components/StateIcon.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Rendered inside StrategyTab.jsx (moved out of its own top-level tab
@@ -61,11 +62,15 @@ function ParamRow({ k, v }) {
 }
 
 /* One expressive state badge instead of the old chevron stack + in-text
-   glyphs (2026-09-28, user request): ⚡ charging / 🔋 discharging / 💤 idle,
-   tinted per state, gently pulsing while energy actually flows. */
+   glyphs (2026-09-28, user request): MDI battery-charging / battery-arrow-
+   down / power-standby icons (StateIcon), tinted per state, gently pulsing
+   while energy actually flows. */
 function StatusBadge({ mode }) {
-  const icon = mode === "charging" ? "⚡" : mode === "discharging" ? "🔋" : "💤";
-  return <span className={`batt-state-icon ${mode}`}>{icon}</span>;
+  return (
+    <span className={`batt-state-icon ${mode}`}>
+      <StateIcon mode={mode} />
+    </span>
+  );
 }
 
 // One battery: animated SOC gauge (with the configured min/max markers right
