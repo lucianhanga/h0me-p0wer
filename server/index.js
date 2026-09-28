@@ -596,10 +596,12 @@ async function timeseriesInner(req, res) {
   // per physical module, 2026-09-27) for the Graph tab's module charts. No
   // cloud fallback exists for these (040a is realtime-only): they exist from
   // the MQTT subtopic fix onward, 48h retention.
+  const seenModules = new Set();
   for (const r of getModuleHistory(from - CLOUD_INTERVAL_MS, to)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     if (r.soc != null) add(bt, `soc__${r.module}`, r.soc);
     if (r.temperature_c != null) add(bt, `temp__${r.module}`, r.temperature_c);
+    seenModules.add(r.module);
   }
 
   // Source 2: cloud 20-min trend as ANCHOR points in buckets without local
@@ -907,12 +909,37 @@ async function timeseriesInner(req, res) {
   // Per-module metadata for the Graph tab's module charts (2026-09-27):
   // every solarbank + every expansion pack, keyed by their physical SNs —
   // matching the soc__<sn>/temp__<sn> fields emitted per bucket above.
-  const modules = [...latestBatteries.values()].flatMap((m) => [
+  // 2026-09-28 fix (user report: "there should be all 4... why did you
+  // remove them"): this list used to come from the LIVE members map alone —
+  // but expansions are MQTT-only state, so after any restart with a stalled
+  // broker the extension series silently vanished from the charts even
+  // though their history sat in module_snapshots. Now built as the UNION of
+  // live state (names, order) and the module keys actually present in this
+  // window's data — a series renders whenever its data exists.
+  const LEGACY_MODULE_KEYS = new Set(["main", "exp1"]); // pre-SN-keyed rows
+  const liveModules = [...latestBatteries.values()].flatMap((m) => [
     { sn: m.sn, name: m.name ?? m.sn },
-    ...(m.expansions ?? [])
-      .filter((e) => e.sn)
-      .map((e, i) => ({ sn: e.sn, name: `${m.name ?? m.sn} ext ${i + 1}` })),
+    ...(m.expansions ?? []).map((e, i) => ({
+      sn: e.sn ?? `${m.sn}-exp${i + 1}`,
+      name: `${m.name ?? m.sn} ext ${i + 1}`,
+    })),
   ]);
+  const moduleBySn = new Map(liveModules.map((m) => [m.sn, m]));
+  const nameFor = (key) => {
+    const exp = key.match(/^(.+)-exp(\d+)$/);
+    if (exp && moduleBySn.has(exp[1]))
+      return `${moduleBySn.get(exp[1]).name} ext ${exp[2]}`;
+    return key;
+  };
+  const modules = [
+    ...liveModules,
+    ...[...seenModules]
+      // -exp with no index: malformed key from an intermediate version
+      // (2 stray points, ages out with the 48h retention) — never render it.
+      .filter((k) => !moduleBySn.has(k) && !LEGACY_MODULE_KEYS.has(k) && !/-exp$/.test(k))
+      .sort()
+      .map((k) => ({ sn: k, name: nameFor(k) })),
+  ];
 
   // Outside temperature overlay for the battery-temperature chart: nearest
   // hourly Open-Meteo sample per bucket (hourly source resolution — finer

@@ -118,13 +118,27 @@ function TopDaysCard({ title, rows }) {
                     {t("dashboard.producedKwh", { kwh: d.pvProducedKwh })}
                   </span>
                 </div>
-                <div className="topdays-stats">
-                  <span>{t("dashboard.topdays.house", { kwh: d.homeKwh })}</span>
-                  <span className="wx-c-grid">{t("dashboard.topdays.grid", { kwh: d.gridKwh })}</span>
-                  <span className="wx-c-batt">
-                    {t("dashboard.topdays.battOut", { kwh: d.battKwh })}
-                    {d.battInKwh > 0 ? t("dashboard.topdays.battIn", { kwh: d.battInKwh }) : ""}
-                  </span>
+                {/* Symmetric 4-metric grid (2026-09-28, user request): every
+                    day shows the same four cells — label above, colored value
+                    below — instead of the old mixed free-text lines where the
+                    battery in/out wording ragged the layout. */}
+                <div className="topdays-metrics">
+                  <div>
+                    <span>{t("dashboard.topdays.house")}</span>
+                    <b>{d.homeKwh} kWh</b>
+                  </div>
+                  <div>
+                    <span>{t("dashboard.topdays.grid")}</span>
+                    <b className="wx-c-grid">{d.gridKwh} kWh</b>
+                  </div>
+                  <div>
+                    <span>{t("dashboard.topdays.battOut")}</span>
+                    <b className="wx-c-batt">{d.battKwh} kWh</b>
+                  </div>
+                  <div>
+                    <span>{t("dashboard.topdays.battIn")}</span>
+                    <b>{d.battInKwh} kWh</b>
+                  </div>
                 </div>
               </div>
             </div>
