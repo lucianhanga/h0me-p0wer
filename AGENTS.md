@@ -5119,3 +5119,47 @@ side recovers — no action needed unless it persists for days.
   landscape viewport, the page scrolls instead.
 - Verified: desktop + 390px screenshots, all five charts legible,
   scrollW == 390.
+
+## Graph module charts: meta list is data ∪ live, not live-only (2026-09-28, user report)
+
+- User: "Battery temperature / charge per module should show all 4
+  (solarbanks + extensions) and the outside temp — why did you remove
+  them?" Nothing was removed deliberately: the `modules` meta list in
+  /api/timeseries was built from the LIVE members map alone — but
+  expansion-pack state is MQTT-only, so after any restart with a stalled
+  broker (or before the first 040a arrives) the extension series silently
+  vanished even though their history sat in module_snapshots. Now the meta
+  is the UNION of live members (names, order) and the module keys actually
+  present in the window's data (Source 1d collects them while bucketing);
+  DB-only keys get named via the live unit ("<unit> ext N") or fall back
+  to the raw key. Legacy "main"/"exp1" keys and a malformed "-exp" (no
+  index) stray key are filtered out explicitly.
+
+## Strategy cards: taller cylinders, per-card timestamps, status spacing (2026-09-28, user requests)
+
+- `.batt-seg` 180→260px desktop, 150→200px phone ("make the batteries
+  longer/higher").
+- Every unit card gets the bottom-right "updated HH:MM:SS" stamp the
+  system tile already had (`.batt-sys-ts` reused; `.batt-gauge-card` is
+  now position:relative with extra bottom padding so the status line
+  never collides with the stamp).
+- `.batt-status` gains margin-top — breathing room between the module
+  legend and the discharging line.
+
+## Dashboard top-days: symmetric 4-metric grid (2026-09-28, user request)
+
+- The Highest/Lowest production days tiles used ragged free-text lines
+  ("battery 0.39 kWh out · 2.15 kWh in"). Now each day renders a fixed
+  4-cell grid — HOUSE / GRID / BATTERY OUT / BATTERY IN, muted uppercase
+  label above, tabular colored value below (grid orange, discharge
+  purple; battery-in stays grey per the Dashboard convention) — all four
+  cells always shown (0 kWh included) for symmetry. i18n keys changed
+  from sentence templates to plain labels (en/de/ro).
+
+## Header buttons: uniform box (2026-09-28, user request)
+
+- The flag/mic/bell/view-toggle buttons had four slightly different
+  padding/font-size combinations. One shared rule: inline-flex, centered,
+  width 2.4em, same padding/font-size/line-height — all four measure
+  exactly 38×29px (44px min-height on coarse pointers still applies to
+  all equally).

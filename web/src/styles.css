@@ -63,6 +63,25 @@ header h1 {
   align-self: center;
 }
 
+/* Header controls: one uniform box size for the flag, mic, bell and view
+   toggle (2026-09-28, user request) — glyph sizes differ per emoji, so the
+   box is normalized (same padding, font size, line height, min width). */
+.lang-btn,
+.ask-btn,
+.activity-bell,
+.view-toggle {
+  align-self: center;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4em; /* exact same box for all four — glyph widths differ */
+  min-height: 0;
+  padding: 0.25rem 0;
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
 nav {
   order: 7;
   flex-basis: 100%;
@@ -78,14 +97,6 @@ nav::-webkit-scrollbar {
 }
 
 /* Voice Q&A: mic button in the header + modal overlay with the answer. */
-.ask-btn {
-  padding: 0.15rem 0.5rem;
-  min-height: 0;
-  font-size: 1rem;
-  line-height: 1.4;
-  align-self: center;
-}
-
 .ask-btn.listening {
   border-color: #e05c5c;
   color: #e05c5c;
@@ -155,20 +166,13 @@ nav::-webkit-scrollbar {
 
 /* Language switcher — ONE cycling flag button (2026-09-27, user: "the
    languages make it only one button"): taps cycle EN → DE → RO. */
-.lang-btn {
-  align-self: center;
-  flex-shrink: 0;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.85rem;
+.lang-btn.nav-active {
+  border-color: #f7a44f;
+  color: #f7a44f;
 }
 
 nav button {
   flex-shrink: 0; /* never compress tabs to fit — scroll instead (one row) */
-}
-
-.lang-btn.nav-active {
-  border-color: #f7a44f;
-  color: #f7a44f;
 }
 
 nav button.nav-active {
@@ -1050,13 +1054,28 @@ pre {
   white-space: nowrap;
 }
 
-.topdays-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.1rem 0.6rem;
+/* Symmetric per-day metric grid (2026-09-28, user request): four fixed
+   cells per day — muted label above, tabular colored value below. */
+.topdays-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.15rem 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.topdays-metrics span {
+  display: block;
+  font-size: 0.66rem;
   color: #8b98a5;
-  font-size: 0.75rem;
-  margin-top: 0.15rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.topdays-metrics b {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1660,6 +1679,8 @@ pre {
 
 .batt-gauge-card {
   margin-bottom: 0.25rem;
+  position: relative; /* for the bottom-right update stamp */
+  padding-bottom: 1.7rem; /* keeps the status line clear of the stamp */
 }
 
 /* Per-card identity (2026-09-21) — each battery names itself on its OWN
@@ -1747,6 +1768,9 @@ pre {
   gap: 0.5rem;
   font-weight: 600;
   color: #8b98a5;
+  /* breathing room between the module legend and the status line
+     (2026-09-28, user request) */
+  margin-top: 0.7rem;
 }
 
 .batt-status.charging {
@@ -1924,7 +1948,7 @@ pre {
 .batt-seg {
   position: relative;
   width: 84px;
-  height: 180px;
+  height: 260px; /* taller cylinders (2026-09-28, user request) */
   flex-shrink: 0;
   border: 2px solid #3a4550;
   border-radius: 8px 8px 12px 12px;
@@ -2141,7 +2165,7 @@ pre {
 @media (max-width: 600px) {
   .batt-seg {
     width: 72px;
-    height: 150px;
+    height: 200px; /* taller on phones too (2026-09-28, user request) */
   }
 
   /* Phone layout (2026-09-28, user report): the legend's detail line
@@ -2200,11 +2224,7 @@ pre {
 /* --- Activity bell + panel (2026-09-27) ----------------------------------- */
 
 .activity-bell {
-  position: relative;
-  align-self: center;
-  flex-shrink: 0;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.9rem;
+  position: relative; /* anchor for the .activity-dot */
 }
 
 .activity-dot {
@@ -2276,13 +2296,6 @@ pre {
 }
 
 /* --- Simple view (2026-09-27, "Tesla way") -------------------------------- */
-
-.view-toggle {
-  align-self: center;
-  flex-shrink: 0;
-  padding: 0.2rem 0.45rem;
-  font-size: 0.85rem;
-}
 
 /* One calm column, lots of breathing space, the visuals do the talking. */
 .simple-home {

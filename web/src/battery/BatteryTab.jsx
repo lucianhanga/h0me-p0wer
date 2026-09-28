@@ -202,6 +202,10 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             {t("battery.lowFloorWarn")}
           </p>
         )}
+        {/* Per-unit update stamp, bottom-right like the system tile's
+            (2026-09-28, user request: "timestamps on the bottom right on
+            each tile"). */}
+        <div className="batt-sys-ts">{t("battery.system.updated", { time: fmtTime(live.ts) })}</div>
       </div>
 
       <BatteryDetails
