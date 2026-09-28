@@ -48,6 +48,41 @@ const FIELDS_0405 = {
   // toHomeW now.)
 };
 
+// Solarbank 4 (AE103) 0405 — community _AE103_0405 (2026-09-28). DIFFERENT
+// wire layout than the Solarbank 2 family (do NOT reuse the map above — the
+// blind reuse decoded soc=0 on real hardware, which is why AE103 was
+// REST-only until now): the SOC lives in a3 (ad is output_power there!),
+// temperature in a5, and ALL power fields are raw watts (the community map
+// carries no FACTOR for them, parser default = 1). New useful channels the
+// SB2 family doesn't have: c4 grid_power_signed (the docked system's grid
+// flow as the SB4 sees it) and ac battery_power_signed.
+const FIELDS_0405_AE103 = {
+  a3: { key: "soc", factor: 1 }, // battery_soc (unit total, incl. packs)
+  a4: { key: "batteryStatus", factor: 1 }, // 0 standby, 2 charging, ? discharging
+  a5: { key: "temperatureC", factor: 1, signed: true }, // main device temp, °C
+  ab: { key: "pvW", factor: 1 }, // photovoltaic_power (raw W on AE103)
+  ac: { key: "batteryPowerSignedW", factor: 1 }, // battery_power_signed (verified: + charge / − discharge)
+  ad: { key: "outputW", factor: 1 }, // output_power (TOTAL inverter output)
+  ae: { key: "acOutputSignedW", factor: 1 }, // ac_output_power_signed
+  bb: { key: "heatingPower", factor: 1 },
+  bc: { key: "gridToBatteryW", factor: 1 },
+  bd: { key: "maxLoadW", factor: 1 },
+  // Dock-era caveat (verified 2026-09-28): behind a Power Dock c4/c5 are
+  // unit-local, NOT whole-system channels — c4 read exactly −outputW and
+  // c5 read 0 while the house drew ~350 W. scen_info remains the source
+  // for whole-house home_load_power; these are kept for debugging only.
+  c4: { key: "gridSignedW", factor: 1 }, // grid_power_signed (unit-local behind dock)
+  c5: { key: "homeLoadW", factor: 1 }, // home_demand (0 behind a dock)
+  c6: { key: "pv1W", factor: 1 },
+  c7: { key: "pv2W", factor: 1 },
+  c8: { key: "pv3W", factor: 1 },
+  c9: { key: "pv4W", factor: 1 },
+};
+
+function fields0405For(pn) {
+  return pn === "AE103" ? FIELDS_0405_AE103 : FIELDS_0405;
+}
+
 // Round like the community client: decimals derived from the factor.
 function applyFactor(raw, factor) {
   if (factor === 1) return raw;
@@ -159,6 +194,38 @@ export function decodeExpansionData(fields) {
     });
   }
   return { ts: Date.now(), packCount, mainSoc, packs };
+}
+
+// Decode a 040a expansion message from a SOLARBANK 4 (AE103) — community
+// _AE103_040a. Different layout than the SB2 family's 040a: a2 = pack count
+// (shows 2 even with 1 pack installed), a3 = TOTAL battery SOC, then field
+// a4 is the MAIN pack composite and a5..a9 the expansion packs (one per
+// field). Composite byte offsets: 0: controller SN (str 16), 26: temperature
+// (ui, two's complement), 27: battery status (0 standby / 1 discharging /
+// 2 charging), 28: SOC (ui), 29: SOH (ui). Exported for testing.
+export function decodeExpansionDataAE103(fields) {
+  const packCount = fields.a2 ? decodeValue(fields.a2) : null;
+  const totalSoc = fields.a3 ? decodeValue(fields.a3) : null;
+  const readPack = (hex) => {
+    const f = fields[hex];
+    if (!f?.value || f.value.length < 30) return null;
+    const v = f.value;
+    return {
+      controllerSn: v.subarray(0, 16).toString("utf8").replaceAll("\0", "").trim() || null,
+      status: v[27],
+      temperatureC: v[26] > 127 ? v[26] - 256 : v[26],
+      soc: v[28],
+      soh: v[29],
+      sn: null, // the AE103 040a composite carries no separate pack SN
+    };
+  };
+  const main = readPack("a4");
+  const packs = [];
+  for (let idx = 1; idx <= 5; idx++) {
+    const p = readPack((0xa4 + idx).toString(16));
+    if (p) packs.push(p);
+  }
+  return { ts: Date.now(), packCount, mainSoc: main?.soc ?? null, main, packs };
 }
 
 // Build the realtime-trigger command (0057): the device streams 0405 telemetry
@@ -359,7 +426,9 @@ export class AnkerMqtt {
         return; // bad checksum or not a Solix binary message
       }
       if (msg.msgtype === MSGTYPE_EXPANSION) {
-        const exp = decodeExpansionData(msg.fields);
+        const exp = this.pn === "AE103"
+          ? decodeExpansionDataAE103(msg.fields)
+          : decodeExpansionData(msg.fields);
         this.lastDataAt = Date.now(); // device data = connection is alive
         this.backoffMs = 5000;
         if (!this.loggedFirstExpansion) {
@@ -378,7 +447,7 @@ export class AnkerMqtt {
       }
 
       const out = { ts: Date.now() };
-      for (const [hexName, def] of Object.entries(FIELDS_0405)) {
+      for (const [hexName, def] of Object.entries(fields0405For(this.pn))) {
         const f = msg.fields[hexName];
         if (!f) continue;
         let raw = decodeValue(f);
@@ -395,24 +464,38 @@ export class AnkerMqtt {
         }
       }
       // Map onto the REST sync payload shape: outputW is the TOTAL inverter
-      // output (d3 output_power) — NOT the cells-only b7 bat_discharge_power
-      // (b7 was preferred until 2026-09-27 and made MQTT/REST alternate
-      // outputW between 0 and the total — the flicker that cascaded through
-      // the flow diagram, Home line, gauge and graphs). toHomeW is REST-only
-      // (c4 is home_demand ≈ homeLoadW, a different quantity than
-      // to_home_load — see the map comment). Only forward keys that actually
-      // carry a value — a null would overwrite the REST channel's value on
-      // the shared latestBattery object.
+      // output (d3 output_power on SB2, ad on AE103) — NOT the cells-only
+      // b7 bat_discharge_power (b7 was preferred until 2026-09-27 and made
+      // MQTT/REST alternate outputW between 0 and the total — the flicker
+      // that cascaded through the flow diagram, Home line, gauge and
+      // graphs). toHomeW is REST-only (c4 on SB2 is home_demand ≈ homeLoadW,
+      // a different quantity than to_home_load). Only forward keys that
+      // actually carry a value — a null would overwrite the REST channel's
+      // value on the shared latestBattery object.
+      const isAE103 = this.pn === "AE103";
       const data = {
         ts: out.ts,
         soc: out.soc ?? out.mainSoc ?? null,
         mainSoc: out.mainSoc ?? null,
         outputW: out.outputW ?? out.dischargeW ?? out.acOutputW ?? 0,
-        chargeW: out.chargeW ?? 0,
+        // AE103 has no separate charge field — ac battery_power_signed
+        // carries the signed cell flow (verified live 2026-09-28: ac read
+        // −380 while the unit discharged 380 W, so POSITIVE = charging).
+        chargeW:
+          out.chargeW ??
+          (out.batteryPowerSignedW != null ? Math.max(0, out.batteryPowerSignedW) : 0),
         pvW: out.pvW ?? 0,
         temperatureC: out.temperatureC ?? null,
       };
       if (out.homeLoadW != null) data.homeLoadW = out.homeLoadW;
+      // AE103 extras (raw pass-through; consumers pick what they know):
+      // gridSignedW = the docked system's grid flow as the unit sees it,
+      // per-string pv1-4W, batteryStatus, heatingPower, maxLoadW.
+      if (isAE103) {
+        for (const k of ["gridSignedW", "pv1W", "pv2W", "pv3W", "pv4W", "batteryStatus", "heatingPower", "maxLoadW", "batteryPowerSignedW"]) {
+          if (out[k] != null) data[k] = out[k];
+        }
+      }
       if (!this.loggedFirstData) {
         this.loggedFirstData = true;
         console.log(

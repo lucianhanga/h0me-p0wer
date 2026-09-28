@@ -1561,12 +1561,12 @@ function recomputeAggregate() {
   };
 }
 
-// MQTT telemetry maps are verified only for the Solarbank 2 family
-// (A17C0-C3). The AE103 (Solarbank 4) streams a different map — decoding it
-// with ours produced garbage (soc=0 while REST read 17%, seen 2026-09-27),
-// so unknown models run REST-only instead of writing wrong values into the
-// aggregate. Add AE103 here once its map is verified (ticket #210).
-const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3"]);
+// MQTT telemetry maps are verified per model. The Solarbank 2 family
+// (A17C0-C3) shares one map; the AE103 (Solarbank 4) uses its own
+// (FIELDS_0405_AE103 + decodeExpansionDataAE103, from the community
+// _AE103_0405/_AE103_040a) — decoding AE103 with the SB2 map produced
+// garbage (soc=0 while REST read 17%, seen 2026-09-27).
+const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3", "AE103"]);
 
 function startBatteryMqtts() {
   if (!latestBatteries.size) return;
@@ -1596,8 +1596,15 @@ function startBatteryMqtts() {
         saveBatterySnapshot(latestBattery);
         // Per-module history (Graph tab): keyed by the PHYSICAL module's SN
         // (unit SN for each solarbank, pack SN for expansions — 2026-09-27).
-        if (d.mainSoc != null || d.temperatureC != null) {
-          saveModuleSnapshot(d.ts, m.sn, d.mainSoc ?? d.soc ?? null, d.temperatureC ?? null);
+        // The module value must be the MAIN PACK's SOC: for the SB2 family
+        // that's 0405 a3 (mainSoc); for the AE103, 0405 a3 is the UNIT TOTAL
+        // and the main pack's SOC only exists in 040a — the `?? d.soc`
+        // fallback would write the unit total under the module key, mixing
+        // semantics with the 040a writes (2026-09-28: SB4 read a bogus 18%
+        // = mix of main-pack 8% and unit-total 27%).
+        const moduleSoc = d.mainSoc ?? (m.pn === "AE103" ? null : d.soc ?? null);
+        if (moduleSoc != null || d.temperatureC != null) {
+          saveModuleSnapshot(d.ts, m.sn, moduleSoc, d.temperatureC ?? null);
         }
       } catch (err) {
         console.warn("[db] failed to persist battery snapshot:", err.message);
@@ -1608,18 +1615,23 @@ function startBatteryMqtts() {
     // expansion batteries (BP5000 etc.) — merged into the unit and the
     // aggregate, carried forward across REST syncs (see upsertMember).
     client.onExpansion = (d) => {
-      upsertMember({ sn: m.sn, mainSoc: d.mainSoc ?? undefined, expansions: d.packs });
+      // Normalize pack identity: the AE103 (Solarbank 4) 040a composite has
+      // no separate pack SN (only the 16-char controllerSn) — give sn-less
+      // packs a stable synthetic key so module_snapshots, the /api/timeseries
+      // modules meta (which filters on sn) and the UI all key them the same.
+      const packs = d.packs.map((p, i) => (p.sn ? p : { ...p, sn: `${m.sn}-exp${i + 1}` }));
+      upsertMember({ sn: m.sn, mainSoc: d.mainSoc ?? undefined, expansions: packs });
       recomputeAggregate();
       lastCloudOkAt = Date.now();
       try {
         if (d.mainSoc != null) saveModuleSnapshot(d.ts, m.sn, d.mainSoc, latestBattery.temperatureC ?? null);
-        d.packs.forEach((p) => saveModuleSnapshot(d.ts, p.sn ?? `${m.sn}-exp`, p.soc ?? null, p.temperatureC ?? null));
+        packs.forEach((p) => saveModuleSnapshot(d.ts, p.sn, p.soc ?? null, p.temperatureC ?? null));
       } catch (err) {
         console.warn("[db] failed to persist module snapshot:", err.message);
       }
-      if (d.packs.length > 0 && !client.expansionLogged) {
+      if (packs.length > 0 && !client.expansionLogged) {
         client.expansionLogged = true;
-        activity("expansion_detected", { n: d.packs.length, sn: d.packs[0]?.sn ?? null });
+        activity("expansion_detected", { n: packs.length, sn: packs[0]?.sn ?? null });
       }
       broadcastLive({ batteryTriggered: true });
     };
@@ -1665,12 +1677,18 @@ async function syncBatteryInner() {
       // upsertMember preserves each unit's MQTT-only fields across REST.
       for (const m of info.members ?? []) {
         upsertMember(m);
-        // Per-module SOC history for REST-only units too (the SB4's map is
-        // unverified so it gets no MQTT — its SOC comes from this sync).
-        try {
-          saveModuleSnapshot(info.ts, m.sn, m.soc ?? null, m.temperatureC ?? null);
-        } catch {
-          /* non-fatal */
+        // Per-module SOC history for units WITHOUT an MQTT map only
+        // (2026-09-28 fix): the module key is the unit's SN, and MQTT 040a
+        // writes the MAIN PACK's SOC under it — writing REST's unit-TOTAL
+        // soc under the same key mixes two semantics (SB4: main pack 8%
+        // vs unit total 27% averaged into a meaningless 18.6%). A gap
+        // during an MQTT stall is more honest than a mixed value.
+        if (!MQTT_KNOWN_PN.has(m.pn)) {
+          try {
+            saveModuleSnapshot(info.ts, m.sn, m.soc ?? null, m.temperatureC ?? null);
+          } catch {
+            /* non-fatal */
+          }
         }
       }
       // REST has no temperature field — carry the last MQTT-sourced value
