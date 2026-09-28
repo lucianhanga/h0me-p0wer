@@ -5179,3 +5179,20 @@ side recovers — no action needed unless it persists for days.
 - Verified via a static harness page (the card needs a live power-plan
   decision, which POWER_PLAN_DISABLE=true on dev never produces):
   full-width 366px at 390px, no timestamp overlap.
+
+## Simple view: both batteries as parallel vertical stacks (2026-09-28, user request)
+
+- User: "in the simplified view present both batteries vertical, parallel,
+  one near the other, with the texts including the percentage
+  underneath." SimpleHome used to render the AGGREGATE stack only; now it
+  renders one BatteryModules column per UNIT (members from
+  /api/battery/params; falls back to the aggregate/primary for
+  single-battery setups). BatteryModules gains a `stacked` prop: cylinder
+  on top, all texts centered underneath — unit name (`.batt-modules-title`,
+  rendered first under the cylinder), hero % + kWh, then the per-module
+  legend. Phones keep both columns SIDE BY SIDE (flex-wrap: nowrap, gap
+  1.25rem, legend rows 0.72rem — long detail lines wrap at the " · "
+  separators, NBSP keeps number+unit together). Per-unit zone badge
+  (LOW/FULL) computed per unit.
+- Verified: desktop (two parallel stacks, centered texts) + 390px phone
+  (side by side, scrollW == 390).

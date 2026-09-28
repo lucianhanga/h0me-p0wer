@@ -28,8 +28,11 @@ const SEG_LEVELS = [
 const segLevel = (soc) =>
   soc == null ? null : SEG_LEVELS.find(([min]) => soc >= min)[1];
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle" }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false }) {
   const t = useT();
+  // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
+  // name, hero %, kWh, per-module legend) centered underneath — units sit
+  // side by side, one column each.
   // single: the aggregate system card renders ONE segment for the whole
   // system — its "modules" are the member units, shown on their own cards.
   const packs = single ? 0 : (constants?.expansionPacks ?? 0);
@@ -69,7 +72,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
   const storedOf = (m) => (m.soc != null ? Math.round(((m.soc / 100) * m.kwh) * 100) / 100 : null);
   const anyUnknown = modules.some((m) => m.soc == null);
   return (
-    <div className="batt-modules">
+    <div className={`batt-modules${stacked ? " stacked" : ""}`}>
       <div
         className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
         title={t("battery.modules.tip")}
@@ -85,6 +88,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         ))}
       </div>
       <div className="batt-modules-side">
+        {stacked && live.name && <div className="batt-modules-title">{live.name}</div>}
         <div className="batt-modules-hero">
           <span className="batt-gauge-pct">
             {live.soc ?? 0} %{heroZoneLabel && <span className={`batt-gauge-zone ${heroLvlClass}`}>{heroZoneLabel}</span>}

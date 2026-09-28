@@ -2339,6 +2339,67 @@ pre {
   max-width: 460px;
 }
 
+/* Both units as parallel vertical stacks (2026-09-28, user request): one
+   column per battery, cylinders side by side, texts centered underneath. */
+.simple-batt-row {
+  display: flex;
+  gap: 2.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.simple-batt-row .simple-batt {
+  width: auto;
+  max-width: none;
+}
+
+.batt-modules.stacked {
+  flex-direction: column;
+  align-items: center;
+}
+
+.batt-modules.stacked .batt-modules-side {
+  align-items: center;
+  text-align: center;
+}
+
+.batt-modules.stacked .batt-modules-hero {
+  align-items: center;
+}
+
+.batt-modules.stacked .batt-modules-row {
+  align-items: center;
+}
+
+.batt-modules.stacked .batt-modules-detail {
+  text-align: center;
+}
+
+.batt-modules-title {
+  font-weight: 600;
+  color: #e8ecef;
+  margin-bottom: 0.1rem;
+}
+
+/* Phones: keep the two units side by side (the whole point of the parallel
+   stacks) — narrower columns, smaller legend text; long detail lines wrap
+   at the " · " separators, never mid-number (NBSP). */
+@media (max-width: 600px) {
+  .simple-batt-row {
+    flex-wrap: nowrap;
+    gap: 1.25rem;
+  }
+
+  .simple-batt-row .simple-batt {
+    min-width: 0;
+  }
+
+  .batt-modules.stacked .batt-modules-row {
+    font-size: 0.72rem;
+  }
+}
+
 @media (max-width: 600px) {
   .simple-home {
     gap: 1.75rem;
