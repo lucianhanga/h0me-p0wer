@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-27, v1.5.104, `main`, working tree clean, nothing pending.**
+**As of 2026-09-28, v1.5.105, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4862,3 +4862,40 @@ side recovers — no action needed unless it persists for days.
   11.6; /api/battery/params aggregate 11.6/stored 1.16@10%, members
   5.0/6.6. Meter-2 Modbus still hangs (user-side power-cycle pending),
   so grid stays cloud-live — unaffected by this fix.
+
+## Solarbank 4 (AE103) MQTT map + its BP5000 expansion (2026-09-28, user added a BP5000 to the SB4)
+
+- User: "I added an extension battery for the Solarbank 4 — 10 kWh, system
+  16.6 kWh." Capacity adapted automatically (sub_package_num=1 via
+  scen_info → resolveConstants), but the SB4 was REST-only (ticket #210's
+  open half): no per-module data, no fast telemetry.
+- The community map (thomluther/anker-solix-api mqttmap.py) HAS
+  _AE103_0405/_AE103_0404/_AE103_040a — a DIFFERENT wire layout than the
+  SB2 family: SOC in a3 (ad is output_power there — the blind SB2-map
+  reuse on 2026-09-27 decoded soc=0), temperature a5, and ALL power
+  fields raw watts (community parser factor default is 1 — SB2 uses
+  ×0.1/×0.01 deci/centiwatts). Implemented per-pn map selection
+  (fields0405For) + decodeExpansionDataAE103 (040a: a3=total soc, a4=
+  main pack composite, a5..a9 packs; offsets 26 temp / 27 status / 28
+  soc / 29 soh; NO separate pack SN — sn-less packs get a stable
+  synthetic "<unitSn>-exp<N>" key in index.js's onExpansion so
+  module_snapshots, /api/timeseries modules meta and the UI key them
+  identically). AE103 added to MQTT_KNOWN_PN.
+- **Live-verified against REST** (night, discharging): MQTT soc=27 ==
+  REST 27; out(ad)=370-380 == REST output_power 370; charge=0 ==
+  REST bat_charge_power=0 after the sign fix — ac
+  battery_power_signed read −380 WHILE discharging, so POSITIVE =
+  charging (chargeW = max(0, ac)). battery_status a4: 1 = discharging
+  (community map had "?" there). SB4's BP5000 decoded: 48% SOC,
+  SOH 100%, 20 °C (main pack 8% → unit 27% capacity-weighted ✓).
+- **Dock-era caveat, verified**: behind the Power Dock the AE103's c4
+  (grid_power_signed) reads exactly −outputW and c5 (home_demand) reads
+  0 while the house drew ~350 W — both unit-local, NOT whole-system
+  channels; scen_info home_load_power stays the whole-house source.
+  Not wired into the aggregate.
+- BatteryModules legend detail: NBSP between numbers and units so
+  wraps happen only at " · " separators ("SOH 100 %" no longer splits).
+- Ticket #210's remaining half: SB4 CONTROL surface (set schedule /
+  usage mode writes) still unverified. PV field factors (c6-c9, ab)
+  unverifiable tonight (PV=0) — sanity-check them on the next sunny
+  day against REST photovoltaic_power.

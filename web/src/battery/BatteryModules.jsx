@@ -90,9 +90,11 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             <div key={m.key} className="batt-modules-row">
               <span className="batt-modules-name">{m.name}</span>
               <span className="batt-modules-detail">
-                {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
-                {m.soh != null && ` · SOH ${m.soh} %`}
-                {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
+                {/* \u00a0 between a number and its unit — the line may wrap
+                    at the " · " separators but never split "100 %". */}
+                {m.kwh} kWh · {m.soc != null ? `${m.soc} %` : "—"}
+                {m.soh != null && ` · SOH ${m.soh} %`}
+                {m.tempC != null && ` · ${Math.round(m.tempC)} °C`}
               </span>
             </div>
           ))}

@@ -1561,12 +1561,12 @@ function recomputeAggregate() {
   };
 }
 
-// MQTT telemetry maps are verified only for the Solarbank 2 family
-// (A17C0-C3). The AE103 (Solarbank 4) streams a different map — decoding it
-// with ours produced garbage (soc=0 while REST read 17%, seen 2026-09-27),
-// so unknown models run REST-only instead of writing wrong values into the
-// aggregate. Add AE103 here once its map is verified (ticket #210).
-const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3"]);
+// MQTT telemetry maps are verified per model. The Solarbank 2 family
+// (A17C0-C3) shares one map; the AE103 (Solarbank 4) uses its own
+// (FIELDS_0405_AE103 + decodeExpansionDataAE103, from the community
+// _AE103_0405/_AE103_040a) — decoding AE103 with the SB2 map produced
+// garbage (soc=0 while REST read 17%, seen 2026-09-27).
+const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3", "AE103"]);
 
 function startBatteryMqtts() {
   if (!latestBatteries.size) return;
@@ -1608,18 +1608,23 @@ function startBatteryMqtts() {
     // expansion batteries (BP5000 etc.) — merged into the unit and the
     // aggregate, carried forward across REST syncs (see upsertMember).
     client.onExpansion = (d) => {
-      upsertMember({ sn: m.sn, mainSoc: d.mainSoc ?? undefined, expansions: d.packs });
+      // Normalize pack identity: the AE103 (Solarbank 4) 040a composite has
+      // no separate pack SN (only the 16-char controllerSn) — give sn-less
+      // packs a stable synthetic key so module_snapshots, the /api/timeseries
+      // modules meta (which filters on sn) and the UI all key them the same.
+      const packs = d.packs.map((p, i) => (p.sn ? p : { ...p, sn: `${m.sn}-exp${i + 1}` }));
+      upsertMember({ sn: m.sn, mainSoc: d.mainSoc ?? undefined, expansions: packs });
       recomputeAggregate();
       lastCloudOkAt = Date.now();
       try {
         if (d.mainSoc != null) saveModuleSnapshot(d.ts, m.sn, d.mainSoc, latestBattery.temperatureC ?? null);
-        d.packs.forEach((p) => saveModuleSnapshot(d.ts, p.sn ?? `${m.sn}-exp`, p.soc ?? null, p.temperatureC ?? null));
+        packs.forEach((p) => saveModuleSnapshot(d.ts, p.sn, p.soc ?? null, p.temperatureC ?? null));
       } catch (err) {
         console.warn("[db] failed to persist module snapshot:", err.message);
       }
-      if (d.packs.length > 0 && !client.expansionLogged) {
+      if (packs.length > 0 && !client.expansionLogged) {
         client.expansionLogged = true;
-        activity("expansion_detected", { n: d.packs.length, sn: d.packs[0]?.sn ?? null });
+        activity("expansion_detected", { n: packs.length, sn: packs[0]?.sn ?? null });
       }
       broadcastLive({ batteryTriggered: true });
     };
