@@ -19,10 +19,14 @@ header {
   display: flex;
   align-items: baseline;
   gap: 0.75rem;
-  /* One row on DESKTOP (2026-09-27, user request — German tab titles
-     wrapped it to two rows): the nav scrolls horizontally instead of
-     wrapping. Phones override this below (their own two-row layout). */
-  flex-wrap: nowrap;
+  /* TWO rows on ALL widths (2026-09-28, user request — same layout as the
+     phone view): row 1 = title + language/mic/bell/view-toggle (+ version
+     on desktop), row 2 = the tab nav, full width. Explicit orders so the
+     control group never leaves row 1; the flag button's auto margin
+     right-aligns the group. The nav scrolls horizontally if it ever
+     overflows instead of pushing to a third row. */
+  flex-wrap: wrap;
+  row-gap: 0.4rem;
   border-bottom: 1px solid #2a3238;
   margin-bottom: 1.5rem;
   /* Sticky, app-like top bar (mobile best practice). */
@@ -33,7 +37,35 @@ header {
   padding: 0.5rem 0;
 }
 
+header h1 {
+  order: 1;
+}
+
+.lang-btn {
+  order: 2;
+  margin-left: auto;
+}
+
+.ask-btn {
+  order: 3;
+}
+
+.activity-bell {
+  order: 4;
+}
+
+.view-toggle {
+  order: 5;
+}
+
+.app-version {
+  order: 6;
+  align-self: center;
+}
+
 nav {
+  order: 7;
+  flex-basis: 100%;
   display: flex;
   gap: 0.5rem;
   flex-wrap: nowrap;
@@ -177,46 +209,8 @@ nav button.nav-active {
     display: none;
   }
 
-  /* Phone header = TWO rows (2026-09-27): row 1 = title + language flags,
-     row 2 = mic + activity bell + view toggle + tab nav. Earlier layout
-     broke to THREE rows once the bell/toggle joined row 1 — the language
-     flags got pushed to their own line ("expands on the second line
-     because it's too long"). Ordering is explicit so the flags never
-     leave row 1; the nav takes the remaining row-2 width and scrolls. */
-  header {
-    flex-wrap: wrap;
-    row-gap: 0.4rem;
-  }
-
-  h1 {
-    order: 1;
-  }
-
-  /* The single cycling flag button (2026-09-27, user: "the languages make
-     it only one button") — row 1 fits title + flag + mic + bell + toggle
-     again, so the tabs go back to their own full-width row. */
-  .lang-btn {
-    order: 2;
-    margin-left: auto;
-  }
-
-  .ask-btn {
-    order: 3;
-  }
-
-  .activity-bell {
-    order: 4;
-  }
-
-  .view-toggle {
-    order: 5;
-  }
-
-  nav {
-    order: 6;
-    flex-basis: 100%;
-  }
-
+  /* The two-row header layout (title + controls / tabs) is the BASE rule
+     for all widths since 2026-09-28 — phones only tighten the spacing. */
   header {
     gap: 0.5rem;
     margin-bottom: 1rem;

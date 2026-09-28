@@ -4899,3 +4899,24 @@ side recovers — no action needed unless it persists for days.
   usage mode writes) still unverified. PV field factors (c6-c9, ab)
   unverifiable tonight (PV=0) — sanity-check them on the next sunny
   day against REST photovoltaic_power.
+
+## Module-history semantics fix + two-row header on all widths (2026-09-28)
+
+- **Module SOC history mixed two semantics under one key** (found while
+  verifying the SB4's graphs): the module_snapshots key is the unit SN,
+  and MQTT 040a writes the MAIN PACK's SOC under it — but the REST sync
+  wrote the unit-TOTAL soc under the same key (and the AE103's 0405
+  `?? d.soc` fallback did too, since AE103's 0405 a3 IS the unit total,
+  unlike the SB2's a3 = main pack). Result: the SB4's module line read a
+  meaningless 18% (mix of main-pack 8% and unit-total 27%). Fixes:
+  syncBatteryInner writes module snapshots only for models with NO MQTT
+  map (`!MQTT_KNOWN_PN.has(m.pn)`); the onData fallback is gated to
+  non-AE103 (`d.mainSoc ?? (pn === "AE103" ? null : d.soc)`). A gap
+  during an MQTT stall is more honest than a mixed value.
+- **Header: two rows on ALL widths** (user request — browser should look
+  like the phone view): row 1 = title + flag/mic/bell/view-toggle (+
+  version, desktop only), row 2 = tab nav full width. The explicit
+  flex orders + the flag button's auto margin moved from the phone media
+  query to the BASE header rule; the media query keeps only
+  phone-specific sizing. nav scrolls horizontally rather than producing
+  a third row. Verified by screenshot at 1280px and 390px.

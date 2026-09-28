@@ -1596,8 +1596,15 @@ function startBatteryMqtts() {
         saveBatterySnapshot(latestBattery);
         // Per-module history (Graph tab): keyed by the PHYSICAL module's SN
         // (unit SN for each solarbank, pack SN for expansions — 2026-09-27).
-        if (d.mainSoc != null || d.temperatureC != null) {
-          saveModuleSnapshot(d.ts, m.sn, d.mainSoc ?? d.soc ?? null, d.temperatureC ?? null);
+        // The module value must be the MAIN PACK's SOC: for the SB2 family
+        // that's 0405 a3 (mainSoc); for the AE103, 0405 a3 is the UNIT TOTAL
+        // and the main pack's SOC only exists in 040a — the `?? d.soc`
+        // fallback would write the unit total under the module key, mixing
+        // semantics with the 040a writes (2026-09-28: SB4 read a bogus 18%
+        // = mix of main-pack 8% and unit-total 27%).
+        const moduleSoc = d.mainSoc ?? (m.pn === "AE103" ? null : d.soc ?? null);
+        if (moduleSoc != null || d.temperatureC != null) {
+          saveModuleSnapshot(d.ts, m.sn, moduleSoc, d.temperatureC ?? null);
         }
       } catch (err) {
         console.warn("[db] failed to persist battery snapshot:", err.message);
@@ -1670,12 +1677,18 @@ async function syncBatteryInner() {
       // upsertMember preserves each unit's MQTT-only fields across REST.
       for (const m of info.members ?? []) {
         upsertMember(m);
-        // Per-module SOC history for REST-only units too (the SB4's map is
-        // unverified so it gets no MQTT — its SOC comes from this sync).
-        try {
-          saveModuleSnapshot(info.ts, m.sn, m.soc ?? null, m.temperatureC ?? null);
-        } catch {
-          /* non-fatal */
+        // Per-module SOC history for units WITHOUT an MQTT map only
+        // (2026-09-28 fix): the module key is the unit's SN, and MQTT 040a
+        // writes the MAIN PACK's SOC under it — writing REST's unit-TOTAL
+        // soc under the same key mixes two semantics (SB4: main pack 8%
+        // vs unit total 27% averaged into a meaningless 18.6%). A gap
+        // during an MQTT stall is more honest than a mixed value.
+        if (!MQTT_KNOWN_PN.has(m.pn)) {
+          try {
+            saveModuleSnapshot(info.ts, m.sn, m.soc ?? null, m.temperatureC ?? null);
+          } catch {
+            /* non-fatal */
+          }
         }
       }
       // REST has no temperature field — carry the last MQTT-sourced value
