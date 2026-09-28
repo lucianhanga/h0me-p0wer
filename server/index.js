@@ -448,6 +448,13 @@ async function computeFlowPayload() {
           name: b.name ?? "Solarbank",
           pv1W: b.pv1W ?? 0,
           pv2W: b.pv2W ?? 0,
+          // Per-unit PV strings for the Live tab's expanded Solar PV section
+          // (2026-09-28, user request): every MPPT channel of every unit,
+          // each flagged connected/disconnected (sticky "seen producing"
+          // marker — see decoratePvChannels).
+          pvUnits: (b.members ?? [])
+            .filter((m) => m.pvChannels?.length)
+            .map((m) => ({ sn: m.sn, name: m.name, channels: m.pvChannels })),
           ts: b.ts ?? null,
           source: "online", // battery data is always cloud (REST/MQTT)
           // Charge/discharge ETA inputs — see the note above the route.
@@ -1553,6 +1560,24 @@ const batteryMqtts = new Map(); // SN -> AnkerMqtt (one client per unit)
 // MQTT-only fields (temperature, mainSoc, expansions) survive REST syncs —
 // REST has no equivalent and must not blank them (same rule as before,
 // now per unit).
+// A PV channel counts as "connected" once we've EVER seen it produce
+// (> 5 W) — scen_info has no per-channel connection flag (checked the raw
+// payload 2026-09-28), and at night every channel reads 0 W, so the marker
+// is sticky in kv (`pvSeen:<unitSn>:<n>`). A newly wired string lights up
+// with its first sunny hour.
+const PV_CONNECTED_MIN_W = 5;
+function decoratePvChannels(m) {
+  if (!m.pvChannels?.length) return m;
+  return {
+    ...m,
+    pvChannels: m.pvChannels.map((c) => {
+      const key = `pvSeen:${m.sn}:${c.n}`;
+      if (c.watts > PV_CONNECTED_MIN_W && kvGet(key) == null) kvSet(key, Date.now());
+      return { ...c, connected: c.watts > PV_CONNECTED_MIN_W || kvGet(key) != null };
+    }),
+  };
+}
+
 function upsertMember(m) {
   const prev = latestBatteries.get(m.sn);
   latestBatteries.set(m.sn, {
@@ -1725,7 +1750,7 @@ async function syncBatteryInner() {
       // Per-unit state first (dock era: multiple solarbanks per site) —
       // upsertMember preserves each unit's MQTT-only fields across REST.
       for (const m of info.members ?? []) {
-        upsertMember(m);
+        upsertMember(decoratePvChannels(m));
         // Per-module SOC history for units WITHOUT an MQTT map only
         // (2026-09-28 fix): the module key is the unit's SN, and MQTT 040a
         // writes the MAIN PACK's SOC under it — writing REST's unit-TOTAL
@@ -1745,6 +1770,9 @@ async function syncBatteryInner() {
       // mainSoc/expansions (MQTT 0405/040a only, no REST equivalent).
       latestBattery = {
         ...info,
+        // The decorated (pv-connected flags) + MQTT-preserved per-unit
+        // objects, not the raw REST members.
+        members: [...latestBatteries.values()],
         temperatureC: latestBattery?.temperatureC ?? null,
         mainSoc: latestBattery?.mainSoc ?? null,
         expansions: latestBattery?.expansions ?? null,
