@@ -234,10 +234,10 @@ export default function LiveTab() {
             <div className="card-value" style={{ color: "#c084fc" }}>
               {battery
                 ? (battery.cells ?? 0) > 0
-                  ? `⏏ −${battW ?? 0} W`
+                  ? `🔋 −${battW ?? 0} W`
                   : battery.charge > 0
                     ? `⚡ +${battW ?? 0} W`
-                    : t("live.battery.idle")
+                    : `💤 ${t("live.battery.idle")}`
                 : "—"}
             </div>
             <div className="card-label">
