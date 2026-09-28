@@ -211,9 +211,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
 }
 
 // The collapsible "Battery information" detail (config card, status card,
-// one card per expansion pack) — shared by BatteryCard (per-unit) and
-// BatterySystemTile (the aggregate's horizontal summary), so the dock-era
-// aggregate tile keeps the primary unit's details one tap away.
+// one card per expansion pack) — used by BatteryCard (per-unit). Briefly
+// shared with the aggregate's system tile until 2026-09-28, when the user
+// asked for the tile to be summary-only (no toggle).
 function BatteryDetails({ live, config, features, constants, member = false, onRefresh }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -336,9 +336,10 @@ function BatteryDetails({ live, config, features, constants, member = false, onR
 // capacity-weighted SOC, the configured min/max SOC, four capacity figures
 // (usable-to-floor now / stored incl. reserve / usable window floor→ceiling
 // / total), the total discharge rate with the ETA to the floor, and the
-// last-update time bottom-right. The primary unit's Configuration/Status
-// details stay one tap away via the shared BatteryDetails toggle.
-function BatterySystemTile({ live, config, features, constants, dischargeTolerancePct, onRefresh }) {
+// last-update time bottom-right. Deliberately NO "Battery information"
+// toggle here (same request, follow-up) — per-unit details live on the
+// unit cards.
+function BatterySystemTile({ live, config, features, constants, dischargeTolerancePct }) {
   const t = useT();
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
 
@@ -464,13 +465,9 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
           {t("battery.lowFloorWarn")}
         </p>
       )}
-      <BatteryDetails
-        live={live}
-        config={config}
-        features={features}
-        constants={constants}
-        onRefresh={onRefresh}
-      />
+      {/* No "Battery information" toggle on the system tile (2026-09-28,
+          user request) — the summary IS the whole point of this tile; the
+          per-unit details live on the unit cards below. */}
       <div className="batt-sys-ts">{t("battery.system.updated", { time: fmtTime(live.ts) })}</div>
     </div>
   );
@@ -572,7 +569,6 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               features={b.features}
               constants={b.constants}
               dischargeTolerancePct={dischargeTolerancePct}
-              onRefresh={forceRefresh}
             />
           ) : (
             <BatteryCard
