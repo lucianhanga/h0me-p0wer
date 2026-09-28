@@ -2019,6 +2019,17 @@ pre {
   text-shadow: 0 1px 2px #000000aa;
 }
 
+/* Dark pill backdrop behind the segment labels (2026-09-28): the fill's
+   glossy surface ellipse crosses the labels whenever the fill level sits at
+   label height, reading as a strikethrough — the pill keeps glyphs legible
+   over any fill. */
+.batt-seg-soc,
+.batt-seg-kwh {
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
+  padding: 0 0.3em;
+}
+
 .batt-modules-legend {
   display: flex;
   flex-direction: column;
@@ -2091,6 +2102,26 @@ pre {
     height: 150px;
   }
 
+  /* Phone layout (2026-09-28, user report): the legend's detail line
+     ("1.7 / 5 kWh · 34 % · SOH 100 % · 21 °C") needs ~300px but the side
+     column next to the cylinder only has ~250px at 390px — it wrapped,
+     leaving "21 °C" dangling. Flattening the side column (display:
+     contents) makes hero + legend direct flex children, so the legend
+     wraps to a full-width row below the cylinder and the detail fits on
+     one line in all three languages. */
+  .batt-modules {
+    flex-wrap: wrap;
+  }
+
+  .batt-modules-side {
+    display: contents;
+  }
+
+  .batt-modules-legend {
+    flex-basis: 100%;
+    max-width: none;
+    margin-top: 0.25rem;
+  }
 }
 
 /* Strategy PIN modal (reuses the .ask-* overlay chrome). */

@@ -5013,3 +5013,30 @@ side recovers — no action needed unless it persists for days.
 - Verified by screenshot (desktop + phone): SB4 main 8 % red / ext 35 %
   yellow with kWh labels, Pro main 16 % / ext 15 %, toggles present,
   layout intact.
+
+## Mobile battery-card fixes: full-width legend + label pills (2026-09-28, user report)
+
+- User screenshot: on the phone the unit cards' module legend detail
+  ("1.7 / 5 kWh · 34 % · SOH 100 % · 21 °C") wrapped, leaving "21 °C"
+  dangling — the side column next to the 72px cylinder only has ~250px
+  at 390px, the line needs ~300px. Fix (CSS only): inside the ≤600px
+  media query, `.batt-modules` gets `flex-wrap: wrap` and
+  `.batt-modules-side` gets `display: contents`, so hero + legend become
+  direct flex children and the legend wraps to a FULL-WIDTH row below
+  the cylinder — one line in en/de/ro. Desktop unchanged; the simple
+  view inherits the same fix.
+- Same screenshots showed the segment SOC/kWh labels struck through by
+  the fill's glossy surface ellipse whenever the fill level sits at
+  label height (z-index/text-shadow alone didn't stop the bright band
+  from cutting the glyphs). `.batt-seg-soc`/`.batt-seg-kwh` now carry a
+  dark pill backdrop (`rgba(0,0,0,.45)`, all widths).
+- Verification tooling note: drove headless Chrome via CDP
+  `Emulation.setDeviceMetricsOverride` (390×844, mobile:true, DSR 2 —
+  the exact mechanism DevTools device mode uses) against the dev server
+  with live data. Two harness gotchas: hash-only navigation does NOT
+  remount the app (language/view localStorage changes need a real
+  `Page.reload`), and the simple-view toggle's persisted state survives
+  into later screenshots of other tabs (reset `h0mep0wer.view`).
+  Verified post-fix: one-line legend details EN+DE on both unit cards,
+  legible pill labels on all segments, simple view fixed the same way,
+  desktop 1280px unaffected, scrollW == 390 everywhere.
