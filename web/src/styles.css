@@ -522,6 +522,54 @@ h4 {
   border-color: #5a6672;
 }
 
+/* Strategy decision card (2026-09-28, user request: clearer + timestamp
+   bottom-right): title, one-line reason, labeled metric chips, and the
+   last-write timestamp pinned to the bottom-right corner. */
+.decision-card {
+  position: relative;
+  padding-bottom: 1.6rem; /* room for the corner timestamp */
+}
+
+.decision-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e8ecef;
+}
+
+.decision-reason {
+  color: #8b98a5;
+  font-size: 0.8rem;
+  margin-top: 0.15rem;
+}
+
+.decision-metrics {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  font-size: 1.05rem;
+}
+
+.decision-metrics b {
+  font-weight: 600;
+}
+
+.decision-metric-label {
+  color: #8b98a5;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 0.35rem;
+}
+
+.decision-ts {
+  position: absolute;
+  right: 0.9rem;
+  bottom: 0.55rem;
+  color: #5a6672;
+  font-size: 0.72rem;
+}
+
 /* Strategy tab: step-up hold countdown — shown while the controller is
    deliberately withholding a higher preset write until STEP_UP_HOLD_MS
    elapses (anti-wobble hysteresis, see server/power-plan.js). */
@@ -2110,4 +2158,174 @@ pre {
     gap: 1.75rem;
     padding-top: 1rem;
   }
+}
+
+/* Battery SYSTEM summary tile (2026-09-28, user request): the aggregate is
+   a horizontal overview, not another battery-shaped gauge — hero SOC, a
+   0–100 % bar with min/floor/max markers, four capacity figures, the total
+   discharge rate + floor ETA, and the update time pinned bottom-right. */
+.batt-sys {
+  flex-basis: 100%; /* full width of the wrapping battery-list row */
+  position: relative;
+  padding-bottom: 1.7rem; /* room for the corner timestamp */
+}
+
+.batt-sys-main {
+  display: flex;
+  gap: 1.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.batt-sys-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 130px;
+}
+
+.batt-sys-name {
+  color: #8b98a5;
+  font-size: 0.78rem;
+}
+
+.batt-sys-pct {
+  font-size: 2.3rem;
+  font-weight: 700;
+  line-height: 1.1;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.batt-sys-pct.lvl-full { color: #6bb8f5; }
+.batt-sys-pct.lvl-high { color: #5fce80; }
+.batt-sys-pct.lvl-mid { color: #f7a44f; }
+.batt-sys-pct.lvl-low { color: #e05c5c; }
+
+.batt-sys-zone {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.batt-sys-stored {
+  color: #8b98a5;
+  font-size: 0.85rem;
+}
+
+.batt-sys-body {
+  flex: 1;
+  min-width: 240px;
+}
+
+.batt-sys-bar {
+  position: relative;
+  height: 14px;
+  border-radius: 999px;
+  background: #101418;
+  border: 1px solid #2a3238;
+  overflow: hidden;
+}
+
+.batt-sys-reserve {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(45deg, #2a3238 0 4px, transparent 4px 8px);
+  opacity: 0.6;
+}
+
+.batt-sys-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px 0 0 999px;
+  transition: width 1s ease;
+}
+
+.batt-sys-fill.lvl-full { background: linear-gradient(90deg, #3d8fe0, #6bb8f5); }
+.batt-sys-fill.lvl-high { background: linear-gradient(90deg, #4cb06c, #74da92); }
+.batt-sys-fill.lvl-mid { background: linear-gradient(90deg, #d98a3a, #f9b468); }
+.batt-sys-fill.lvl-low { background: linear-gradient(90deg, #c04848, #e67474); }
+
+.batt-sys-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #8b98a5;
+}
+
+.batt-sys-tick.floor { background: #f7a44f; }
+.batt-sys-tick.max { background: #5fce80; }
+
+.batt-sys-bar-labels {
+  position: relative;
+  height: 1rem;
+  font-size: 0.68rem;
+  color: #5a6672;
+  margin-top: 0.2rem;
+}
+
+.batt-sys-bar-labels span {
+  position: absolute;
+  transform: translateX(-50%);
+}
+
+.batt-sys-bar-labels span:first-child { transform: none; }
+.batt-sys-bar-labels span:last-child { right: 0; transform: none; }
+
+.batt-sys-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.6rem;
+  margin-top: 0.5rem;
+}
+
+.batt-sys-metrics > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.batt-sys-metrics span {
+  color: #8b98a5;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.batt-sys-metrics b {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.batt-sys-status {
+  margin-top: 0.45rem;
+  font-weight: 600;
+  color: #8b98a5;
+  font-size: 0.9rem;
+}
+
+.batt-sys-status.discharging { color: #c084fc; }
+.batt-sys-status.charging { color: #5fce80; }
+
+.batt-sys-ts {
+  position: absolute;
+  right: 0.9rem;
+  bottom: 0.55rem;
+  color: #5a6672;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 600px) {
+  .batt-sys-pct { font-size: 1.9rem; }
+  .batt-sys-metrics { gap: 0.35rem 1rem; }
+}
+
+.batt-sys-bar-labels span {
+  white-space: nowrap;
 }
