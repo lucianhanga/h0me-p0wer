@@ -379,6 +379,13 @@ section {
     gap: 0.5rem;
   }
 
+  /* The two-column phone rule above would otherwise win the
+     equal-specificity tie over .cards-single (it comes later), rendering
+     the lone decision card half-width (user screenshot 2026-09-28). */
+  .cards.cards-single {
+    grid-template-columns: 1fr;
+  }
+
   /* Must out-specify the base `.card { min-width: 180px }`, which comes
      LATER in this file and would otherwise win the tie (phones got a 465px
      viewport from it — the "zoomed-in Live tab" bug). */
@@ -561,10 +568,18 @@ h4 {
 
 .decision-metrics {
   display: flex;
-  gap: 1.2rem;
+  gap: 1.5rem;
   flex-wrap: wrap;
   margin-top: 0.6rem;
   font-size: 1.05rem;
+}
+
+/* Label above value (2026-09-28, user request — the label-left-of-value
+   chips scattered and collided with the corner timestamp on narrow
+   widths); same label-over-value pattern as the Dashboard's metric grid. */
+.decision-metrics > span {
+  display: flex;
+  flex-direction: column;
 }
 
 .decision-metrics b {
@@ -576,7 +591,7 @@ h4 {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin-right: 0.35rem;
+  margin-bottom: 0.05rem;
 }
 
 .decision-ts {
