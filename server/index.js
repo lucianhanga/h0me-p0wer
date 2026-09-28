@@ -15,6 +15,7 @@ import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, resolveConstants, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { pvKwhForDay } from "./welcome-ai.js";
+import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
 import { PowerPlanController } from "./power-plan.js";
 import {
   saveSnapshot,
@@ -505,7 +506,15 @@ app.get("/api/history", (req, res) => {
 // without local samples), aggregated server-side into buckets sized so the
 // response holds at most `points` rows — unless `bucket` (ms) is passed to
 // force a fixed granularity (clamped so responses stay below 4000 rows).
+// The timeseries handler is wrapped for the outside-temp merge (its only
+// async step — everything else inside stays synchronous).
 app.get("/api/timeseries", (req, res) => {
+  timeseriesInner(req, res).catch((err) => {
+    console.warn(`[timeseries] failed: ${err.message}`);
+    res.status(500).json({ ok: false, error: String(err.message ?? err) });
+  });
+});
+async function timeseriesInner(req, res) {
   const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
   const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
   const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
@@ -898,9 +907,49 @@ app.get("/api/timeseries", (req, res) => {
       .map((e, i) => ({ sn: e.sn, name: `${m.name ?? m.sn} ext ${i + 1}` })),
   ]);
 
-  res.json({ ok: true, bucketMs, data, modules });
-});
+  // Outside temperature overlay for the battery-temperature chart: nearest
+  // hourly Open-Meteo sample per bucket (hourly source resolution — finer
+  // buckets just repeat the hour's value; the chart interpolates visually).
+  const outside = await getOutsideTempSeries();
+  if (outside?.length) {
+    const byHour = new Map(outside.map((r) => [Math.floor(r.tsMs / 3600000), r.tempC]));
+    for (const r of data) {
+      const v = byHour.get(Math.floor(r.t / 3600000));
+      if (v != null) r.outsideTempC = v;
+    }
+  }
 
+  res.json({ ok: true, bucketMs, data, modules });
+}
+
+// Outside temperature (Open-Meteo hourly, geocoded from HOME_ADDRESS in
+// .env) — overlaid on the Graph tab's battery-temperature chart
+// (2026-09-28, user request). Deliberately the same provider/geocoder the
+// Welcome tab already uses, NOT HTML scraping of a weather site: same
+// address from the config, but a stable API instead of markup that breaks
+// on every redesign. KV-cached for 60 min so chart zoom/pan refetches
+// (which re-call /api/timeseries constantly) never hammer Open-Meteo.
+async function getOutsideTempSeries() {
+  const config = parseWelcomeConfig();
+  if (!config) return null; // no HOME_ADDRESS — feature silently off
+  const key = "outsideTempHourlyV1";
+  const hit = kvGet(key);
+  if (hit && Date.now() - hit.fetchedAt < 60 * 60 * 1000) return hit.value;
+  try {
+    const geo = await geocode(config.address);
+    const j = await fetchHourlyTemperatures(geo.lat, geo.lon, 31);
+    const times = j?.hourly?.time ?? [];
+    const temps = j?.hourly?.temperature_2m ?? [];
+    const value = times
+      .map((t, i) => ({ tsMs: new Date(t).getTime(), tempC: temps[i] }))
+      .filter((r) => Number.isFinite(r.tsMs) && r.tempC != null);
+    kvSet(key, value);
+    return value;
+  } catch (err) {
+    console.warn(`[weather] outside temperature fetch failed: ${err.message}`);
+    return hit?.value ?? null; // a stale series beats none
+  }
+}
 
 // Wrap cloud calls: 503 when credentials are missing, 502 for Anker errors.
 function cloudRoute(handler) {

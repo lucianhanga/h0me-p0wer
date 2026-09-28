@@ -317,6 +317,7 @@ export const en = {
       pvToHome: "PV to home",
       discharging: "Discharging",
       charging: "Charging",
+      outsideTemp: "Outside",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
     phases: "L1·L2·L3",
