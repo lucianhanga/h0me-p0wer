@@ -151,7 +151,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-09-28, v1.5.106, `main`, working tree clean, nothing pending.**
+**As of 2026-09-28, v1.5.107, `main`, working tree clean, nothing pending.**
 Latest: the account gained a SECOND site ("h-power": Solarbank 4 E5000 Pro
 AE103 + Power Dock AE100 + a second meter) — site resolution is now pinned
 to the site containing our local meter's SN (was `site_list[0]`, which
@@ -4949,3 +4949,33 @@ side recovers — no action needed unless it persists for days.
   (6.7-26.7 °C, plausible late-September); screenshot shows the dashed
   line tracing the overnight dip under the four module-temperature
   lines with the Outside legend entry.
+
+## Strategy tab: decision-card polish + horizontal Battery-system summary tile (2026-09-28, user requests)
+
+- **Decision card** ("Native self-consumption active / PV · house · SOC /
+  reason · last write"): restructured into .decision-card — title, one-line
+  muted reason, labeled metric chips (PV/House/SOC, i18n strategy.metric.*),
+  and the last-write timestamp pinned BOTTOM-RIGHT (.decision-ts) instead
+  of appended to the reason text. Applied to both the native/anker_app
+  single card and the preset-path inputs card.
+- **"Battery system" aggregate is no longer a battery-shaped gauge** (user:
+  "should not be a battery tile... horizontal tile"): new BatterySystemTile
+  in BatteryTab.jsx — hero capacity-weighted SOC % + stored kWh, a 0–100 %
+  horizontal bar (hatched reserve zone below min SOC, live fill in the
+  level color, ticks at min / effective floor / max SOC), four capacity
+  figures (usable now to the effective floor / available now incl. reserve
+  / usable window min→max / total capacity), total discharge rate with the
+  floor ETA, last-update bottom-right. The collapsible Battery information
+  section survives: BatteryCard's details block was extracted into a
+  shared BatteryDetails component used by both the unit cards and the
+  system tile. Server: the aggregate entry's expansions now span EVERY
+  member's packs (was the primary's only — the details section rendered an
+  empty second card), with constants.expansionPacks to match.
+- Bar-label collision guards: "0" hidden when min ≤ 10 %, "100" hidden
+  when max ≥ 90 %, the max label end-aligned at its tick near the edge.
+  NBSPs keep numbers glued to units.
+- i18n battery.system.* in en/de/ro. Verified by screenshot at 1280px and
+  390px (bar, metrics, ETA, bottom-right timestamps all render; unit
+  cards unaffected). The decision card itself couldn't be exercised live
+  on dev (POWER_PLAN_DISABLE=true → no ticks, no lastDecision) — markup
+  is the same card chrome as before, only rearranged.

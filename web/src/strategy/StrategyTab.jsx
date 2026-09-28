@@ -168,9 +168,8 @@ export default function StrategyTab() {
     holdRemainingS = Math.max(0, Math.ceil((hold.totalMs - elapsedMs) / 1000));
   }
 
-  const lastWriteSuffix = state.lastWriteAt
-    ? ` · ${t("strategy.lastWrite", { time: new Date(state.lastWriteAt).toLocaleTimeString() })}`
-    : "";
+  // (The last-write timestamp renders bottom-right inside the decision
+  // cards themselves — see .decision-ts.)
 
   return (
     <div>
@@ -267,17 +266,34 @@ export default function StrategyTab() {
 
       {d && (isAnkerApp || isNative) && (
         <div className="cards cards-single">
-          <div className="card">
-            <div className="card-label">
+          <div className="card decision-card">
+            <div className="decision-title">
               {isAnkerApp ? t("strategy.liveNumbers.title") : t("strategy.native.title")}
             </div>
-            <div className="card-value" style={{ fontSize: "1rem" }}>
-              {t("strategy.liveLine", { pv: d.pvW, house: d.demandW, soc: d.soc })}
-            </div>
-            <div className="card-label">
+            <div className="decision-reason">
               {d.wrote ? t("strategy.native.modeWritten", { reason: d.reason }) : d.reason}
-              {lastWriteSuffix}
             </div>
+            <div className="decision-metrics">
+              <span>
+                <span className="decision-metric-label">{t("strategy.metric.pv")}</span>
+                <b>{d.pvW} W</b>
+              </span>
+              <span>
+                <span className="decision-metric-label">{t("strategy.metric.house")}</span>
+                <b>{d.demandW} W</b>
+              </span>
+              <span>
+                <span className="decision-metric-label">{t("strategy.metric.soc")}</span>
+                <b>{d.soc} %</b>
+              </span>
+            </div>
+            {/* Timestamp bottom-right (2026-09-28, user request) — out of
+                the reason line so the decision text reads clean. */}
+            {state.lastWriteAt && (
+              <div className="decision-ts">
+                {t("strategy.lastWrite", { time: new Date(state.lastWriteAt).toLocaleTimeString() })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -293,15 +309,19 @@ export default function StrategyTab() {
               })}
             </div>
           </div>
-          <div className="card">
+          <div className="card decision-card">
             <div className="card-label">{t("strategy.decision.inputsTitle")}</div>
             <div className="card-value" style={{ fontSize: "1rem" }}>
               {t("strategy.liveLine", { pv: d.pvW, house: d.demandW, soc: d.soc })}
             </div>
             <div className="card-label">
               {d.wrote ? t("strategy.decision.presetWritten", { reason: d.reason }) : d.reason}
-              {lastWriteSuffix}
             </div>
+            {state.lastWriteAt && (
+              <div className="decision-ts">
+                {t("strategy.lastWrite", { time: new Date(state.lastWriteAt).toLocaleTimeString() })}
+              </div>
+            )}
           </div>
         </div>
       )}

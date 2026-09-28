@@ -73,13 +73,6 @@ function ParamRow({ k, v }) {
 // number and know the thresholds yourself. `zoneLabel` below adds that.
 function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false }) {
   const t = useT();
-  const [refreshing, setRefreshing] = useState(false);
-  const [open, setOpen] = useState(false);
-
-  const forceRefresh = () => {
-    setRefreshing(true);
-    onRefresh().finally(() => setRefreshing(false));
-  };
 
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
 
@@ -205,6 +198,34 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
         )}
       </div>
 
+      <BatteryDetails
+        live={live}
+        config={config}
+        features={features}
+        constants={constants}
+        member={member}
+        onRefresh={onRefresh}
+      />
+    </div>
+  );
+}
+
+// The collapsible "Battery information" detail (config card, status card,
+// one card per expansion pack) — shared by BatteryCard (per-unit) and
+// BatterySystemTile (the aggregate's horizontal summary), so the dock-era
+// aggregate tile keeps the primary unit's details one tap away.
+function BatteryDetails({ live, config, features, constants, member = false, onRefresh }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const forceRefresh = () => {
+    setRefreshing(true);
+    onRefresh().finally(() => setRefreshing(false));
+  };
+
+  return (
+    <>
       {config == null && features == null ? (
         // Secondary battery (e.g. the Solarbank 4, 2026-09-24): monitored
         // live-only — its config endpoints aren't verified for this hardware,
@@ -306,13 +327,160 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           )}
         </>
       )}
+    </>
+  );
+}
+
+// The AGGREGATE "Battery system" tile (2026-09-28, user request): NOT
+// another battery-shaped gauge — a horizontal summary of the whole system:
+// capacity-weighted SOC, the configured min/max SOC, four capacity figures
+// (usable-to-floor now / stored incl. reserve / usable window floor→ceiling
+// / total), the total discharge rate with the ETA to the floor, and the
+// last-update time bottom-right. The primary unit's Configuration/Status
+// details stay one tap away via the shared BatteryDetails toggle.
+function BatterySystemTile({ live, config, features, constants, dischargeTolerancePct, onRefresh }) {
+  const t = useT();
+  if (!live) return <p className="muted">{t("battery.noData")}</p>;
+
+  const soc = live.soc ?? 0; // already capacity-weighted server-side
+  const cap = constants?.capacityKwh ?? null;
+  const minPct = config?.dischargeLowerLimitPct ?? null;
+  const maxPct = config?.chargeUpperLimitPct ?? null;
+  const effFloorPct =
+    minPct != null && dischargeTolerancePct != null ? minPct + dischargeTolerancePct : minPct;
+  const lvlClass = soc > 90 ? "lvl-full" : soc > 50 ? "lvl-high" : soc >= 20 ? "lvl-mid" : "lvl-low";
+  const zoneLabel =
+    lvlClass === "lvl-full" ? t("battery.zone.full") : lvlClass === "lvl-low" ? t("battery.zone.low") : null;
+
+  const r2 = (v) => Math.round(v * 100) / 100;
+  const storedKwh = cap != null ? r2((soc / 100) * cap) : null; // incl. reserve
+  const usableNowKwh =
+    cap != null && effFloorPct != null ? r2(Math.max(0, ((soc - effFloorPct) / 100) * cap)) : null;
+  const windowKwh =
+    cap != null && minPct != null && maxPct != null ? r2(((maxPct - minPct) / 100) * cap) : null;
+
+  const chargeW = live.chargeW ?? 0;
+  const cellsW = live.cellsW ?? 0;
+  const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
+  const etaLabel = formatEta(
+    batteryEtaHours({
+      mode,
+      soc,
+      chargeW,
+      cellsW,
+      maxPct,
+      floorPct: effFloorPct ?? minPct,
+      capacityKwh: cap,
+    }),
+  );
+
+  return (
+    <div className="card batt-sys">
+      <div className="batt-sys-main">
+        <div className="batt-sys-hero">
+          <span className="batt-sys-name">{live.name ?? t("battery.fallbackName")}</span>
+          <span className={`batt-sys-pct ${lvlClass}`}>
+            {soc}&nbsp;%{zoneLabel && <span className="batt-sys-zone">{zoneLabel}</span>}
+          </span>
+          <span className="batt-sys-stored">
+            {storedKwh != null && cap != null ? `${storedKwh} / ${cap} kWh` : "—"}
+          </span>
+        </div>
+        <div className="batt-sys-body">
+          {/* 0–100 % bar: dim reserve below the min SOC, the live fill to
+              the current SOC, tick markers at min / effective floor / max. */}
+          <div className="batt-sys-bar" role="img" aria-label={`SOC ${soc} %`}>
+            {minPct != null && (
+              <div className="batt-sys-reserve" style={{ width: `${minPct}%` }} />
+            )}
+            <div className={`batt-sys-fill ${lvlClass}`} style={{ width: `${soc}%` }} />
+            {[
+              { pct: minPct, cls: "min" },
+              { pct: effFloorPct !== minPct ? effFloorPct : null, cls: "floor" },
+              { pct: maxPct, cls: "max" },
+            ]
+              .filter((tk) => tk.pct != null)
+              .map((tk) => (
+                <div key={tk.cls} className={`batt-sys-tick ${tk.cls}`} style={{ left: `${tk.pct}%` }} />
+              ))}
+          </div>
+          <div className="batt-sys-bar-labels">
+            {/* "0" collides with the min label when min ≤ 10 % — skip it. */}
+            {(minPct == null || minPct > 10) && <span>0</span>}
+            {minPct != null && <span style={{ left: `${minPct}%` }}>{t("battery.system.minShort", { pct: minPct })}</span>}
+            {maxPct != null && (
+              <span
+                style={{
+                  left: `${maxPct}%`,
+                  // Near the right edge, end-align the label at the tick
+                  // instead of centering — centered would overflow/wrap.
+                  transform: maxPct >= 90 ? "translateX(-100%)" : undefined,
+                }}
+              >
+                {t("battery.system.maxShort", { pct: maxPct })}
+              </span>
+            )}
+            {/* "100" collides with the max label when max ≥ 90 % — skip it. */}
+            {(maxPct == null || maxPct < 90) && <span>100</span>}
+          </div>
+          <div className="batt-sys-metrics">
+            <div>
+              <span>{t("battery.system.usableNow", { pct: effFloorPct ?? minPct ?? "—" })}</span>
+              <b>{usableNowKwh != null ? `${usableNowKwh} kWh` : "—"}</b>
+            </div>
+            <div>
+              <span>{t("battery.system.availableNow")}</span>
+              <b>{storedKwh != null ? `${storedKwh} kWh` : "—"}</b>
+            </div>
+            <div>
+              <span>{t("battery.system.window", { min: minPct ?? "—", max: maxPct ?? "—" })}</span>
+              <b>{windowKwh != null ? `${windowKwh} kWh` : "—"}</b>
+            </div>
+            <div>
+              <span>{t("battery.system.totalCap")}</span>
+              <b>{cap != null ? `${cap} kWh` : "—"}</b>
+            </div>
+          </div>
+          <div className={`batt-sys-status ${mode}`}>
+            {mode === "charging" && t("battery.status.charging", { w: fmtW(chargeW) })}
+            {mode === "discharging" && t("battery.status.discharging", { w: fmtW(cellsW) })}
+            {mode === "idle" && t("battery.status.idle")}
+            {etaLabel && (
+              <span className="batt-status-eta">
+                {" · "}
+                {mode === "charging"
+                  ? t("battery.status.fullIn", { eta: etaLabel })
+                  : t("battery.status.emptyIn", { eta: etaLabel })}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+      {config?.dischargeLowerLimitPct != null && config.dischargeLowerLimitPct <= 5 && (
+        // Same factory-floor warning BatteryCard shows (2026-09-27): the
+        // config here is the primary unit's — the one the controller obeys.
+        <p className="callout-warn batt-floor-warn">
+          <span className="callout-icon">⚠</span>
+          {t("battery.lowFloorWarn")}
+        </p>
+      )}
+      <BatteryDetails
+        live={live}
+        config={config}
+        features={features}
+        constants={constants}
+        onRefresh={onRefresh}
+      />
+      <div className="batt-sys-ts">{t("battery.system.updated", { time: fmtTime(live.ts) })}</div>
     </div>
   );
 }
 
-// Battery section: one UPRIGHT segmented card per unit, side by side
-// (2026-09-27, user request) — metrics underneath each unit; wraps on
-// narrow screens. The horizontal gauge is gone for good (same request).
+
+// Battery section: the aggregate renders as the horizontal BatterySystemTile
+// summary (2026-09-28, user request — it was a battery-shaped gauge like the
+// units before); each unit keeps its UPRIGHT segmented card, side by side
+// (2026-09-27), metrics underneath; wraps on narrow screens.
 export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const t = useT();
   const { data, error, setData } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
@@ -395,22 +563,34 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
       </UpdatedStamp>
 
       <div className="battery-list">
-        {batteries.map((b, i) => (
-          <BatteryCard
-            key={b.live?.sn ?? i}
-            live={b.live}
-            config={b.config}
-            features={b.features}
-            constants={b.constants}
-            aggregate={b.aggregate ?? false}
-            member={b.member ?? false}
-            // The discharge tolerance is a power-plan concept — it applies
-            // only to the primary (controlled) battery, never to a
-            // monitored-only secondary one.
-            dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
-            onRefresh={forceRefresh}
-          />
-        ))}
+        {batteries.map((b, i) =>
+          b.aggregate ? (
+            <BatterySystemTile
+              key={b.live?.sn ?? i}
+              live={b.live}
+              config={b.config}
+              features={b.features}
+              constants={b.constants}
+              dischargeTolerancePct={dischargeTolerancePct}
+              onRefresh={forceRefresh}
+            />
+          ) : (
+            <BatteryCard
+              key={b.live?.sn ?? i}
+              live={b.live}
+              config={b.config}
+              features={b.features}
+              constants={b.constants}
+              aggregate={b.aggregate ?? false}
+              member={b.member ?? false}
+              // The discharge tolerance is a power-plan concept — it applies
+              // only to the primary (controlled) battery, never to a
+              // monitored-only secondary one.
+              dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
+              onRefresh={forceRefresh}
+            />
+          ),
+        )}
       </div>
     </div>
   );

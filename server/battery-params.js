@@ -419,24 +419,30 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
       });
 
       // The aggregate's capacity is the SUM of its units' capacities (its own
-      // pn/expansionPacks alone would undercount the other units).
-      // The aggregate's capacity is the SUM of its units' capacities (its own
       // pn/expansionPacks alone would undercount the other units) — and its
       // storedKwh must be recomputed against that sum (it was derived from
-      // the pre-override constants above).
+      // the pre-override constants above). Its expansions list likewise spans
+      // EVERY member's packs, so the details section can render one card per
+      // physical expansion battery in the system.
       let primaryOut = primary;
       if (members.length) {
         const totalCap =
           Math.round(
             members.reduce((a, m) => a + resolveConstants(m.pn, m.expansionPacks ?? 0).capacityKwh, 0) * 100,
           ) / 100;
+        const allExpansions = members.flatMap((m) => m.expansions ?? []);
         primaryOut = {
           ...primary,
           aggregate: true,
-          constants: { ...primary.constants, capacityKwh: totalCap },
+          constants: {
+            ...primary.constants,
+            capacityKwh: totalCap,
+            expansionPacks: allExpansions.length || primary.constants.expansionPacks,
+          },
           live: primary.live
             ? {
                 ...primary.live,
+                expansions: allExpansions.length ? allExpansions : primary.live.expansions,
                 storedKwh:
                   primary.live.soc != null
                     ? Math.round((primary.live.soc / 100) * totalCap * 100) / 100
