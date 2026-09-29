@@ -12,7 +12,7 @@ import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, resolveConstants, systemCapacityKwh } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
@@ -1676,24 +1676,15 @@ function upsertMember(m) {
   });
 }
 
-// Capacity-weighted mean SOC across units (a plain mean misweights the
-// 1.6 kWh Pro against the 5 kWh+ units — resolveConstants knows each unit's
-// size incl. expansion packs).
-function weightedSoc(members) {
-  let ws = 0;
-  let wc = 0;
-  for (const m of members) {
-    const cap = resolveConstants(m.pn, m.expansionPacks ?? 0).capacityKwh;
-    ws += (m.soc ?? 0) * cap;
-    wc += cap;
-  }
-  if (!wc) return 0;
-  return Math.round(ws / wc);
-}
-
 // Rebuild the aggregate's fast fields after an MQTT merge — sums satisfy
 // the same flow invariants per unit (pvW = chargeW + pvThrough holds for
-// sums of units where it holds per unit).
+// sums of units where it holds per unit). SOC is NOT recomputed here
+// (2026-09-29, user report: the system SOC flip-flopped 17↔18% every few
+// seconds): weightedSoc() and REST's total_battery_power straddle a
+// rounding boundary at different moments and alternated on every MQTT/REST
+// update. The aggregate SOC comes from ONE source — Anker's own
+// site-level total_battery_power (what the app displays), refreshed by the
+// REST sync; it moves far too slowly to need MQTT cadence.
 function recomputeAggregate() {
   if (!latestBattery || !latestBatteries.size) return;
   const members = [...latestBatteries.values()];
@@ -1705,8 +1696,11 @@ function recomputeAggregate() {
     members,
     outputW: sum("outputW"),
     chargeW: sum("chargeW"),
+    // Cells-only discharge summed too (2026-09-29): the flow diagram's
+    // battery→house arc reads dischargeW — without this it went stale
+    // between REST syncs once MQTT drove the members' values.
+    dischargeW: sum("dischargeW"),
     pvW: sum("pvW"),
-    soc: weightedSoc(members),
     temperatureC: primary.temperatureC ?? null,
     mainSoc: primary.mainSoc ?? null,
     expansions: primary.expansions ?? null,
