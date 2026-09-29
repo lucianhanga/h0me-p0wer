@@ -5301,3 +5301,20 @@ side recovers — no action needed unless it persists for days.
   via the validated identity grid_to_home + Σoutput − pv_to_grid ==
   home_load_power. Verified live: 17+371+0 = 388 vs home 387 (Δ 1 W
   rounding); PV split 371+938=1309 vs 1319 (Δ 10 W inverter losses).
+
+## Simple-view stack alignment + arc label legibility (2026-09-29, user screenshots)
+
+- **Desktop: cylinders were TOP-aligned** despite the v1.5.117
+  margin-top:auto rule — measured live: the flex column had zero free
+  main-axis space, so the auto margin resolved to 0. Replaced with a
+  deterministic slot: `.batt-seg-slot` reserves the tallest stack's
+  height (`slotHeightPx`, = baseH) and bottom-aligns the cylinder inside
+  (flex-end). Cylinders now stand on the same line like the physical
+  stack; texts align across columns. Verified by measurement: both
+  cylinder bottoms at y=778.
+- **PV→Battery arc label sat ON the dashed line** — diagonal edges now
+  offset their label PERPENDICULAR to the arc (always above it), and
+  every arc label gets a dark outline (`paintOrder="stroke"` +
+  strokeWidth 3 in the flow diagram's palette) so it stays legible even
+  when a line passes underneath. Vertical/horizontal edge label
+  positions unchanged.

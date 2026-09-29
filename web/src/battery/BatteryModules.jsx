@@ -28,7 +28,7 @@ const SEG_LEVELS = [
 const segLevel = (soc) =>
   soc == null ? null : SEG_LEVELS.find(([min]) => soc >= min)[1];
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
   // name, hero %, kWh, per-module legend) centered underneath — units sit
@@ -73,11 +73,19 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
   const anyUnknown = modules.some((m) => m.soc == null);
   return (
     <div className={`batt-modules${stacked ? " stacked" : ""}`}>
+      {/* The slot reserves the TALLEST stack's height and bottom-aligns the
+          cylinder inside it (2026-09-29, user report: cylinders top-aligned
+          on desktop) — margin-top:auto on the segment never engaged because
+          the flex column had no free main-axis space. */}
       <div
-        className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
-        style={heightPx ? { height: `${heightPx}px` } : undefined}
-        title={t("battery.modules.tip")}
+        className="batt-seg-slot"
+        style={stacked && slotHeightPx ? { height: `${slotHeightPx}px` } : undefined}
       >
+        <div
+          className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
+          style={heightPx ? { height: `${heightPx}px` } : undefined}
+          title={t("battery.modules.tip")}
+        >
         {modules.map((m) => (
           <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
             <div className={`batt-seg-fill ${segLevel(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
@@ -87,6 +95,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             </span>
           </div>
         ))}
+        </div>
       </div>
       <div className="batt-modules-side">
         {stacked && live.name && <div className="batt-modules-title">{live.name}</div>}
