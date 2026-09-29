@@ -2074,33 +2074,13 @@ pre {
   animation-direction: reverse;
 }
 
-/* drop color = the unit's current fill level color */
-.batt-rain.seg-full i { background: #4ee06b; }
-.batt-rain.seg-good i { background: #b8e62e; }
-.batt-rain.seg-mid i { background: #f5d33c; }
-.batt-rain.seg-low i { background: #f39c12; }
-.batt-rain.seg-crit i { background: #e05c5c; }
+/* drop color = the unit's current fill color (progressive hue, set inline
+   as --rain-color by BatteryModules) */
+.batt-rain i { background: var(--rain-color, #f39c12); }
 
-/* 5-step level ramp per segment SOC (from the reference pictures) */
-.batt-seg-fill.seg-full {
-  background: linear-gradient(180deg, #4ee06b, #27ae60);
-}
-
-.batt-seg-fill.seg-good {
-  background: linear-gradient(180deg, #b8e62e, #8bc34a);
-}
-
-.batt-seg-fill.seg-mid {
-  background: linear-gradient(180deg, #f5d33c, #d4ac0d);
-}
-
-.batt-seg-fill.seg-low {
-  background: linear-gradient(180deg, #f39c12, #d35400);
-}
-
-.batt-seg-fill.seg-crit {
-  background: linear-gradient(180deg, #e05c5c, #b03a3a);
-}
+/* 5-step level ramp replaced by a progressive per-SOC hue sweep
+   (2026-09-29, user request) — fills get an inline hsl() gradient from
+   BatteryModules (socHue), no per-level classes anymore. */
 
 .batt-seg-soc {
   position: relative;
@@ -2434,12 +2414,26 @@ pre {
   text-align: center;
 }
 
+/* "covers ≈ Xh at average use" (7-day average consumption, 2026-09-29). */
+.batt-cover {
+  font-size: 0.78rem;
+  color: #8b98a5;
+  margin-top: 0.15rem;
+}
+
+.simple-batt .batt-cover {
+  text-align: center;
+}
+
 /* Simple view's read-only charts (full width — charts benefit from it) and
    the Today tile (calm centered column like the battery stacks). Titles
    and legends stay centered (2026-09-29, user report: "the graphs look
    uncentered" next to the centered battery stacks). */
 .simple-charts {
   width: 100%;
+  /* breathing room between the battery stacks and the graphs
+     (2026-09-29, user request) */
+  margin-top: 1.75rem;
 }
 
 .simple-chart h4 {

@@ -18,15 +18,12 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // module's own SOC. While the unit charges/discharges, a soft light streak
 // flows upward/downward through the fills (the reference's lightning arcs,
 // extrapolated into an animation our flat style can carry).
-const SEG_LEVELS = [
-  [80, "seg-full"], // green
-  [55, "seg-good"], // lime
-  [35, "seg-mid"], // yellow
-  [15, "seg-low"], // orange
-  [0, "seg-crit"], // red
-];
-const segLevel = (soc) =>
-  soc == null ? null : SEG_LEVELS.find(([min]) => soc >= min)[1];
+// Progressive fill color (2026-09-29, user request): a CONTINUOUS hue
+// sweep with SOC — hsl hue 4 (red, empty) → 140 (green, full) — replacing
+// the 5-step class ramp (SEG_LEVELS). Applies to the module fills AND the
+// energy-rain drops (via --rain-color).
+const socHue = (soc) => 4 + Math.min(100, Math.max(0, soc ?? 0)) * 1.36;
+const fillColor = (soc, lightness) => `hsl(${socHue(soc)} 75% ${lightness}%)`;
 
 export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null }) {
   const t = useT();
@@ -82,13 +79,21 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         style={stacked && slotHeightPx ? { height: `${slotHeightPx}px` } : undefined}
       >
         <div
-          className={`batt-seg${mode === "charging" ? " flow-up" : mode === "discharging" ? " flow-down" : ""}`}
+          className="batt-seg"
           style={heightPx ? { height: `${heightPx}px` } : undefined}
           title={t("battery.modules.tip")}
         >
         {modules.map((m) => (
           <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
-            <div className={`batt-seg-fill ${segLevel(m.soc) ?? ""}`} style={{ height: `${m.soc ?? 0}%` }} />
+            <div
+              className="batt-seg-fill"
+              style={{
+                height: `${m.soc ?? 0}%`,
+                ...(m.soc != null
+                  ? { background: `linear-gradient(180deg, ${fillColor(m.soc, 55)}, ${fillColor(m.soc, 40)})` }
+                  : {}),
+              }}
+            />
             <span className="batt-seg-soc">{m.soc != null ? `${m.soc} %` : "—"}</span>
             <span className="batt-seg-kwh">
               {storedOf(m) != null ? `${storedOf(m)} kWh` : ""}
@@ -102,7 +107,10 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             out). Fill-colored drops; replaces the old subtle streak.
             Below the segment labels (they keep z-index 1). */}
         {mode !== "idle" && (
-          <div className={`batt-rain ${mode === "charging" ? "rain-in" : "rain-out"} ${segLevel(live.soc ?? 0) ?? ""}`}>
+          <div
+            className={`batt-rain ${mode === "charging" ? "rain-in" : "rain-out"}`}
+            style={{ "--rain-color": fillColor(live.soc ?? 50, 55) }}
+          >
             <i />
             <i />
             <i />

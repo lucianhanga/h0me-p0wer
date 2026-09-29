@@ -1142,6 +1142,7 @@ registerBatteryParamsRoute(app, {
   anker,
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMembers: () => [...latestBatteries.values()],
+  getAvgHomeKwh7d: avgDailyHomeKwh7d,
 });
 app.get(
   "/api/cloud/energy",

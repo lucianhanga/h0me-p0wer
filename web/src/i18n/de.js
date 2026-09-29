@@ -246,6 +246,7 @@ export const de = {
       emptyIn: "leer in ≈ {eta}",
       usableWindow: "nutzbares Fenster ≈ {kwh} kWh",
     },
+    coverAvg: "reicht ≈ {eta} bei Ø-Verbrauch",
     liveOnlyNote: "nur Live-Überwachung — nicht Teil des Haussystems, keine Steuerung oder Verlauf",
     memberNote: "Teil des Akku-Systems — Live-Ansicht pro Einheit",
     details: {

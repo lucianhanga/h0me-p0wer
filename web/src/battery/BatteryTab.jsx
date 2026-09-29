@@ -192,6 +192,11 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             <span className="batt-status-sub">{t("battery.status.usableWindow", { kwh: usableKwh })}</span>
           )}
         </div>
+        {/* Coverage at the 7-day-average home consumption (2026-09-29, user
+            request) — distinct from the ETA's CURRENT-rate estimate. */}
+        {live.coverH != null && (
+          <div className="batt-cover muted">{t("battery.coverAvg", { eta: formatEta(live.coverH) })}</div>
+        )}
         {config?.dischargeLowerLimitPct != null && config.dischargeLowerLimitPct <= 5 && (
           // Factory-floor warning (2026-09-27): the E1600 Pro arrived with
           // the 5% factory cutoff (the user's 8% died with the old Plus) and
@@ -500,6 +505,10 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
               </span>
             )}
           </div>
+          {/* Coverage at the 7-day-average home consumption (2026-09-29). */}
+          {live.coverH != null && (
+            <div className="batt-cover muted">{t("battery.coverAvg", { eta: formatEta(live.coverH) })}</div>
+          )}
         </div>
       </div>
       {config?.dischargeLowerLimitPct != null && config.dischargeLowerLimitPct <= 5 && (

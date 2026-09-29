@@ -126,6 +126,14 @@ export default function SimpleHome() {
                     </span>
                   )}
                 </div>
+                {/* Coverage at the 7-day-average home consumption
+                    (2026-09-29, user request) — distinct from the ETA above
+                    (which uses the CURRENT charge/discharge rate). */}
+                {u.live?.coverH != null && (
+                  <div className="batt-cover muted">
+                    {t("battery.coverAvg", { eta: formatEta(u.live.coverH) })}
+                  </div>
+                )}
               </div>
             );
           })}

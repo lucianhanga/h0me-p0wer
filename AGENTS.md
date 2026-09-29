@@ -5432,3 +5432,26 @@ side recovers — no action needed unless it persists for days.
   labels the displayed value "via cloud". Verified: tiles ≡ diagram
   field-for-field on a live sample; screenshot shows 929 PV → 455 home +
   478 battery, house 625, grid 41 — matching arcs exactly.
+
+## Progressive battery color + 7-day coverage + simple-view spacing (2026-09-29, user requests)
+
+- **Progressive fill color** (user: "are you changing progressively the
+  color of the battery animated content?" — it was the 5-step ramp):
+  continuous hue sweep hsl 4 (red, 0%) → 140 (green, 100%) via `socHue()`
+  in BatteryModules — applied to the module fills (inline gradient) AND
+  the rain drops (`--rain-color` CSS var). SEG_LEVELS/segLevel and the
+  seg-* CSS ramp + per-level rain colors deleted; the flow-up/flow-down
+  streak classes removed from the JSX (the streak was already replaced
+  by the rain).
+- **"Covers ≈ Xh at average use"** (7-day average consumption — the same
+  avgDailyHomeKwh7d() the diagram's battery node uses, 2026-09-29):
+  /api/battery/params gains `coverH` per entry (aggregate + every member;
+  new getAvgHomeKwh7d dep on registerBatteryParamsRoute). Shown as a
+  muted line under the status on: the simple view's per-unit stacks, the
+  Strategy tab's unit cards, and the Battery-system tile — distinct from
+  the current-rate ETA. i18n battery.coverAvg en/de/ro.
+- **Spacing**: `.simple-charts` gains margin-top 1.75rem (user: "put some
+  space between the battery and the graphs").
+- Verified: coverH consistent (system 30.3h ≈ SB4 18.2h + Pro 12.5h);
+  screenshots phone simple + strategy (all three placements), scrollW
+  == 390.
