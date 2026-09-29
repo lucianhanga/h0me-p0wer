@@ -5455,3 +5455,23 @@ side recovers — no action needed unless it persists for days.
 - Verified: coverH consistent (system 30.3h ≈ SB4 18.2h + Pro 12.5h);
   screenshots phone simple + strategy (all three placements), scrollW
   == 390.
+
+## Cells discharge: derived everywhere — bat_discharge_power is unreliable (2026-09-29, user reports)
+
+- User: "the Live tab's battery→home arc shows NOTHING while the Anker
+  app shows discharging" and "one battery discharging, one idle, but the
+  TOTAL shows idle too — the total should be a composition." Live proof:
+  Σoutput 270 W with ΣPV+Σcharge 132 W (≈138 W provably from cells) while
+  `bat_discharge_power` read 0 on BOTH units. The discharge channel is
+  simply not trustworthy; v1.5.118/v1.5.127 had switched the arc and the
+  tile to it. The WS live-merge then overwrote the params-computed
+  derived cellsW with the channel's 0 → system tile "idle".
+- Fix: battToHomeW (arc), battery.cells (tile) and pvToHomeW are DERIVED
+  again — from the same app channels and closing the validated identity
+  (output = pvThrough + cells; home = grid_to_home + Σoutput −
+  pv_to_grid). pvToHomeW = max(0, Σoutput − pvToGrid − cellsDerived).
+  Verified live: grid 0 + pvHome 121 + batt 182 = 303 vs home 298 (Δ 5 W
+  rounding); tile cells == arc; params' aggregate + members consistent
+  (system discharging 190 W, composition of SB4 100 + Pro 90).
+- The dischargeW field stays in the payload for reference/debugging but
+  no longer feeds any display.
