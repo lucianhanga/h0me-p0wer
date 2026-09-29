@@ -95,6 +95,20 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             </span>
           </div>
         ))}
+        {/* Energy-rain animation while charging/discharging (2026-09-29,
+            user request — "something falling inside, in the same color as
+            the battery load"; research convention: charging = particles
+            flowing IN top-down, discharging = the mirror, drifting up and
+            out). Fill-colored drops; replaces the old subtle streak.
+            Below the segment labels (they keep z-index 1). */}
+        {mode !== "idle" && (
+          <div className={`batt-rain ${mode === "charging" ? "rain-in" : "rain-out"} ${segLevel(live.soc ?? 0) ?? ""}`}>
+            <i />
+            <i />
+            <i />
+            <i />
+          </div>
+        )}
         </div>
       </div>
       <div className="batt-modules-side">

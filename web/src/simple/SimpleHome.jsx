@@ -49,7 +49,7 @@ export default function SimpleHome() {
   // "display the batteries with different sizes near each other... so the
   // proportions are observed" — the Pro's main unit is only 1.6 kWh). A
   // floor keeps a small unit's cylinder readable (55% of the largest).
-  const baseH = window.matchMedia("(max-width: 600px)").matches ? 200 : 260;
+  const baseH = window.matchMedia("(max-width: 600px)").matches ? 230 : 300;
   const maxCap = Math.max(...stacks.map((u) => u.constants?.capacityKwh ?? 0), 0) || 1;
   const heightOf = (u) =>
     Math.round(baseH * Math.max(0.55, (u.constants?.capacityKwh ?? maxCap) / maxCap));

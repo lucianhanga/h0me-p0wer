@@ -5318,3 +5318,20 @@ side recovers — no action needed unless it persists for days.
   strokeWidth 3 in the flow diagram's palette) so it stays legible even
   when a line passes underneath. Vertical/horizontal edge label
   positions unchanged.
+
+## Battery energy-rain animation + taller simple-view stacks (2026-09-29, user requests)
+
+- Simple-view cylinders taller: baseH 260→300 desktop, 200→230 phone
+  (heightPx/slotHeightPx scale from it, so capacity proportions hold).
+- **Charging/discharging animation, researched conventions**: charging =
+  particles flowing IN top-down, discharging = the mirror (drifting up
+  and out) — fill-colored drops raining through the glass tube
+  (`.batt-rain`, 4 staggered drops, color from the unit's current seg-*
+  level ramp; `rain-in`/`rain-out` = animation-direction reverse).
+  Replaces the old subtle ::after light streak (deleted). Below the
+  segment labels (they keep z-index 1); prefers-reduced-motion hides it.
+  Applies to BOTH the simple view and the Strategy unit cards (same
+  BatteryModules), driven by the card's dominant-direction mode.
+- Verified with two timed screenshots catching drops mid-fall on both
+  units while charging (live state: PV splitting into both), desktop +
+  phone; scrollW == 390.

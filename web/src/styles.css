@@ -2034,35 +2034,52 @@ pre {
   background: radial-gradient(ellipse at 50% 0%, #ffffff70 0%, #ffffff18 60%, transparent 75%);
 }
 
-/* energy streak flowing through the fill while charging/discharging */
-.batt-seg-fill::after {
-  content: "";
+/* Energy-rain (2026-09-29, user request — research convention: charging =
+   particles poured IN from the top, discharging = the mirror, drifting up
+   and out). Drops take the unit's current fill color (the seg-* ramp).
+   Replaces the old subtle light streak. */
+.batt-rain {
   position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 15%, #ffffff33 45%, #ffffff66 50%, #ffffff33 55%, transparent 85%);
-  background-size: 100% 250%;
+  inset: 3px;
+  border-radius: 6px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.batt-rain i {
+  position: absolute;
+  top: -12px;
+  width: 4px;
+  height: 10px;
+  border-radius: 3px;
   opacity: 0;
+  animation: batt-rain 2.4s linear infinite;
 }
 
-.flow-up .batt-seg-fill::after {
-  opacity: 1;
-  animation: batt-flow-up 2.4s linear infinite;
+.batt-rain i:nth-child(1) { left: 16%; animation-delay: 0s; }
+.batt-rain i:nth-child(2) { left: 38%; animation-delay: 0.6s; }
+.batt-rain i:nth-child(3) { left: 60%; animation-delay: 1.2s; }
+.batt-rain i:nth-child(4) { left: 80%; animation-delay: 1.8s; }
+
+/* charging: drops fall top → bottom (energy poured into the battery) */
+@keyframes batt-rain {
+  0% { top: -12px; opacity: 0; }
+  12% { opacity: 0.9; }
+  85% { opacity: 0.9; }
+  100% { top: calc(100% + 2px); opacity: 0; }
 }
 
-.flow-down .batt-seg-fill::after {
-  opacity: 1;
-  animation: batt-flow-down 2.4s linear infinite;
+/* discharging: the mirror — drops drift bottom → top (energy leaving) */
+.batt-rain.rain-out i {
+  animation-direction: reverse;
 }
 
-@keyframes batt-flow-up {
-  from { background-position-y: 130%; }
-  to { background-position-y: -130%; }
-}
-
-@keyframes batt-flow-down {
-  from { background-position-y: -130%; }
-  to { background-position-y: 130%; }
-}
+/* drop color = the unit's current fill level color */
+.batt-rain.seg-full i { background: #4ee06b; }
+.batt-rain.seg-good i { background: #b8e62e; }
+.batt-rain.seg-mid i { background: #f5d33c; }
+.batt-rain.seg-low i { background: #f39c12; }
+.batt-rain.seg-crit i { background: #e05c5c; }
 
 /* 5-step level ramp per segment SOC (from the reference pictures) */
 .batt-seg-fill.seg-full {
@@ -2171,10 +2188,8 @@ pre {
     transition: none;
   }
 
-  .flow-up .batt-seg-fill::after,
-  .flow-down .batt-seg-fill::after {
-    animation: none;
-    opacity: 0;
+  .batt-rain {
+    display: none;
   }
 }
 
