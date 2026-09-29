@@ -21,6 +21,11 @@ export const ro = {
     simpleTip: "Vedere simplă — un singur ecran calm",
     fullTip: "Vedere completă — toate taburile și detaliile",
   },
+  simple: {
+    batteries: "Baterii",
+    charts: "Tendințe",
+    periods: "Totaluri",
+  },
   header: {
     voiceCommand: "Comandă vocală",
     voiceUnsupported: "Comenzile vocale nu sunt suportate în acest browser",

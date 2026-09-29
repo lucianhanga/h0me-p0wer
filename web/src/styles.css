@@ -2185,16 +2185,20 @@ pre {
      leaving "21 °C" dangling. Flattening the side column (display:
      contents) makes hero + legend direct flex children, so the legend
      wraps to a full-width row below the cylinder and the detail fits on
-     one line in all three languages. */
-  .batt-modules {
+     one line in all three languages.
+     Scoped to :not(.stacked) (2026-09-29, user report — misaligned texts
+     under the simple view's battery pair): the flattening made the
+     stacked columns' text rows land at different heights; stacked mode
+     keeps a real side column under the slot instead. */
+  .batt-modules:not(.stacked) {
     flex-wrap: wrap;
   }
 
-  .batt-modules-side {
+  .batt-modules:not(.stacked) .batt-modules-side {
     display: contents;
   }
 
-  .batt-modules-legend {
+  .batt-modules:not(.stacked) .batt-modules-legend {
     flex-basis: 100%;
     max-width: none;
     margin-top: 0.25rem;
@@ -2425,6 +2429,15 @@ pre {
   text-align: center;
 }
 
+@media (max-width: 600px) {
+  /* Narrower so the coverage line fits ONE row in a ~173px column
+     (2026-09-29, user report: "the last row spans two rows"). */
+  .simple-batt .batt-cover {
+    font-size: 0.72rem;
+    white-space: nowrap;
+  }
+}
+
 /* Simple view's read-only charts (full width — charts benefit from it) and
    the Today tile (calm centered column like the battery stacks). Titles
    and legends stay centered (2026-09-29, user report: "the graphs look
@@ -2438,6 +2451,29 @@ pre {
 
 .simple-chart h4 {
   text-align: center;
+}
+
+/* Section dividers for the simple view (2026-09-29, user request — "add
+   some titles to each section... make it look finished"): minimal centered
+   label with hairlines flanking it. Decoration only. */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  color: #8b98a5;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.section-title::before,
+.section-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: #2a3238;
 }
 
 .simple-today {

@@ -5475,3 +5475,25 @@ side recovers — no action needed unless it persists for days.
   (system discharging 190 W, composition of SB4 100 + Pro 90).
 - The dischargeW field stays in the payload for reference/debugging but
   no longer feeds any display.
+
+## Simple view: section dividers + text alignment + night PV arc (2026-09-29, user requests)
+
+- **Section dividers** (`web/src/components/SectionTitle.jsx`): minimal
+  centered uppercase label with hairlines flanking it (standard dashboard
+  composition pattern — researched; decoration only, no data). SimpleHome
+  sections: Power Flow / Batteries / Trends / Totals (i18n simple.* in
+  en/de/ro; reuses live.powerFlow).
+- **Battery texts misaligned between the two columns** (user screenshot):
+  the ≤600px `display: contents` side-flattening (built for the Strategy
+  cards' legend wrap) applied to the STACKED layout too, landing the two
+  columns' text rows at different heights. The flattening rules are now
+  scoped `:not(.stacked)`; stacked mode keeps a real centered side column.
+  The coverage line ("covers ≈ … at average use") is nowrap + 0.72rem on
+  phones so it never wraps to two rows in a ~173px column.
+- **"3 W from PV while PV produces nothing"** (user screenshot): the
+  PV→Home arc glowed at night — output/cells channel wobble left a small
+  remainder on pvToHomeW (output − pvToGrid − cells). Now CAPPED at
+  current production (PV→home can never exceed it): `min(pvW, …)` — at
+  night pvW=0 forces 0.
+- Verified: pvToHome 0 at night; phone + desktop screenshots (dividers,
+  aligned columns, single-line coverage); scrollW == 390 both.

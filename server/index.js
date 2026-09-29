@@ -480,12 +480,13 @@ async function computeFlowPayload() {
     // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above).
     // NOT to_home_load (unit-local behind the dock, v1.5.120) and NOT
     // output − pv_to_grid − bat_discharge_power (broken channel, above).
-    // Closes exactly: grid_to_home + Σoutput − pv_to_grid ==
-    // home_load_power (validated 2026-09-27), so grid + pvToHome +
-    // battToHome == homeW by construction.
+    // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above),
+    // CAPPED at current production (2026-09-29, user report: a "2 W"
+    // PV→Home arc glowed at night with PV at 0 — output/cells channel
+    // wobble left a remainder). PV→home can never exceed production.
     pvToHomeW:
       appCh && b.outputW != null
-        ? Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW)
+        ? Math.min(pvW, Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW))
         : pvToHome,
     batterySoc: b?.soc ?? null,
     // stored kWh ÷ 7-day-average consumption rate — "time to empty

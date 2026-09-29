@@ -21,6 +21,11 @@ export const de = {
     simpleTip: "Einfache Ansicht — ein ruhiger Bildschirm",
     fullTip: "Volle Ansicht — alle Tabs und Details",
   },
+  simple: {
+    batteries: "Akkus",
+    charts: "Verläufe",
+    periods: "Summen",
+  },
   header: {
     voiceCommand: "Sprachbefehl",
     voiceUnsupported: "Sprachbefehle werden in diesem Browser nicht unterstützt",
