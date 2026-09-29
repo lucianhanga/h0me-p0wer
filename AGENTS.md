@@ -5229,3 +5229,48 @@ side recovers — no action needed unless it persists for days.
   390) + desktop screenshots; Today tile flip verified via CDP click;
   SB4 "idle" state confirmed correct against live data (it hit its own
   10% cutoff — outputW 0 while the Pro carried the house).
+
+## Flow diagram: Anker-app channels + generic FlowView control (2026-09-29, user request + analysis)
+
+- **Analysis (delivered as a report first)**: same-second live capture
+  showed our Home 521 W vs the app's 658 W — the display-side median-of-3
+  despike (added for the CONTROLLER's transient protection) lagging a real
+  load change; arcs were derived from mixed-freshness fields. Decision per
+  the user's direction: the live flow DIAGRAM displays Anker's own
+  scen_info channels (the direct Modbus connection brings no advantage
+  there); the meter stays for DB/timeseries/stats (1 s, per-phase,
+  offline-proof).
+- **/api/flow gains a `diagram` block** (computeFlowPayload):
+  homeW=home_load_power RAW (the despiked refreshHomeConsumption() now
+  feeds ONLY powerPlan.tick), gridToHomeW/pvToGridW from grid_info,
+  battToHomeW=Σ bat_discharge_power (new member+aggregate field in
+  anker-cloud.js — the app's own battery→house channel),
+  pvToBattW=Σ bat_charge_power, pvToHomeW=to_home_load−Σdischarge (≥0),
+  pvW=Σ photovoltaic_power, batterySoc=total_battery_power, and
+  timeToEmptyH = stored kWh ÷ (avgDailyHomeKwh7d()/24) — the 7-day-average
+  consumption the user asked for, computed from energy-day.js helpers
+  (home = grid import + cells + PV-to-home per finished day, SN-array
+  safe), memoized 1 h, null with < 3 days of data. Everything falls back
+  to the previous derived values when the battery feed is down. The arcs
+  close EXACTLY to the Home node (grid_to_home + to_home_load ==
+  home_load_power) — verified live: all 7 channel comparisons OK +
+  identity closes.
+- **The four Live-tab TILES deliberately keep their own sources** (meter
+  where available) — the request was about the graph; tile↔arc source
+  split is documented in computeFlowPayload.
+- **Generic control**: web/src/flow/ — model.js (buildFlowModel: the ONE
+  place payload→nodes/edges; Grid node carries NO value per the user,
+  battery node = soc% + "≈ {eta}"), FlowView.jsx (<FlowView flow
+  variant="basic"> — the single control both views use; variants are a
+  registry, an artistic variant with icon nodes plugs in WITHOUT touching
+  the model), variants/basic.jsx (the current SVG presentation + tweened
+  labels, moved verbatim-ish). FlowDiagram.jsx DELETED; LiveTab +
+  SimpleHome both render FlowView. i18n flow.eta "≈ {eta}" (en/de/ro).
+- **Same PR: simple-view centering** (user screenshot): the per-unit
+  status line's ETA ("full in ≈ 149h 22m") pushed the column off-center —
+  ETA now on its OWN centered line below the status text; simple charts'
+  titles and legends centered.
+- Verified: live same-second channel comparison ALL OK; 7-day average
+  per-day print matches the Dashboard's own figures; screenshots both
+  views phone+desktop (Grid node valueless, battery node "8% · ≈ 9h 42m"),
+  scrollW == 390.

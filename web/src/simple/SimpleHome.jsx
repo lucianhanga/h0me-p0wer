@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import FlowDiagram from "../FlowDiagram.jsx";
+import FlowView from "../flow/FlowView.jsx";
 import BatteryModules from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
@@ -57,7 +57,7 @@ export default function SimpleHome() {
   return (
     <div className="simple-home">
       <div className="simple-flow">
-        <FlowDiagram flow={flow} />
+        <FlowView flow={flow} />
       </div>
       {stacks.length > 0 && (
         <div className="simple-batt-row">

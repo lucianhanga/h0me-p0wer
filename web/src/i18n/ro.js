@@ -123,6 +123,7 @@ export const ro = {
     grid: "Rețea",
     home: "Casă",
     battery: "Baterie",
+    eta: "≈ {eta}",
     ariaLabel: "flux de putere",
   },
   powerplan: {

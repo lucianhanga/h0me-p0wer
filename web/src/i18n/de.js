@@ -127,6 +127,7 @@ export const de = {
     grid: "Netz",
     home: "Haus",
     battery: "Akku",
+    eta: "≈ {eta}",
     ariaLabel: "Energiefluss",
   },
   powerplan: {

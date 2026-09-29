@@ -53,6 +53,7 @@ import {
   logActivity,
   getActivity,
 } from "./db.js";
+import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Root package.json version — piggybacked on every WS live push so a stale
@@ -384,11 +385,32 @@ function getPvStringKwhToday() {
   return pvStringKwhCache.result;
 }
 
+// Average daily house consumption (kWh) over the last 7 finished days —
+// basis for the battery node's "time to empty" in the flow diagram
+// (2026-09-29, user request: "approximated based on a consume of average
+// for the last 7 days"). Same validated per-day balance as the Dashboard:
+// home = grid import + cells discharge + PV direct-to-home. Memoized 1 h.
+let homeAvg7dCache = { at: 0, value: null };
+function avgDailyHomeKwh7d() {
+  if (homeAvg7dCache.value != null && Date.now() - homeAvg7dCache.at < 3600000)
+    return homeAvg7dCache.value;
+  const days = [];
+  for (let i = 1; i <= 7; i++) {
+    const d = localDate(new Date(Date.now() - i * 86400000));
+    days.push(dayGridImportKwh(meterSns(), d) + dayBattery(batterySns(), d).dischargedKwh + dayPv(d).toHome);
+  }
+  const withData = days.filter((v) => v > 0);
+  if (withData.length < 3) return null; // not enough history — honest null
+  const avg = withData.reduce((a, v) => a + v, 0) / withData.length;
+  homeAvg7dCache = { at: Date.now(), value: Math.round(avg * 100) / 100 };
+  return homeAvg7dCache.value;
+}
+
 // The /api/flow payload, extracted so BOTH the REST route and the WebSocket
 // live-push (broadcastLive below) share the exact same computation.
 // refreshHomeConsumption() is called here (not just on the 10 s tick) so
-// WS-pushed updates carry a Home value as fresh as the meter sample that
-// triggered them — the despike median-of-3 simply sees more samples.
+// the CONTROLLER's despiked home value stays as fresh as the trigger
+// sample — the DISPLAY no longer uses it (see the diagram block below).
 async function computeFlowPayload() {
   const glRaw = getGridLive();
   // Display-smoothed for the meter source (see GRID_DISPLAY_SMOOTH_MS);
@@ -424,10 +446,40 @@ async function computeFlowPayload() {
     () => latestBattery ?? getLatestBattery(),
   );
   const dischargeTolerancePct = powerPlan.getState().dischargeTolerancePct ?? 0;
-  refreshHomeConsumption(); // keep Home as fresh as the trigger sample
+  refreshHomeConsumption(); // keep the controller's despiked value fresh
+  // The flow DIAGRAM displays the same channels the Anker app does
+  // (2026-09-29, user request — analysis showed our despiked Home lagged
+  // the app by up to ~30 s and derived arcs flickered from mixing fields
+  // of different freshness): one payload, one timestamp, and the arcs
+  // close EXACTLY to the Home node (grid_to_home + to_home_load ==
+  // home_load_power, validated twice). b.homeLoadW present = the feed is
+  // live; anything missing falls back to the derived values above.
+  const appCh = b?.homeLoadW != null;
+  const capKwh = b ? systemCapacityKwh(b) : null;
+  const storedKwh = b?.soc != null && capKwh != null ? (b.soc / 100) * capKwh : null;
+  const avgKwhDay = avgDailyHomeKwh7d();
+  const diagram = {
+    homeW: appCh ? b.homeLoadW : latestHomeConsumptionW,
+    pvW,
+    gridToHomeW: appCh && b.gridToHomeW != null ? b.gridToHomeW : grid != null ? Math.max(grid, 0) : null,
+    pvToGridW: appCh && b.pvToGridW != null ? b.pvToGridW : grid != null ? Math.max(-grid, 0) : null,
+    battToHomeW: b?.dischargeW ?? cellsW,
+    pvToBattW: chargeW,
+    pvToHomeW:
+      b?.toHomeW != null && b?.dischargeW != null
+        ? Math.max(0, b.toHomeW - b.dischargeW)
+        : pvToHome,
+    batterySoc: b?.soc ?? null,
+    // stored kWh ÷ 7-day-average consumption rate — "time to empty
+    // approximated based on a consume of average for the last 7 days".
+    timeToEmptyH:
+      storedKwh != null && avgKwhDay ? Math.round((storedKwh / (avgKwhDay / 24)) * 10) / 10 : null,
+    ts: b?.ts ?? null,
+  };
   return {
     ts: Date.now(),
     obtainedAt: new Date().toISOString(), // when the server obtained these values
+    diagram,
     grid: {
       import: grid != null ? Math.max(grid, 0) : null,
       export: grid != null ? Math.max(-grid, 0) : null,
