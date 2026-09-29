@@ -56,7 +56,7 @@ function Edge({ edge }) {
   const a = POS[edge.from];
   const b = POS[edge.to];
   const w = useTweenedWatts(edge.watts ?? 0); // arcs glide with the values
-  if (!w) {
+  if (w <= 0) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
   const mx = (a.x + b.x) / 2;

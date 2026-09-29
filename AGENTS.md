@@ -5274,3 +5274,17 @@ side recovers — no action needed unless it persists for days.
   per-day print matches the Dashboard's own figures; screenshots both
   views phone+desktop (Grid node valueless, battery node "8% · ≈ 9h 42m"),
   scrollW == 390.
+
+## Grid arc: dominant direction + negative-channel clamp (2026-09-29, user report)
+
+- User: "between grid and home the arc goes both directions." The new
+  app-channel model draws grid→home from grid_to_home_power AND
+  home→grid from photovoltaic_to_grid_power — two SEPARATE channels
+  (the old diagram had ONE signed value, so only one direction could
+  draw). Both can be nonzero at once (per-phase import on L3 + inverter
+  export on L1, plus timing), and pv_to_grid can even read a small
+  NEGATIVE (seen live: −7) — which drew an export arc labeled "−7 W"
+  next to the import arc. model.js now nets them
+  (max(0,import) − max(0,export), dominant direction only — the same
+  rule the battery pair always used) and basic.jsx's Edge hides any arc
+  with w <= 0 (was only w == 0).
