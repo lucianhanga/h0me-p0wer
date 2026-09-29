@@ -5350,3 +5350,28 @@ side recovers — no action needed unless it persists for days.
   dischargeW in recomputeAggregate (the flow diagram's batt→home arc
   reads it since v1.5.118 — it went stale between REST syncs under MQTT
   cadence). Verified: 40 s watch with interleaved MQTT/REST — steady.
+
+## Simple view: 4-face flip chart tiles + Week/Month tiles + equal battery columns (2026-09-29, user requests)
+
+- **QuadFlipTile** (`web/src/components/QuadFlipTile.jsx`): generic
+  round-robin multi-face flipper — tap the title (or the tile) to cycle
+  faces. Single-content swap (rotate edge-on → onFlip fires at the
+  invisible moment → rotate back), no fixed pixel dimensions needed;
+  same >10px drag guard as FlipTile; reduced-motion aware. Controlled:
+  the parent owns the face index (it drives data loading).
+- **SimpleCharts reworked**: each of the three tiles (Home Power Usage /
+  Power Production / Battery) is now a 4-face tile cycling
+  12h → 24h → 1w → 1h (user's face order); each face fetches its own
+  /api/timeseries window (points=600, 60 s refresh for the active face);
+  x-axis switches to day+time labels on the 7d face; legend hidden (the
+  title button carries identity + current span "· 12h ⟳"). Chart re-inits
+  per fetch (60 s cadence + flips — the 1-3 Hz re-init storm class from
+  the Live mini-charts can't happen here).
+- **Week + Month tiles** under Today: the Dashboard's real SourceCards
+  (flip + ‹ › period nav included), stacked in a 460px centered column
+  (.simple-periods replaces .simple-today).
+- **Equal battery columns** (user screenshot: pair off-center when only
+  one unit charged): content-sized columns drifted when one status block
+  was taller (charging+ETA vs bare "idle") — now flex 1 1 0 + max-width
+  320px, symmetric regardless of content (verified: both columns 173px,
+  symmetric margins at 390px).

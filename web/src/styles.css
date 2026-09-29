@@ -2366,8 +2366,13 @@ pre {
 }
 
 .simple-batt-row .simple-batt {
-  width: auto;
-  max-width: none;
+  /* Equal-width columns (2026-09-29, user report): content-sized columns
+     drifted off-center whenever one unit's status line was longer (ETA on
+     the charging one, bare "idle" on the other) — the pair sat lopsided.
+     Equal flex basis keeps the pair symmetric regardless of content. */
+  flex: 1 1 0;
+  max-width: 320px;
+  min-width: 0;
   display: flex;
   flex-direction: column;
 }
@@ -2444,6 +2449,70 @@ pre {
 .simple-today {
   width: 100%;
   max-width: 460px;
+}
+
+/* Today + Week + Month stacked under the charts (2026-09-29, user
+   request) — the same centered column width as the battery stacks. */
+.simple-periods {
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* Round-robin flip tiles (QuadFlipTile — the simple view's 4-face chart
+   tiles). Single-content swap: rotate edge-on, swap at the invisible
+   moment, rotate back. */
+.quadflip {
+  perspective: 1200px;
+}
+
+.quadflip-title {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: #e8ecef;
+  font-size: 1.05rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 0.25rem 0;
+  cursor: pointer;
+}
+
+.quadflip-face {
+  color: #8b98a5;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.quadflip-inner {
+  transition: transform 0.18s ease-in;
+  transform-style: preserve-3d;
+}
+
+.quadflip-inner.qf-out {
+  transform: rotateY(90deg);
+}
+
+.quadflip-inner.qf-prep {
+  transition: none;
+  transform: rotateY(-90deg);
+}
+
+.quadflip-inner.qf-in {
+  transform: rotateY(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .quadflip-inner {
+    transition: none;
+  }
+}
+
+.simple-chart-loading {
+  /* empty box of chart height while the first fetch is in flight */
 }
 
 /* Phones: keep the two units side by side (the whole point of the parallel
