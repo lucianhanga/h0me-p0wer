@@ -231,6 +231,7 @@ export const en = {
       emptyIn: "empty in ≈ {eta}",
       usableWindow: "usable window ≈ {kwh} kWh",
     },
+    coverAvg: "covers ≈ {eta} at average use",
     liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
     memberNote: "part of the battery system — per-unit live view",
     details: {

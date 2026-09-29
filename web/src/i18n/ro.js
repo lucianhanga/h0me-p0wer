@@ -242,6 +242,7 @@ export const ro = {
       emptyIn: "goală în ≈ {eta}",
       usableWindow: "fereastră utilizabilă ≈ {kwh} kWh",
     },
+    coverAvg: "acoperă ≈ {eta} la consum mediu",
     liveOnlyNote: "doar monitorizare live — nu face parte din sistemul casei, fără control sau istoric",
     memberNote: "parte din sistemul de baterii — vedere live pe unitate",
     details: {
