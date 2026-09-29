@@ -5335,3 +5335,18 @@ side recovers — no action needed unless it persists for days.
 - Verified with two timed screenshots catching drops mid-fall on both
   units while charging (live state: PV splitting into both), desktop +
   phone; scrollW == 390.
+
+## Aggregate SOC: one writer (REST total_battery_power) (2026-09-29, user report)
+
+- User: the Battery-system tile oscillated 17%↔18% within 5 s while
+  charging 932 W (physically impossible — 932 W × 5 s = 0.08% of 16.6
+  kWh). Root cause: TWO writers — REST sync wrote the site's own
+  total_battery_power; every MQTT message recomputed a capacity-weighted
+  mean via weightedSoc(). The two straddle a rounding boundary at
+  different moments → flip-flop. Fix: recomputeAggregate() no longer
+  touches soc — the aggregate SOC comes only from Anker's site-level
+  total_battery_power (what the app displays; SOC moves far too slowly
+  to need MQTT cadence). weightedSoc() deleted (dead). Also summed
+  dischargeW in recomputeAggregate (the flow diagram's batt→home arc
+  reads it since v1.5.118 — it went stale between REST syncs under MQTT
+  cadence). Verified: 40 s watch with interleaved MQTT/REST — steady.
