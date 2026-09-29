@@ -2,14 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { rowValue } from "../graph/derive.js";
+import QuadFlipTile from "../components/QuadFlipTile.jsx";
 
 // Simple view's three read-only charts (2026-09-28, user request): house
 // consumption by source (grid / solar / battery, stacked + home line),
 // total power production, battery charging/discharging. The SAME series
 // definitions as the Graph tab's first three charts — derivations shared
-// via graph/derive.js — but deliberately interaction-free: fixed trailing
-// 24h window, no zoom/pan/span buttons, refreshed once a minute (this is
-// the glance screen, not the analysis tool).
+// via graph/derive.js — but deliberately interaction-free: no zoom/pan.
+// 2026-09-29 (user request): each tile is a 4-face round-robin flipper —
+// tap the title (or the tile) to cycle 12h → 24h → 1w → 1h.
 const DEFS = [
   {
     titleKey: "graph.title.home",
@@ -33,10 +34,17 @@ const DEFS = [
   },
 ];
 
-const REFRESH_MS = 60000;
-const WINDOW_MS = 24 * 3600 * 1000;
+// Face order per the user's spec: 12h, 24h, 1w, 1h — round robin.
+const SPANS = [
+  { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
+  { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
+  { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
+  { key: "graph.span.1h", ms: 3600 * 1000 },
+];
 
-function SimpleChart({ def, rows, title }) {
+const REFRESH_MS = 60000;
+
+function ChartCanvas({ def, rows }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!rows?.length) return undefined;
@@ -44,7 +52,7 @@ function SimpleChart({ def, rows, title }) {
     chart.setOption({
       animation: false,
       backgroundColor: "transparent",
-      grid: { top: 30, right: 8, bottom: 24, left: 8, containLabel: true },
+      grid: { top: 8, right: 8, bottom: 24, left: 8, containLabel: true },
       tooltip: {
         trigger: "axis",
         backgroundColor: "#1a2128",
@@ -59,7 +67,15 @@ function SimpleChart({ def, rows, title }) {
           color: "#8b98a5",
           fontSize: 11,
           hideOverlap: true,
-          formatter: (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          formatter: (ts) => {
+            const d = new Date(ts);
+            // Day+time labels once the window spans more than a day (7d face).
+            return def.spanMs > 24 * 3600 * 1000
+              ? d.toLocaleDateString([], { day: "numeric", month: "short" }) +
+                  " " +
+                  d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+              : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          },
         },
         splitLine: { show: false },
       },
@@ -69,16 +85,7 @@ function SimpleChart({ def, rows, title }) {
         axisLabel: { color: "#8b98a5", fontSize: 11, formatter: (v) => `${Math.round(v)} W` },
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
-      legend: {
-        top: 0,
-        left: "center",
-        type: "scroll",
-        textStyle: { color: "#8b98a5", fontSize: 11 },
-        icon: "roundRect",
-        itemWidth: 12,
-        itemHeight: 8,
-        inactiveColor: "#5a6672",
-      },
+      legend: { show: false }, // the title button carries the tile's identity
       series: def.series.map((s) => ({
         name: s.name,
         type: "line",
@@ -99,22 +106,19 @@ function SimpleChart({ def, rows, title }) {
       chart.dispose();
     };
   }, [def, rows]);
-  return (
-    <section className="simple-chart">
-      <h4>{title}</h4>
-      <div ref={ref} className="chart-box-sm" />
-    </section>
-  );
+  return <div ref={ref} className="chart-box-sm" />;
 }
 
-export default function SimpleCharts() {
+function SimpleChartTile({ def }) {
   const t = useT();
+  const [spanIdx, setSpanIdx] = useState(0); // first face: 12h
   const [rows, setRows] = useState(null);
+  const spanMs = SPANS[spanIdx].ms;
   useEffect(() => {
     let cancelled = false;
     const load = () => {
       const to = Date.now();
-      fetch(`/api/timeseries?from=${to - WINDOW_MS}&to=${to}&points=600&view=${WINDOW_MS}`)
+      fetch(`/api/timeseries?from=${to - spanMs}&to=${to}&points=600&view=${spanMs}`)
         .then((r) => r.json())
         .then((p) => {
           if (!cancelled && p?.ok) setRows(p.data);
@@ -127,9 +131,27 @@ export default function SimpleCharts() {
       cancelled = true;
       clearInterval(timer);
     };
-  }, []);
-  // Resolve series names once per language (a fresh defs object re-inits
-  // the charts — wanted on language change, not on every render).
+  }, [spanMs]);
+  return (
+    <section className="simple-chart">
+      <QuadFlipTile
+        title={def.title}
+        faceLabel={t(SPANS[spanIdx].key)}
+        onFlip={() => setSpanIdx((i) => (i + 1) % SPANS.length)}
+      >
+        {rows?.length ? (
+          <ChartCanvas def={{ ...def, spanMs }} rows={rows} />
+        ) : (
+          <div className="chart-box-sm simple-chart-loading" />
+        )}
+      </QuadFlipTile>
+    </section>
+  );
+}
+
+export default function SimpleCharts() {
+  const t = useT();
+  // Resolve titles/series names once per language.
   const defs = useMemo(
     () =>
       DEFS.map((d) => ({
@@ -139,11 +161,10 @@ export default function SimpleCharts() {
       })),
     [t],
   );
-  if (!rows?.length) return null;
   return (
     <div className="simple-charts">
       {defs.map((def) => (
-        <SimpleChart key={def.titleKey} def={def} rows={rows} title={def.title} />
+        <SimpleChartTile key={def.titleKey} def={def} />
       ))}
     </div>
   );

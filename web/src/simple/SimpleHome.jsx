@@ -133,12 +133,27 @@ export default function SimpleHome() {
       )}
       <SimpleCharts />
       {overview?.byPeriod?.today && (
-        <div className="simple-today">
+        <div className="simple-periods">
+          {/* Today + Week + Month (2026-09-29, user request — "under the
+              today tile add also the week and month tiles") — the real
+              Dashboard cards, flip + ‹ › period nav included. */}
           <SourceCard
             type="day"
             title={t("dashboard.today")}
             data={overview.byPeriod.today}
             formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          />
+          <SourceCard
+            type="week"
+            title={t("dashboard.thisWeek")}
+            data={overview.byPeriod.week}
+            formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
+          />
+          <SourceCard
+            type="month"
+            title={t("dashboard.thisMonth")}
+            data={overview.byPeriod.month}
+            formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
           />
         </div>
       )}
