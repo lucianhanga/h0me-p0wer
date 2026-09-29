@@ -5375,3 +5375,16 @@ side recovers — no action needed unless it persists for days.
   was taller (charging+ETA vs bare "idle") — now flex 1 1 0 + max-width
   320px, symmetric regardless of content (verified: both columns 173px,
   symmetric margins at 390px).
+
+## Swipe gestures: no more tab switching; period tiles swipe through history (2026-09-29, user request)
+
+- **Removed** the global swipe-left/right tab navigation (App.jsx) — tabs
+  are switched via the tab bar only now.
+- **SourceCard (Dashboard period tiles + the simple view's Today/Week/
+  Month)**: swiping left on a card goes to the OLDER period (‹), right to
+  the NEWER (›) — same go() as the chevron buttons; 50px minimum,
+  horizontal must dominate 1.5×, gestures starting on buttons ignored,
+  FlipTile's >10px drag guard still prevents accidental flips. Works on
+  the flipped (bar-chart) side too.
+- Verified via CDP touch events: Today →(swipe left)→ Yesterday
+  →(swipe right)→ Today; background swipes no longer change the tab.
