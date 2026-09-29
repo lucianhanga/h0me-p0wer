@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
@@ -177,6 +177,25 @@ export function SourceCard({ type, title, data, formatLabel }) {
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
   const [past, setPast] = useState(null); // /api/stats/period response (offset ≥ 1)
   const [blocked, setBlocked] = useState(false); // no data further back
+  const swipeStart = useRef(null);
+
+  // Swipe left/right on the card navigates its history (2026-09-29, user
+  // request — replaces the removed global swipe-to-switch-tabs): swipe
+  // left = older (the ‹ button), right = newer (›). Horizontal must
+  // dominate 1.5×, 50px minimum; taps and vertical scrolls untouched.
+  const onTouchStart = (e) => {
+    if (e.target.closest("button")) return;
+    swipeStart.current = [e.touches[0].clientX, e.touches[0].clientY];
+  };
+  const onTouchEnd = (e) => {
+    const s = swipeStart.current;
+    swipeStart.current = null;
+    if (!s) return;
+    const dx = e.changedTouches[0].clientX - s[0];
+    const dy = e.changedTouches[0].clientY - s[1];
+    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    go(dx < 0 ? 1 : -1);
+  };
 
   async function go(dir) {
     const next = offset + dir;
@@ -210,7 +229,7 @@ export function SourceCard({ type, title, data, formatLabel }) {
     ...(active.exportKwh != null ? [EXPORT_ROW] : []),
   ];
   return (
-    <div className="src-card">
+    <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* Outside the FlipTile so ‹ › period nav stays usable on the flipped
           (bar-chart) side too — it used to live inside the front face and
           vanish once the card was flipped (2026-09-19, user request). */}
