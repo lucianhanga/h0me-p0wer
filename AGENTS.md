@@ -5288,3 +5288,16 @@ side recovers — no action needed unless it persists for days.
   (max(0,import) − max(0,export), dominant direction only — the same
   rule the battery pair always used) and basic.jsx's Edge hides any arc
   with w <= 0 (was only w == 0).
+
+## PV→Home arc: to_home_load is unit-local behind the dock (2026-09-29, user report)
+
+- User: "PV to House + Grid to House don't add up to Home" (screenshot:
+  210 + 51 ≠ 518). Root cause found live: behind the Power Dock the
+  site-level scen_info `to_home_load` carries only ONE unit's output
+  (verified: 210 == h-solarbank-4's output_power while the Pro pushed
+  another 342 W). My v1.5.118 formula `to_home_load − Σdischarge` was
+  pre-dock correct, dock-wrong. Fixed: `pvToHomeW = max(0, Σ output_power
+  − photovoltaic_to_grid_power − Σ bat_discharge_power)` — closes exactly
+  via the validated identity grid_to_home + Σoutput − pv_to_grid ==
+  home_load_power. Verified live: 17+371+0 = 388 vs home 387 (Δ 1 W
+  rounding); PV split 371+938=1309 vs 1319 (Δ 10 W inverter losses).
