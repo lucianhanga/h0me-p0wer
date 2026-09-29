@@ -468,19 +468,24 @@ async function computeFlowPayload() {
         : grid != null
           ? Math.max(-grid, 0)
           : null,
-    battToHomeW: b?.dischargeW ?? cellsW,
+    // Cells discharge is DERIVED, never read from bat_discharge_power
+    // (2026-09-29, user report: "Live tab's battery→home arc shows
+    // NOTHING while the Anker app shows discharging" — the channel read 0
+    // on BOTH units while Σoutput (270) exceeded ΣPV+Σcharge (132), i.e.
+    // ~138 W was provably coming from the cells). The derivation reads the
+    // same app channels and closes the identity exactly
+    // (output = pvThrough + cells, validated 2026-09-13).
+    battToHomeW: cellsW,
     pvToBattW: chargeW,
-    // PV→Home = Σ output_power − pv_to_grid − Σ bat_discharge (2026-09-29,
-    // user report: "PV to House + Grid to House don't add up to Home").
-    // NOT to_home_load − discharge: behind the Power Dock the site-level
-    // to_home_load field carries only ONE unit's output (verified live:
-    // 210 == the SB4's output_power while the Pro pushed another 342).
-    // This closes exactly: grid_to_home + Σoutput − pv_to_grid ==
+    // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above).
+    // NOT to_home_load (unit-local behind the dock, v1.5.120) and NOT
+    // output − pv_to_grid − bat_discharge_power (broken channel, above).
+    // Closes exactly: grid_to_home + Σoutput − pv_to_grid ==
     // home_load_power (validated 2026-09-27), so grid + pvToHome +
     // battToHome == homeW by construction.
     pvToHomeW:
-      appCh && b.outputW != null && b.dischargeW != null
-        ? Math.max(0, b.outputW - (b.pvToGridW ?? 0) - b.dischargeW)
+      appCh && b.outputW != null
+        ? Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW)
         : pvToHome,
     batterySoc: b?.soc ?? null,
     // stored kWh ÷ 7-day-average consumption rate — "time to empty
@@ -519,10 +524,11 @@ async function computeFlowPayload() {
           soc: b.soc,
           discharge: b.outputW,
           charge: chargeW,
-          // Cells-only output to the house — the app's own
-          // bat_discharge_power channel when available (same number the
-          // diagram's battery→house arc carries), else the derived value.
-          cells: b.dischargeW ?? cellsW,
+          // Cells-only output to the house — DERIVED (output minus the PV
+          // pass-through): the bat_discharge_power channel proved
+          // unreliable (reads 0 while the cells provably discharge,
+          // 2026-09-29). Same number the diagram's battery→house arc shows.
+          cells: cellsW,
           // Charging sourced from the grid (chargeW beyond what PV covers)
           // — the Home→Battery arc, normally 0.
           gridCharge: gridChargeW,
