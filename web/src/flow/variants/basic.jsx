@@ -62,6 +62,33 @@ function Edge({ edge }) {
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   const vertical = a.x === b.x;
+  const horizontal = a.y === b.y;
+  // Diagonal edges (PV→Battery): the label used to sit ON the dashed line
+  // (2026-09-29, user report: "the text is over the arc line, not clearly
+  // visible") — offset it PERPENDICULAR to the arc (above the line) and
+  // give every label a dark outline (paint-order stroke) so it stays
+  // legible even when a line passes underneath.
+  let lx, ly, anchor;
+  if (vertical) {
+    lx = mx + 8;
+    ly = my - 3;
+    anchor = "start";
+  } else if (horizontal) {
+    lx = mx;
+    ly = my - 8;
+    anchor = "middle";
+  } else {
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    let nx = -(b.y - a.y) / len;
+    let ny = (b.x - a.x) / len;
+    if (ny > 0) {
+      nx = -nx;
+      ny = -ny; // label above the line, never below
+    }
+    lx = mx + nx * 12;
+    ly = my + ny * 12 + 4;
+    anchor = "middle";
+  }
   return (
     <g>
       <line
@@ -75,12 +102,15 @@ function Edge({ edge }) {
         className="flow-edge-anim"
       />
       <text
-        x={vertical ? mx + 8 : mx}
-        y={vertical ? my - 3 : my - 8}
+        x={lx}
+        y={ly}
         fill={edge.color}
         fontSize="12"
         fontWeight="600"
-        textAnchor={vertical ? "start" : "middle"}
+        textAnchor={anchor}
+        paintOrder="stroke"
+        stroke="#10161b"
+        strokeWidth="3"
       >
         {w} W
       </text>

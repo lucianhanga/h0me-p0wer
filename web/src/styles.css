@@ -2361,11 +2361,15 @@ pre {
   flex: 1;
 }
 
-/* Cylinders stand on the same line like the physical stack, regardless of
-   capacity-proportional height — the names/percentages underneath then
-   align across columns. */
-.simple-batt-row .batt-modules.stacked .batt-seg {
-  margin-top: auto;
+/* Cylinder slot (stacked/simple view): reserves the tallest stack's height
+   and bottom-aligns each cylinder inside it — cylinders "stand" on the
+   same line like the physical stack regardless of capacity-proportional
+   height, so the name/%/status texts align across columns. */
+.batt-seg-slot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  align-self: center;
 }
 
 .batt-modules.stacked {

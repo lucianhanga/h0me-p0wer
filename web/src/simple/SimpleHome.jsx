@@ -106,6 +106,7 @@ export default function SimpleHome() {
                   stacked
                   legend={false}
                   heightPx={heightOf(u)}
+                  slotHeightPx={baseH}
                 />
                 {/* State + ETA until full/empty, same as the Strategy cards
                     (2026-09-28, user request) — replaces the per-module legend
