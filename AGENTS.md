@@ -5412,3 +5412,23 @@ side recovers — no action needed unless it persists for days.
   stalls, isFresh() goes false and REST fills in again automatically.
 - Verified live: charge 678-707 W smooth drift (real PV wobble), cells
   0, soc steady, no mode flips over 45 s.
+
+## Live tiles follow the same app channels as the diagram (2026-09-29, user report)
+
+- User screenshot (a few-seconds transition): diagram Grid arc 10 W while
+  the Grid TILE read 992 W "meter direct", Battery tile −188 W while the
+  PV→Home arc exceeded PV production. The tiles mixed the 1 s local meter
+  with cloud channels; during device transitions the two genuinely
+  diverge, and the Anker app "is always ok" because it shows ONE payload.
+  Per the user's standing direction ("if the direct connection brings no
+  advantage, do it like the Anker app"), the tile-facing blocks of
+  /api/flow now prefer the app channels whenever the battery feed is live:
+  grid.import/export = grid_to_home_power / max(0, photovoltaic_to_grid),
+  battery.cells = Σ bat_discharge_power (?? derived), pv.toHome = the
+  diagram's value, home.consumption = home_load_power RAW (the despike
+  stays with the controller). Meter values remain the fallback when the
+  feed is down, and remain the source for DB/graphs/stats/watchdog. The
+  "meter direct/online" badge still reflects meter health; the grid tile
+  labels the displayed value "via cloud". Verified: tiles ≡ diagram
+  field-for-field on a live sample; screenshot shows 929 PV → 455 home +
+  478 battery, house 625, grid 41 — matching arcs exactly.

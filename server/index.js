@@ -462,7 +462,12 @@ async function computeFlowPayload() {
     homeW: appCh ? b.homeLoadW : latestHomeConsumptionW,
     pvW,
     gridToHomeW: appCh && b.gridToHomeW != null ? b.gridToHomeW : grid != null ? Math.max(grid, 0) : null,
-    pvToGridW: appCh && b.pvToGridW != null ? b.pvToGridW : grid != null ? Math.max(-grid, 0) : null,
+    pvToGridW:
+      appCh && b.pvToGridW != null
+        ? Math.max(0, b.pvToGridW) // the channel can read small negatives (−7 seen live) — clamp at the source
+        : grid != null
+          ? Math.max(-grid, 0)
+          : null,
     battToHomeW: b?.dischargeW ?? cellsW,
     pvToBattW: chargeW,
     // PV→Home = Σ output_power − pv_to_grid − Σ bat_discharge (2026-09-29,
@@ -488,20 +493,36 @@ async function computeFlowPayload() {
     ts: Date.now(),
     obtainedAt: new Date().toISOString(), // when the server obtained these values
     diagram,
-    grid: {
-      import: grid != null ? Math.max(grid, 0) : null,
-      export: grid != null ? Math.max(-grid, 0) : null,
-      ts: gridTs,
-      source: gridSource,
-    },
+    grid:
+      // Tile values follow the SAME app channels as the diagram
+      // (2026-09-29, user report: the Grid tile read 992 W "meter direct"
+      // while the diagram's arc read 10 W from the cloud channel — the
+      // meter and the cloud genuinely differ during device transitions,
+      // and the Anker app is always consistent because it shows one
+      // payload). The meter stays for DB/graphs/stats/watchdog; the tiles
+      // fall back to it only when the battery feed is down.
+      appCh
+        ? {
+            import: b.gridToHomeW != null ? Math.max(b.gridToHomeW, 0) : null,
+            export: b.pvToGridW != null ? Math.max(b.pvToGridW, 0) : null,
+            ts: b.ts ?? null,
+            source: "cloud-live",
+          }
+        : {
+            import: grid != null ? Math.max(grid, 0) : null,
+            export: grid != null ? Math.max(-grid, 0) : null,
+            ts: gridTs,
+            source: gridSource,
+          },
     battery: b
       ? {
           soc: b.soc,
           discharge: b.outputW,
           charge: chargeW,
-          // Cells-only output to the house (inverter total minus the PV
-          // pass-through) — the PV→Home arc carries pvToHome separately.
-          cells: cellsW,
+          // Cells-only output to the house — the app's own
+          // bat_discharge_power channel when available (same number the
+          // diagram's battery→house arc carries), else the derived value.
+          cells: b.dischargeW ?? cellsW,
           // Charging sourced from the grid (chargeW beyond what PV covers)
           // — the Home→Battery arc, normally 0.
           gridCharge: gridChargeW,
@@ -532,7 +553,8 @@ async function computeFlowPayload() {
     pv: {
       production: pvW,
       toBattery: pvToBattery,
-      toHome: pvToHome,
+      // Same app-channel value as the diagram's PV→Home arc (2026-09-29).
+      toHome: diagram.pvToHomeW,
       // Per-string energy today (kWh), integrated locally from the 10 s
       // per-string power samples — the cloud has no per-string kWh.
       pv1KwhToday: getPvStringKwhToday().pv1Kwh,
@@ -541,10 +563,10 @@ async function computeFlowPayload() {
       source: b ? "online" : null,
     },
     home: {
-      // Shared, despiked computation — see refreshHomeConsumption() above
-      // for the formula (2026-09-27: the battery's own home_load_power, the
-      // Anker app's exact Home Load — single feed, no cross-feed jitter).
-      consumption: latestHomeConsumptionW,
+      // The app's own home_load_power, raw (2026-09-29 — the tile must
+      // equal the diagram's Home node; the despiked value stays with the
+      // controller). Meter-derived fallback only when the feed is down.
+      consumption: appCh ? b.homeLoadW : latestHomeConsumptionW,
     },
   };
 }
