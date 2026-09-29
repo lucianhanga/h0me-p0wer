@@ -112,6 +112,7 @@ export const en = {
     grid: "Grid",
     home: "Home",
     battery: "Battery",
+    eta: "≈ {eta}",
     ariaLabel: "power flow",
   },
   powerplan: {

@@ -2396,16 +2396,30 @@ pre {
   margin-bottom: 0.1rem;
 }
 
-/* Per-unit state + ETA line under each simple-view stack (2026-09-28). */
+/* Per-unit state + ETA line under each simple-view stack (2026-09-28).
+   The ETA gets its OWN centered line underneath (2026-09-29, user report:
+   the single long line — badge + "charging 38 W full in ≈ 149h 22m" —
+   pushed the whole column optically off-center). */
 .simple-batt-status {
   justify-content: center;
   font-size: 0.85rem;
 }
 
+.simple-batt-status .batt-status-eta {
+  flex-basis: 100%;
+  text-align: center;
+}
+
 /* Simple view's read-only charts (full width — charts benefit from it) and
-   the Today tile (calm centered column like the battery stacks). */
+   the Today tile (calm centered column like the battery stacks). Titles
+   and legends stay centered (2026-09-29, user report: "the graphs look
+   uncentered" next to the centered battery stacks). */
 .simple-charts {
   width: 100%;
+}
+
+.simple-chart h4 {
+  text-align: center;
 }
 
 .simple-today {

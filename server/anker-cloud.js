@@ -319,6 +319,10 @@ export class AnkerClient {
         soc: num(sb.battery_power),
         outputW: num(sb.output_power),
         chargeW: num(sb.bat_charge_power),
+        // Cells-only discharge — the channel the Anker app's own flow view
+        // uses for its battery→house arc (2026-09-29). outputW above is the
+        // TOTAL inverter output (PV pass-through included).
+        dischargeW: num(sb.bat_discharge_power),
         pvW: num(sb.photovoltaic_power),
         pvChannels,
         expansionPacks: Number(sb.sub_package_num ?? 0),
@@ -346,6 +350,7 @@ export class AnkerClient {
       soc: totalSoc > 0 ? Math.round(totalSoc) : Math.round(primary.soc),
       outputW: members.reduce((a, m) => a + m.outputW, 0),
       chargeW: members.reduce((a, m) => a + m.chargeW, 0),
+      dischargeW: members.reduce((a, m) => a + m.dischargeW, 0),
       pvW: members.reduce((a, m) => a + m.pvW, 0),
       pv1W: num(info?.solar_power_1), // per-string PV (site-level fields)
       pv2W: num(info?.solar_power_2),

@@ -71,7 +71,7 @@ function SimpleChart({ def, rows, title }) {
       },
       legend: {
         top: 0,
-        left: 0,
+        left: "center",
         type: "scroll",
         textStyle: { color: "#8b98a5", fontSize: 11 },
         icon: "roundRect",

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import FlowDiagram from "../FlowDiagram.jsx";
+import FlowView from "../flow/FlowView.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import StateIcon from "../components/StateIcon.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
@@ -192,7 +192,7 @@ export default function LiveTab() {
       </p>
 
       <h3>{t("live.powerFlow")}</h3>
-      <FlowDiagram flow={flowDisplay} />
+      <FlowView flow={flowDisplay} />
 
       <div className="cards">
         <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
