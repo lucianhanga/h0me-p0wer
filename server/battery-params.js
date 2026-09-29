@@ -307,7 +307,7 @@ export async function getBatteryLimits(anker, getLiveBattery) {
   };
 }
 
-export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMembers, getAvgHomeKwh7d }) {
+export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMembers, getAvgHomeKwh7d, getFloorPct }) {
   app.get("/api/battery/params", async (req, res) => {
     // try/catch REQUIRED on every async Express 4 handler (2026-09-22 code
     // review): Express 4 doesn't forward rejected handler promises to its
@@ -317,9 +317,17 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
       // "How long the stored energy covers the AVERAGE home consumption"
       // (2026-09-29, user request — average over the last 7 days, computed
       // in index.js where the energy-day helpers live). Per unit AND system.
+      // 2026-09-29 follow-up (user: "the value in the tile is not right"):
+      // measured to the EFFECTIVE FLOOR (same floorEffPct the diagram node
+      // uses), never to zero — and null at/below the floor.
       const avgKwhDay = getAvgHomeKwh7d?.() ?? null;
-      const coverH = (storedKwh) =>
-        storedKwh != null && avgKwhDay ? Math.round((storedKwh / (avgKwhDay / 24)) * 10) / 10 : null;
+      const floorPct = getFloorPct?.() ?? null;
+      const coverH = (soc, capKwh) => {
+        if (soc == null || capKwh == null || !avgKwhDay || floorPct == null) return null;
+        const aboveFloorKwh = Math.max(0, ((soc - floorPct) / 100) * capKwh);
+        if (aboveFloorKwh <= 0) return null;
+        return Math.round((aboveFloorKwh / (avgKwhDay / 24)) * 10) / 10;
+      };
       const b = getLiveBattery() ?? null;
       const flow = b ? deriveBatteryFlow(b) : null;
       const constants = resolveConstants(b?.pn, b?.expansionPacks);
@@ -360,7 +368,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
             // Charging beyond what PV covers = grid-sourced (usually 0).
             gridToBatteryW: flow.gridChargeW,
             storedKwh: b.soc != null ? Math.round(((b.soc / 100) * constants.capacityKwh) * 100) / 100 : null,
-            coverH: b.soc != null ? coverH((b.soc / 100) * constants.capacityKwh) : null,
+            coverH: coverH(b.soc, constants.capacityKwh),
           }
         : null;
 
@@ -418,7 +426,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
             chargingStatus: m.chargingStatus ?? null,
             gridToBatteryW: flowM.gridChargeW,
             storedKwh: m.soc != null ? Math.round((m.soc / 100) * mc.capacityKwh * 100) / 100 : null,
-            coverH: m.soc != null ? coverH((m.soc / 100) * mc.capacityKwh) : null,
+            coverH: coverH(m.soc, mc.capacityKwh),
           },
           config: null,
           features: null,

@@ -5497,3 +5497,20 @@ side recovers — no action needed unless it persists for days.
   night pvW=0 forces 0.
 - Verified: pvToHome 0 at night; phone + desktop screenshots (dividers,
   aligned columns, single-line coverage); scrollW == 390 both.
+
+## One "time until empty" basis everywhere (2026-09-29, user report)
+
+- User: "the tile is not right" — the Battery tile read "empty in ≈ < 1
+  min" while the flow node read "≈ 3h 54m". Three different bases had
+  grown apart: tile = current rate to the effective floor; node = average
+  rate to ZERO; cards' coverage = average rate to zero. Unified:
+  - **Floor basis everywhere**: node timeToEmptyH and params' coverH now
+    measure to the EFFECTIVE floor (account floor + controller margin —
+    floorEffPct computed once in computeFlowPayload, shared via the
+    getFloorPct dep), null at/below the floor (the node then shows just
+    the %, the coverage lines hide).
+  - **No more "< 1 min"**: batteryEtaHours returns null when the
+    discharge ETA computes under 2 minutes (at the floor the estimate is
+    meaningless — the device simply stops there).
+- Verified at the floor (soc 11% == floor 11%): node shows "11%", tile
+  shows just "discharging 365 W", no coverage lines — nothing contradicts.
