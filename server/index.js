@@ -1831,7 +1831,20 @@ async function syncBatteryInner() {
       // Per-unit state first (dock era: multiple solarbanks per site) —
       // upsertMember preserves each unit's MQTT-only fields across REST.
       for (const m of info.members ?? []) {
-        upsertMember(decoratePvChannels(m));
+        // Cross-source consistency (2026-09-29, user report: the Battery
+        // tile oscillated −xxx↔+xxx / 0↔xxx with no physical change): REST
+        // overwrote each unit's power/SOC fields every sync while MQTT was
+        // fresh — and the two sources' values are seconds apart. Fields
+        // that are internally consistent per source (pvW/chargeW/outputW/
+        // dischargeW) then mixed across sources, producing bogus
+        // simultaneous charge+discharge per unit (deriveBatteryFlow on the
+        // mix) and mode flips in the aggregate. While a unit's MQTT is
+        // fresh, REST must not overwrite that unit's power/SOC fields.
+        const mEff = { ...m };
+        if (batteryMqtts.get(m.sn)?.isFresh?.()) {
+          for (const k of ["soc", "pvW", "chargeW", "outputW", "dischargeW"]) delete mEff[k];
+        }
+        upsertMember(decoratePvChannels(mEff));
         // Per-module SOC history for units WITHOUT an MQTT map only
         // (2026-09-28 fix): the module key is the unit's SN, and MQTT 040a
         // writes the MAIN PACK's SOC under it — writing REST's unit-TOTAL
@@ -1858,6 +1871,13 @@ async function syncBatteryInner() {
         mainSoc: latestBattery?.mainSoc ?? null,
         expansions: latestBattery?.expansions ?? null,
       };
+      // Rebuild the aggregate's power sums from the (MQTT-preserved)
+      // members instead of trusting info's REST sums — with per-unit field
+      // preservation above, the members hold one consistent source per
+      // unit, so the aggregate stops jittering between REST-sum and
+      // MQTT-sum of the same physical quantity. soc is untouched by
+      // recomputeAggregate (single writer: total_battery_power, 2026-09-29).
+      recomputeAggregate();
       lastCloudOkAt = Date.now();
       saveBatterySnapshot(latestBattery);
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside

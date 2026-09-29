@@ -5388,3 +5388,27 @@ side recovers — no action needed unless it persists for days.
   the flipped (bar-chart) side too.
 - Verified via CDP touch events: Today →(swipe left)→ Yesterday
   →(swipe right)→ Today; background swipes no longer change the tab.
+
+## Cross-source field mixing: the Battery-tile oscillation (2026-09-29, user report)
+
+- User: "without changes in home load or PV, the PV→battery arc and the
+  Live-tile numbers oscillate from −xxx to +xxx or 0 to xxx." Observed
+  live: the tile jumped 733→914→778 W within seconds and BOTH charge and
+  cells were simultaneously large (457/329). Root cause: the REST sync
+  overwrote each unit's power/SOC fields every 10 s while that unit's MQTT
+  was fresh — the two sources' values are seconds apart, so fields that
+  are internally consistent per SOURCE (pvW/chargeW/outputW/dischargeW)
+  got mixed ACROSS sources inside one member object. deriveBatteryFlow on
+  that mix produced bogus simultaneous charge+discharge per unit, and the
+  aggregate's dominant-direction mode flipped when the bogus pair crossed.
+  Same class as the 2026-09-27 b7/d3 outputW saga — but ACROSS channels.
+- Fix (index.js syncBatteryInner): while a unit's MQTT is fresh, REST
+  does NOT overwrite that unit's soc/pvW/chargeW/outputW/dischargeW
+  (deleted from the REST upsert; upsertMember keeps the previous —
+  MQTT-fresh — values). After the upserts, recomputeAggregate() rebuilds
+  the aggregate's sums from the preserved members, so the aggregate no
+  longer alternates REST-sums vs MQTT-sums either (the ±40 W jitter).
+  soc aggregate untouched (single REST writer since v1.5.123). When MQTT
+  stalls, isFresh() goes false and REST fills in again automatically.
+- Verified live: charge 678-707 W smooth drift (real PV wobble), cells
+  0, soc steady, no mode flips over 45 s.
