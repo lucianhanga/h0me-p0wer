@@ -19,7 +19,12 @@ export function batteryEtaHours({ mode, soc, chargeW, cellsW, maxPct, floorPct, 
   }
   if (mode === "discharging" && cellsW > 0 && floorPct != null) {
     const remainingKwh = Math.max(0, ((soc - floorPct) / 100) * capacityKwh);
-    return remainingKwh / (cellsW / 1000);
+    const h = remainingKwh / (cellsW / 1000);
+    // At/below the floor the ETA degenerates to "< 1 min" (2026-09-29,
+    // user report — "the value in the tile is not right"): the device is
+    // about to stop discharging, and the bogus-looking estimate read as
+    // broken next to the diagram node's average-rate figure. Suppress it.
+    return h * 60 < 2 ? null : h;
   }
   return null;
 }

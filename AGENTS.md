@@ -5475,3 +5475,42 @@ side recovers — no action needed unless it persists for days.
   (system discharging 190 W, composition of SB4 100 + Pro 90).
 - The dischargeW field stays in the payload for reference/debugging but
   no longer feeds any display.
+
+## Simple view: section dividers + text alignment + night PV arc (2026-09-29, user requests)
+
+- **Section dividers** (`web/src/components/SectionTitle.jsx`): minimal
+  centered uppercase label with hairlines flanking it (standard dashboard
+  composition pattern — researched; decoration only, no data). SimpleHome
+  sections: Power Flow / Batteries / Trends / Totals (i18n simple.* in
+  en/de/ro; reuses live.powerFlow).
+- **Battery texts misaligned between the two columns** (user screenshot):
+  the ≤600px `display: contents` side-flattening (built for the Strategy
+  cards' legend wrap) applied to the STACKED layout too, landing the two
+  columns' text rows at different heights. The flattening rules are now
+  scoped `:not(.stacked)`; stacked mode keeps a real centered side column.
+  The coverage line ("covers ≈ … at average use") is nowrap + 0.72rem on
+  phones so it never wraps to two rows in a ~173px column.
+- **"3 W from PV while PV produces nothing"** (user screenshot): the
+  PV→Home arc glowed at night — output/cells channel wobble left a small
+  remainder on pvToHomeW (output − pvToGrid − cells). Now CAPPED at
+  current production (PV→home can never exceed it): `min(pvW, …)` — at
+  night pvW=0 forces 0.
+- Verified: pvToHome 0 at night; phone + desktop screenshots (dividers,
+  aligned columns, single-line coverage); scrollW == 390 both.
+
+## One "time until empty" basis everywhere (2026-09-29, user report)
+
+- User: "the tile is not right" — the Battery tile read "empty in ≈ < 1
+  min" while the flow node read "≈ 3h 54m". Three different bases had
+  grown apart: tile = current rate to the effective floor; node = average
+  rate to ZERO; cards' coverage = average rate to zero. Unified:
+  - **Floor basis everywhere**: node timeToEmptyH and params' coverH now
+    measure to the EFFECTIVE floor (account floor + controller margin —
+    floorEffPct computed once in computeFlowPayload, shared via the
+    getFloorPct dep), null at/below the floor (the node then shows just
+    the %, the coverage lines hide).
+  - **No more "< 1 min"**: batteryEtaHours returns null when the
+    discharge ETA computes under 2 minutes (at the floor the estimate is
+    meaningless — the device simply stops there).
+- Verified at the floor (soc 11% == floor 11%): node shows "11%", tile
+  shows just "discharging 365 W", no coverage lines — nothing contradicts.

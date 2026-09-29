@@ -8,6 +8,7 @@ import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
+import SectionTitle from "../components/SectionTitle.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
 
 // The simple view (2026-09-27, user request — "minimalistic, think Tesla
@@ -56,11 +57,14 @@ export default function SimpleHome() {
 
   return (
     <div className="simple-home">
+      <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <div className="simple-flow">
         <FlowView flow={flow} />
       </div>
       {stacks.length > 0 && (
-        <div className="simple-batt-row">
+        <>
+          <SectionTitle>{t("simple.batteries")}</SectionTitle>
+          <div className="simple-batt-row">
           {stacks.map((u) => {
             const uSoc = u.live?.soc ?? null;
             const uLvl =
@@ -138,10 +142,14 @@ export default function SimpleHome() {
             );
           })}
         </div>
+        </>
       )}
+      <SectionTitle>{t("simple.charts")}</SectionTitle>
       <SimpleCharts />
       {overview?.byPeriod?.today && (
-        <div className="simple-periods">
+        <>
+          <SectionTitle>{t("simple.periods")}</SectionTitle>
+          <div className="simple-periods">
           {/* Today + Week + Month (2026-09-29, user request — "under the
               today tile add also the week and month tiles") — the real
               Dashboard cards, flip + ‹ › period nav included. */}
@@ -164,6 +172,7 @@ export default function SimpleHome() {
             formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
           />
         </div>
+        </>
       )}
       <UpdatedStamp at={flow?.ts ?? primary?.live?.ts ?? null} />
     </div>

@@ -21,6 +21,11 @@ export const en = {
     simpleTip: "Simple view — one calm screen",
     fullTip: "Full view — all tabs and details",
   },
+  simple: {
+    batteries: "Batteries",
+    charts: "Trends",
+    periods: "Totals",
+  },
   header: {
     voiceCommand: "Voice command",
     voiceUnsupported: "Voice commands are not supported in this browser",
@@ -231,8 +236,7 @@ export const en = {
       emptyIn: "empty in ≈ {eta}",
       usableWindow: "usable window ≈ {kwh} kWh",
     },
-    coverAvg: "covers ≈ {eta} at average use",
-    liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
+    coverAvg: "covers ≈ {eta} at average use",    liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
     memberNote: "part of the battery system — per-unit live view",
     details: {
       capacityTitle: "Capacity",

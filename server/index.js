@@ -358,6 +358,11 @@ function despikeHomeLoad(raw) {
   return sorted[1];
 }
 let latestHomeConsumptionW = null;
+// The effective discharge floor (account floor + controller margin) as last
+// computed by computeFlowPayload — shared with the params route's coverage
+// figure via the getFloorPct dep so every "time until empty" in the app
+// uses the SAME floor (2026-09-29, user report of contradicting values).
+let latestFloorEffPct = null;
 function refreshHomeConsumption() {
   const gl = getGridLive();
   // homeLoadW can transiently misreport (2026-09-17 incident) — the
@@ -446,6 +451,11 @@ async function computeFlowPayload() {
     () => latestBattery ?? getLatestBattery(),
   );
   const dischargeTolerancePct = powerPlan.getState().dischargeTolerancePct ?? 0;
+  // The EFFECTIVE floor (account floor + controller margin) — shared by the
+  // tile ETA, the diagram node, and the params route's coverage figure via
+  // the getFloorPct dep (2026-09-29: one basis everywhere).
+  const floorEffPct = dischargeFloorPct + dischargeTolerancePct;
+  latestFloorEffPct = floorEffPct;
   refreshHomeConsumption(); // keep the controller's despiked value fresh
   // The flow DIAGRAM displays the same channels the Anker app does
   // (2026-09-29, user request — analysis showed our despiked Home lagged
@@ -480,18 +490,26 @@ async function computeFlowPayload() {
     // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above).
     // NOT to_home_load (unit-local behind the dock, v1.5.120) and NOT
     // output − pv_to_grid − bat_discharge_power (broken channel, above).
-    // Closes exactly: grid_to_home + Σoutput − pv_to_grid ==
-    // home_load_power (validated 2026-09-27), so grid + pvToHome +
-    // battToHome == homeW by construction.
+    // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above),
+    // CAPPED at current production (2026-09-29, user report: a "2 W"
+    // PV→Home arc glowed at night with PV at 0 — output/cells channel
+    // wobble left a remainder). PV→home can never exceed production.
     pvToHomeW:
       appCh && b.outputW != null
-        ? Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW)
+        ? Math.min(pvW, Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW))
         : pvToHome,
     batterySoc: b?.soc ?? null,
-    // stored kWh ÷ 7-day-average consumption rate — "time to empty
-    // approximated based on a consume of average for the last 7 days".
-    timeToEmptyH:
-      storedKwh != null && avgKwhDay ? Math.round((storedKwh / (avgKwhDay / 24)) * 10) / 10 : null,
+    // Time until the battery reaches its EFFECTIVE FLOOR at the 7-day
+    // average consumption rate (2026-09-29, user report: the tile's
+    // current-rate "< 1 min" and the node's zero-basis "≈ 3h 54m"
+    // contradicted each other). One basis everywhere now: floor + average
+    // rate. null at/below the floor (the node then shows just the %).
+    timeToEmptyH: (() => {
+      if (storedKwh == null || !avgKwhDay || b?.soc == null) return null;
+      const aboveFloorKwh = Math.max(0, ((b.soc - floorEffPct) / 100) * (capKwh ?? 0));
+      if (aboveFloorKwh <= 0) return null;
+      return Math.round((aboveFloorKwh / (avgKwhDay / 24)) * 10) / 10;
+    })(),
     ts: b?.ts ?? null,
   };
   return {
@@ -1149,6 +1167,7 @@ registerBatteryParamsRoute(app, {
   getLiveBattery: () => latestBattery ?? getLatestBattery(),
   getMembers: () => [...latestBatteries.values()],
   getAvgHomeKwh7d: avgDailyHomeKwh7d,
+  getFloorPct: () => latestFloorEffPct,
 });
 app.get(
   "/api/cloud/energy",
