@@ -465,9 +465,17 @@ async function computeFlowPayload() {
     pvToGridW: appCh && b.pvToGridW != null ? b.pvToGridW : grid != null ? Math.max(-grid, 0) : null,
     battToHomeW: b?.dischargeW ?? cellsW,
     pvToBattW: chargeW,
+    // PV→Home = Σ output_power − pv_to_grid − Σ bat_discharge (2026-09-29,
+    // user report: "PV to House + Grid to House don't add up to Home").
+    // NOT to_home_load − discharge: behind the Power Dock the site-level
+    // to_home_load field carries only ONE unit's output (verified live:
+    // 210 == the SB4's output_power while the Pro pushed another 342).
+    // This closes exactly: grid_to_home + Σoutput − pv_to_grid ==
+    // home_load_power (validated 2026-09-27), so grid + pvToHome +
+    // battToHome == homeW by construction.
     pvToHomeW:
-      b?.toHomeW != null && b?.dischargeW != null
-        ? Math.max(0, b.toHomeW - b.dischargeW)
+      appCh && b.outputW != null && b.dischargeW != null
+        ? Math.max(0, b.outputW - (b.pvToGridW ?? 0) - b.dischargeW)
         : pvToHome,
     batterySoc: b?.soc ?? null,
     // stored kWh ÷ 7-day-average consumption rate — "time to empty
