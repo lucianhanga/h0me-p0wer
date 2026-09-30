@@ -79,17 +79,23 @@ export default function SimpleHome() {
             const uCellsW = u.live?.cellsW ?? 0;
             const uMode = uChargeW > uCellsW ? "charging" : uCellsW > uChargeW ? "discharging" : "idle";
             const uW = uMode === "charging" ? uChargeW : uCellsW;
-            const uEta = formatEta(
-              batteryEtaHours({
-                mode: uMode,
-                soc: uSoc,
-                chargeW: uChargeW,
-                cellsW: uCellsW,
-                maxPct: sysMax,
-                floorPct: sysMin,
-                capacityKwh: u.constants?.capacityKwh,
-              }),
-            );
+            const uEta =
+              // Discharge shows NO separate ETA (2026-09-30 — the coverage
+              // line below already carries the stable 7-day-average figure);
+              // charging keeps the current-rate estimate.
+              uMode === "discharging"
+                ? null
+                : formatEta(
+                    batteryEtaHours({
+                      mode: uMode,
+                      soc: uSoc,
+                      chargeW: uChargeW,
+                      cellsW: uCellsW,
+                      maxPct: sysMax,
+                      floorPct: sysMin,
+                      capacityKwh: u.constants?.capacityKwh,
+                    }),
+                  );
             return (
               <div className="simple-batt" key={u.live.sn ?? "aggregate"}>
                 <BatteryModules

@@ -5588,3 +5588,17 @@ cross-cutting), every finding re-verified by hand before fixing:
   margin was visually tight. `.batt-gauge-card .batt-modules` gets
   margin-top 1.3rem (uniform — equal card heights/alignment unaffected,
   verified: both cards 398px, bottoms aligned).
+
+## Discharge ETA = 7-day-average figure everywhere (2026-09-30, user report)
+
+- User: "the estimated unload time is not based on the average consumption
+  of the last 7 days — it changes every time the battery feed changes"
+  (screenshot: discharging 10 W read "empty in ≈ 265h 36m"). The
+  current-rate ETA explodes at low discharge rates and jumps every few
+  seconds. Now: the DISCHARGE estimate everywhere is the stable
+  average-rate-to-effective-floor figure — the Live tab tile shows
+  `diagram.timeToEmptyH` ("empty in ≈ 12h 30m", verified); the Strategy
+  unit cards / system tile / simple stacks show NO separate discharge ETA
+  (their "covers ≈ … at average use" line already carries exactly that
+  number — showing both read as two contradicting figures). Charging keeps
+  the current-rate estimate (PV-driven, steady).

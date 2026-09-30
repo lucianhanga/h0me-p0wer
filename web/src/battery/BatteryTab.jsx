@@ -126,17 +126,25 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
     minPct != null && maxPct != null && constants?.capacityKwh != null
       ? Math.round((((maxPct - minPct) / 100) * constants.capacityKwh) * 100) / 100
       : null;
-  const etaLabel = formatEta(
-    batteryEtaHours({
-      mode,
-      soc,
-      chargeW,
-      cellsW,
-      maxPct,
-      floorPct: effectiveFloorPct ?? minPct,
-      capacityKwh: constants?.capacityKwh,
-    }),
-  );
+  const etaLabel =
+    // Discharge shows NO separate ETA (2026-09-30, user report: the
+    // current-rate estimate jumped with every feed change — 10 W read
+    // "empty in ≈ 265h"): the coverage line right below carries the stable
+    // 7-day-average figure, and duplicating it here would read as two
+    // contradicting numbers. Charging keeps the current-rate estimate.
+    mode === "discharging"
+      ? null
+      : formatEta(
+          batteryEtaHours({
+            mode,
+            soc,
+            chargeW,
+            cellsW,
+            maxPct,
+            floorPct: effectiveFloorPct ?? minPct,
+            capacityKwh: constants?.capacityKwh,
+          }),
+        );
 
   return (
     <div>
@@ -414,17 +422,24 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
   const chargeW = live.chargeW ?? 0;
   const cellsW = live.cellsW ?? 0;
   const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
-  const etaLabel = formatEta(
-    batteryEtaHours({
-      mode,
-      soc,
-      chargeW,
-      cellsW,
-      maxPct,
-      floorPct: effFloorPct ?? minPct,
-      capacityKwh: cap,
-    }),
-  );
+  const etaLabel =
+    // Discharge shows NO separate ETA (2026-09-30, user report: the
+    // current-rate estimate jumped with every feed change): the coverage
+    // line right below carries the stable 7-day-average figure.
+    // Charging keeps the current-rate estimate.
+    mode === "discharging"
+      ? null
+      : formatEta(
+          batteryEtaHours({
+            mode,
+            soc,
+            chargeW,
+            cellsW,
+            maxPct,
+            floorPct: effFloorPct ?? minPct,
+            capacityKwh: cap,
+          }),
+        );
 
   return (
     <div className="card batt-sys">
