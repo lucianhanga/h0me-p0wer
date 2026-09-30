@@ -5602,3 +5602,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   (their "covers ≈ … at average use" line already carries exactly that
   number — showing both read as two contradicting figures). Charging keeps
   the current-rate estimate (PV-driven, steady).
+
+## "This year" tile: aggregate across meters (2026-09-30, user report)
+
+- User: "the this year calculation is wrong" — the year tile read 98.85
+  kWh while "This month" read 364.73 (year must be ≥ month). Root cause:
+  both year paths (byPeriod.year in /api/stats/overview AND the
+  /api/stats/period year navigation) read a SINGLE meter's year rows via
+  getCloudTrend(sn, "year", …) — after the meter-1 → meter-2 swap the
+  tile showed only one meter's share. Month/week already aggregated via
+  getCloudTrendMulti(meterSns, …) — the year paths now do too. Verified
+  on dev: year == month (223.58 ≈ 223.6 — only September has data there).
