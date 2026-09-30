@@ -3,7 +3,7 @@
 // slow-changing device configuration (Anker get_site_device_param), the
 // scen_info feature switches, and the A17C3 hardware constants.
 //
-// The configuration is cached 6 h in the kv store: get_site_device_param
+// The configuration is cached 1 h in the kv store: get_site_device_param
 // shares Anker's tight per-endpoint rate limits and these values change only
 // when the user edits them in the app. `?refresh=1` forces a refetch.
 
@@ -275,7 +275,7 @@ async function fetchConfig(anker, getLiveBattery) {
   return config;
 }
 
-// Shared config resolver: 6 h cache (kv store), same cache the Battery tab
+// Shared config resolver: 1 h cache (kv store), same cache the Battery tab
 // route reads/writes — so the power-plan controller and the Battery tab
 // never disagree about the account's configured charge/discharge limits.
 export async function resolveBatteryConfig(anker, getLiveBattery, { forceRefresh = false } = {}) {

@@ -473,20 +473,23 @@ export class AnkerMqtt {
       // actually carry a value — a null would overwrite the REST channel's
       // value on the shared latestBattery object.
       const isAE103 = this.pn === "AE103";
-      const data = {
-        ts: out.ts,
-        soc: out.soc ?? out.mainSoc ?? null,
-        mainSoc: out.mainSoc ?? null,
-        outputW: out.outputW ?? out.dischargeW ?? out.acOutputW ?? 0,
-        // AE103 has no separate charge field — ac battery_power_signed
-        // carries the signed cell flow (verified live 2026-09-28: ac read
-        // −380 while the unit discharged 380 W, so POSITIVE = charging).
-        chargeW:
-          out.chargeW ??
-          (out.batteryPowerSignedW != null ? Math.max(0, out.batteryPowerSignedW) : 0),
-        pvW: out.pvW ?? 0,
-        temperatureC: out.temperatureC ?? null,
-      };
+      // Only forward keys that actually carry a value (2026-09-29 review):
+      // a null/undefined field would overwrite the REST channel's value on
+      // the shared member object — and REST no longer repairs it while this
+      // unit's MQTT is fresh (the cross-source preservation rule).
+      const data = { ts: out.ts };
+      const socV = out.soc ?? out.mainSoc ?? null;
+      if (socV != null) data.soc = socV;
+      if (out.mainSoc != null) data.mainSoc = out.mainSoc;
+      const outW = out.outputW ?? out.dischargeW ?? out.acOutputW ?? null;
+      if (outW != null) data.outputW = outW;
+      // AE103 has no separate charge field — ac battery_power_signed
+      // carries the signed cell flow (verified live 2026-09-28: ac read
+      // −380 while the unit discharged 380 W, so POSITIVE = charging).
+      const chg = out.chargeW ?? (out.batteryPowerSignedW != null ? Math.max(0, out.batteryPowerSignedW) : null);
+      if (chg != null) data.chargeW = chg;
+      if (out.pvW != null) data.pvW = out.pvW;
+      if (out.temperatureC != null) data.temperatureC = out.temperatureC;
       if (out.homeLoadW != null) data.homeLoadW = out.homeLoadW;
       // AE103 extras (raw pass-through; consumers pick what they know):
       // gridSignedW = the docked system's grid flow as the unit sees it,
@@ -499,8 +502,8 @@ export class AnkerMqtt {
       if (!this.loggedFirstData) {
         this.loggedFirstData = true;
         console.log(
-          `[mqtt] first telemetry: soc=${data.soc}% discharge=${data.outputW}W ` +
-            `charge=${data.chargeW}W pv=${data.pvW}W`,
+          `[mqtt] first telemetry: soc=${data.soc ?? "?"}% discharge=${data.outputW ?? "?"}W ` +
+            `charge=${data.chargeW ?? "?"}W pv=${data.pvW ?? "?"}W`,
         );
       }
       this.lastDataAt = Date.now();

@@ -15,7 +15,10 @@ export function batteryEtaHours({ mode, soc, chargeW, cellsW, maxPct, floorPct, 
   if (capacityKwh == null || soc == null) return null;
   if (mode === "charging" && chargeW > 0 && maxPct != null) {
     const remainingKwh = Math.max(0, ((maxPct - soc) / 100) * capacityKwh);
-    return remainingKwh / (chargeW / 1000);
+    const h = remainingKwh / (chargeW / 1000);
+    // Same degenerate-ETA suppression as the discharge branch (2026-09-29
+    // review): at the ceiling this used to print "full in ≈ < 1 min".
+    return h * 60 < 2 ? null : h;
   }
   if (mode === "discharging" && cellsW > 0 && floorPct != null) {
     const remainingKwh = Math.max(0, ((soc - floorPct) / 100) * capacityKwh);

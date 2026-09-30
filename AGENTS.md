@@ -5514,3 +5514,43 @@ side recovers — no action needed unless it persists for days.
     meaningless — the device simply stops there).
 - Verified at the floor (soc 11% == floor 11%): node shows "11%", tile
   shows just "discharging 365 W", no coverage lines — nothing contradicts.
+
+## Four-area review #2 — findings fixed (2026-09-29/30, user-requested thorough review)
+
+Four parallel reviewers (backend / power-plan+params / frontend /
+cross-cutting), every finding re-verified by hand before fixing:
+- **Grid tile never consumed flow.grid** (v1.5.127's frontend half was
+  never wired): LiveTab now reads flow.grid import−export (app channels),
+  meter is the fallback; the old flowDisplay deadband wrapper was dead
+  code (the model reads diagram.*) — the ±20 W deadband moved INTO
+  model.js's grid-net.
+- **appCh had no freshness gate + num() null→0**: grid channels now
+  null-preserve (numOrNull), and a dedicated lastRestSyncAt timestamp
+  (set on each successful scen_info sync; b.ts can't be used — MQTT
+  merges refresh it) gates appCh/getGridLive/refreshHomeConsumption at
+  60 s → a dead cloud falls back to the meter instead of freezing.
+- **SB4's day-trend was never synced** (primary-SN-only since the dock):
+  regular sync AND catchUpBatteryPvHistory now iterate batterySns() with
+  per-SN missing-day sets — fixes the undercounted "From battery" on
+  finished days, top-days, ROI savings, and the 7-day-average behind
+  coverH/timeToEmptyH (which was biased HIGH).
+- **welcome-ai.js dailyImportRows referenced undefined `meterSns`**
+  (pre-existing since the meter swap — every scheduled Welcome refresh
+  failed); now takes the meter SN array properly.
+- SimpleCharts: memoized chartDef (dispose/init storm on every WS push)
+  + rows cleared on face flip (stale-span flash). SimpleHome: REST poll
+  overwrites unconditionally (`prev ?? flowRest` never fired), per-unit
+  ETAs use the flow payload's effective floor (a third basis removed).
+  batteryEtaHours suppresses < 2 min ETAs on the CHARGING branch too.
+  floorEffPct drops the +3 margin in native mode (the device enforces the
+  bare cutoff there — matches StrategyTab's gauge). mqtt.js forwards only
+  non-null fields (a missing SOC no longer overwrites a good one).
+  Dead: dischargeW aggregate sum removed, .simple-today CSS removed.
+  Minors: SectionTitle is a real heading (aria-level 2), QuadFlipTile
+  cleans its timers, "6 h cache" comments → 1 h, .env.example documents
+  the tuning vars (PROBE_*/HYSTERESIS_*/EXPORT_CORRECT_MIN_W/
+  EXPANSION_PACK_KWH/MQTT_DEBUG), README documents the simple-default
+  view + all-MPPT PV channels.
+- Verified: fresh-sync flow identity closes (Δ 0), Grid tile == arc ==
+  House tile; welcome error gone from the log; build + node --check pass;
+  scrollW == 390.

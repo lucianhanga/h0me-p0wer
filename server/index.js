@@ -310,10 +310,10 @@ function getGridLive() {
     return { power: snap.primary?.totalPower ?? null, ts: snap.timestamp, source: "meter" };
   }
   const b = latestBattery ?? getLatestBattery();
-  if (b?.gridToHomeW != null && b.ts != null && Date.now() - b.ts < 60000) {
+  if (b?.gridToHomeW != null && lastRestSyncAt != null && Date.now() - lastRestSyncAt < 60000) {
     return {
       power: b.gridToHomeW - (b.pvToGridW ?? 0), // import minus PV feed-in
-      ts: new Date(b.ts).toISOString(),
+      ts: new Date(lastRestSyncAt).toISOString(),
       source: "cloud-live",
     };
   }
@@ -370,8 +370,8 @@ function refreshHomeConsumption() {
   // stays for graphs/stats/watchdog, and is the fallback when the battery
   // feed is down or homeLoadW is missing.
   const raw =
-    latestBattery?.homeLoadW != null
-      ? latestBattery.homeLoadW
+    latestBattery?.homeLoadW != null && lastRestSyncAt != null && Date.now() - lastRestSyncAt < 60000
+      ? latestBattery.homeLoadW // fresh app channel only — a stale one is worse than the meter fallback (2026-09-29 review)
       : gl.source !== "cloud-live" && gl.power != null && latestBattery?.outputW != null
         ? Math.max(gl.power, 0) + latestBattery.outputW
         : null;
@@ -399,13 +399,20 @@ let homeAvg7dCache = { at: 0, value: null };
 function avgDailyHomeKwh7d() {
   if (homeAvg7dCache.value != null && Date.now() - homeAvg7dCache.at < 3600000)
     return homeAvg7dCache.value;
+  // Negative-cache briefly too (2026-09-29 review): with < 3 days of history
+  // the result is null and every 1-3 Hz flow push re-ran 21 DB queries.
+  if (homeAvg7dCache.value == null && Date.now() - homeAvg7dCache.at < 300000 && homeAvg7dCache.at > 0)
+    return null;
   const days = [];
   for (let i = 1; i <= 7; i++) {
     const d = localDate(new Date(Date.now() - i * 86400000));
     days.push(dayGridImportKwh(meterSns(), d) + dayBattery(batterySns(), d).dischargedKwh + dayPv(d).toHome);
   }
   const withData = days.filter((v) => v > 0);
-  if (withData.length < 3) return null; // not enough history — honest null
+  if (withData.length < 3) {
+    homeAvg7dCache = { at: Date.now(), value: null }; // negative-cached (5 min, above)
+    return null; // not enough history — honest null
+  }
   const avg = withData.reduce((a, v) => a + v, 0) / withData.length;
   homeAvg7dCache = { at: Date.now(), value: Math.round(avg * 100) / 100 };
   return homeAvg7dCache.value;
@@ -439,7 +446,7 @@ async function computeFlowPayload() {
   // Limits for the Live tab's charge/discharge ETA (2026-09-18, user
   // request: "estimate how much time will be full/empty at the current
   // rate... take in account the observed limits, at discharged including
-  // the extra amount"). getBatteryLimits() reads the same 6 h-cached
+  // the extra amount"). getBatteryLimits() reads the same 1 h-cached
   // account config the Battery tab and power-plan controller already use
   // — normally resolves from cache instantly, so awaiting it here doesn't
   // meaningfully slow this 5 s-polled endpoint. dischargeTolerancePct
@@ -450,11 +457,16 @@ async function computeFlowPayload() {
     anker,
     () => latestBattery ?? getLatestBattery(),
   );
-  const dischargeTolerancePct = powerPlan.getState().dischargeTolerancePct ?? 0;
+  const ppState = powerPlan.getState();
+  const dischargeTolerancePct = ppState.dischargeTolerancePct ?? 0;
   // The EFFECTIVE floor (account floor + controller margin) — shared by the
   // tile ETA, the diagram node, and the params route's coverage figure via
-  // the getFloorPct dep (2026-09-29: one basis everywhere).
-  const floorEffPct = dischargeFloorPct + dischargeTolerancePct;
+  // the getFloorPct dep (2026-09-29: one basis everywhere). In NATIVE
+  // self-consumption mode the margin doesn't exist — the device enforces
+  // the bare account cutoff directly (2026-09-29 review: StrategyTab's
+  // gauge already hides the margin there; the server figures matched it
+  // only by accident before).
+  const floorEffPct = dischargeFloorPct + (ppState.lastDecision?.nativeMode ? 0 : dischargeTolerancePct);
   latestFloorEffPct = floorEffPct;
   refreshHomeConsumption(); // keep the controller's despiked value fresh
   // The flow DIAGRAM displays the same channels the Anker app does
@@ -462,9 +474,14 @@ async function computeFlowPayload() {
   // the app by up to ~30 s and derived arcs flickered from mixing fields
   // of different freshness): one payload, one timestamp, and the arcs
   // close EXACTLY to the Home node (grid_to_home + to_home_load ==
-  // home_load_power, validated twice). b.homeLoadW present = the feed is
-  // live; anything missing falls back to the derived values above.
-  const appCh = b?.homeLoadW != null;
+  // home_load_power, validated twice).
+  // appCh = the app's own channels are LIVE (fresh REST sync ≤ 60 s —
+  // 2026-09-29 review: previously just "homeLoadW exists", so a cloud
+  // outage mid-session froze the diagram/tiles on the last cloud values
+  // instead of falling back to the meter). Anything missing/stale falls
+  // back to the derived/meter values.
+  const appCh =
+    b?.homeLoadW != null && lastRestSyncAt != null && Date.now() - lastRestSyncAt < 60000;
   const capKwh = b ? systemCapacityKwh(b) : null;
   const storedKwh = b?.soc != null && capKwh != null ? (b.soc / 100) * capKwh : null;
   const avgKwhDay = avgDailyHomeKwh7d();
@@ -1267,28 +1284,34 @@ async function syncCloudHistory() {
   // device endpoint rejects device_type=solarbank). Different payload shape:
   // {power: [{time, value}]} → mapped onto the shared cloud_history rows.
   // Sync today + yesterday so week/month tiles have complete battery days.
+  // EVERY unit (2026-09-29 review): this used to sync only the PRIMARY SN —
+  // the SB4's discharge never landed in cloud_history, undercounting every
+  // finished-day battery figure (Dashboard "From battery", top-days, ROI,
+  // and the 7-day-average behind coverH/timeToEmptyH).
   if (latestBattery?.sn && latestBattery.siteId) {
-    for (const dayOffset of [0, 1]) {
-      const d = new Date(now.getTime() - dayOffset * 86400000);
-      const day = iso(d);
-      try {
-        const data = await anker.getEnergyAnalysis({
-          siteId: latestBattery.siteId,
-          deviceSn: latestBattery.sn,
-          deviceType: "solarbank",
-          type: "day",
-          startTime: day,
-          endTime: "",
-        });
-        const rows = (data?.power ?? []).map((p) => ({
-          time: p.time,
-          power: p.value,
-          import_energy: "",
-          export_energy: "",
-        }));
-        saveCloudTrend(latestBattery.sn, "day", day, rows);
-      } catch (err) {
-        console.warn(`[cloud-sync] battery day ${day} failed: ${err.message}`);
+    for (const sn of batterySns()) {
+      for (const dayOffset of [0, 1]) {
+        const d = new Date(now.getTime() - dayOffset * 86400000);
+        const day = iso(d);
+        try {
+          const data = await anker.getEnergyAnalysis({
+            siteId: latestBattery.siteId,
+            deviceSn: sn,
+            deviceType: "solarbank",
+            type: "day",
+            startTime: day,
+            endTime: "",
+          });
+          const rows = (data?.power ?? []).map((p) => ({
+            time: p.time,
+            power: p.value,
+            import_energy: "",
+            export_energy: "",
+          }));
+          saveCloudTrend(sn, "day", day, rows);
+        } catch (err) {
+          console.warn(`[cloud-sync] battery day ${day} (${sn.slice(-4)}) failed: ${err.message}`);
+        }
       }
     }
 
@@ -1393,7 +1416,7 @@ async function catchUpCloudHistory() {
 async function catchUpBatteryPvHistory() {
   if (!latestBattery?.sn || !latestBattery.siteId) return;
 
-  const storedBatt = getStoredPeriodStarts(latestBattery.sn, "day");
+  const sns = batterySns();
   const storedPv = getStoredPvPeriodStarts("day");
   // 2026-09-26 bug (real data destroyed): the missing-day test used to be
   // "!storedBatt OR !storedPv" — after the Plus→Pro swap the NEW battery SN
@@ -1403,26 +1426,33 @@ async function catchUpBatteryPvHistory() {
   // Compute the two missing sets independently now: a fresh battery SN may
   // trigger 31 battery fetches (harmless — they write under its own SN),
   // but never a site-level PV refetch it has nothing to do with.
-  const missingBatt = [];
+  // 2026-09-29 review: per-SN missing sets (was primary-SN-only) — the
+  // SB4's day-trend was never synced at all in the dock era.
+  const missingBattBySn = new Map();
   const missingPv = [];
+  const storedBySn = new Map(sns.map((sn) => [sn, getStoredPeriodStarts(sn, "day")]));
   for (let i = BACKFILL_DAYS; i >= 0; i--) {
     const d = new Date();
     d.setDate(d.getDate() - i);
     const start = localDate(d);
-    if (!storedBatt.has(start) || i === 0) missingBatt.push(start);
+    for (const sn of sns) {
+      if (i === 0 || !storedBySn.get(sn).has(start)) {
+        missingBattBySn.set(sn, [...(missingBattBySn.get(sn) ?? []), start]);
+      }
+    }
     if (!storedPv.has(start)) missingPv.push(start);
   }
-  const missing = [...new Set([...missingBatt, ...missingPv])].sort();
-  if (!missing.length) return;
+  const totalBatt = [...missingBattBySn.values()].reduce((a, v) => a + v.length, 0);
+  if (!totalBatt && !missingPv.length) return;
 
-  console.log(`[cloud-sync] backfilling ${missing.length} day(s) of battery/PV history…`);
+  console.log(`[cloud-sync] backfilling battery (${totalBatt} day-fetches over ${missingBattBySn.size} unit(s)) + PV (${missingPv.length} day(s)) history…`);
   let completed = true;
-  for (const start of missing) {
-    if (missingBatt.includes(start)) {
+  for (const [sn, days] of missingBattBySn) {
+    for (const start of days) {
       try {
         const battData = await anker.getEnergyAnalysis({
           siteId: latestBattery.siteId,
-          deviceSn: latestBattery.sn,
+          deviceSn: sn,
           deviceType: "solarbank",
           type: "day",
           startTime: start,
@@ -1434,16 +1464,19 @@ async function catchUpBatteryPvHistory() {
           import_energy: "",
           export_energy: "",
         }));
-        saveCloudTrend(latestBattery.sn, "day", start, battRows);
+        saveCloudTrend(sn, "day", start, battRows);
       } catch (err) {
-        console.warn(`[cloud-sync] battery backfill day ${start} failed: ${err.message}`);
+        console.warn(`[cloud-sync] battery backfill day ${start} (${sn.slice(-4)}) failed: ${err.message}`);
         completed = false;
         break; // rate-limited or login issue — retry later (below)
       }
       await sleep(6000);
     }
+    if (!completed) break;
+  }
 
-    if (missingPv.includes(start)) {
+  if (completed) {
+    for (const start of missingPv) {
       try {
         const pvData = await anker.getEnergyAnalysis({
           siteId: latestBattery.siteId,
@@ -1685,6 +1718,12 @@ setInterval(() => {
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null; // the AGGREGATE of all solarbanks on the site
 let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
+// Last successful REST scen_info sync specifically (2026-09-29 review):
+// latestBattery.ts ALSO refreshes on every MQTT merge, so it can't gate
+// the REST-sourced channels (grid/home) — a dead REST feed with live MQTT
+// would otherwise freeze the grid arcs/tile on stale cloud values forever
+// instead of falling back to the meter.
+let lastRestSyncAt = null;
 // DOCK ERA (2026-09-27): the site carries multiple solarbanks (SB4 on dock
 // socket A + SB2 Pro on socket B). latestBatteries holds each unit's own
 // live state (REST sync + its own MQTT channel); latestBattery is the
@@ -1744,10 +1783,6 @@ function recomputeAggregate() {
     members,
     outputW: sum("outputW"),
     chargeW: sum("chargeW"),
-    // Cells-only discharge summed too (2026-09-29): the flow diagram's
-    // battery→house arc reads dischargeW — without this it went stale
-    // between REST syncs once MQTT drove the members' values.
-    dischargeW: sum("dischargeW"),
     pvW: sum("pvW"),
     temperatureC: primary.temperatureC ?? null,
     mainSoc: primary.mainSoc ?? null,
@@ -1927,6 +1962,7 @@ async function syncBatteryInner() {
       // recomputeAggregate (single writer: total_battery_power, 2026-09-29).
       recomputeAggregate();
       lastCloudOkAt = Date.now();
+      lastRestSyncAt = Date.now();
       saveBatterySnapshot(latestBattery);
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside
       // Grid channel from the same call — the best available source when
