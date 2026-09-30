@@ -112,9 +112,14 @@ export default function LiveTab() {
   const pvW = useTweenedWatts(pv?.production ?? null);
   const pvHomeW = useTweenedWatts(pv?.toHome ?? null);
   const pvBattW = useTweenedWatts(pv?.toBattery ?? null);
-  // Charge/discharge ETA (2026-09-18, user request) — same shared helper as
-  // BatteryTab.jsx; maxPct/floorPct/capacityKwh come from /api/flow's
-  // battery object (server-resolved account limits, see server/index.js).
+  // Charge/discharge ETA (2026-09-18, user request) — maxPct/floorPct/
+  // capacityKwh come from /api/flow's battery object (server-resolved
+  // account limits, see server/index.js). 2026-09-30 (user report: "the
+  // estimated unload time changes every time the battery feed changes" —
+  // discharging 10 W read "empty in ≈ 265h 36m"): the DISCHARGE estimate
+  // uses the stable 7-day-average figure (the diagram node's
+  // timeToEmptyH, average-rate to the effective floor); charging keeps the
+  // current-rate estimate (PV-driven and steady).
   const battMode = battery
     ? (battery.cells ?? 0) > 0
       ? "discharging"
@@ -123,17 +128,19 @@ export default function LiveTab() {
         : "idle"
     : null;
   const battEta = battery
-    ? formatEta(
-        batteryEtaHours({
-          mode: battMode,
-          soc: battery.soc,
-          chargeW: battery.charge,
-          cellsW: battery.cells,
-          maxPct: battery.maxPct,
-          floorPct: battery.floorPct,
-          capacityKwh: battery.capacityKwh,
-        }),
-      )
+    ? battMode === "discharging"
+      ? formatEta(flow?.diagram?.timeToEmptyH ?? null)
+      : formatEta(
+          batteryEtaHours({
+            mode: battMode,
+            soc: battery.soc,
+            chargeW: battery.charge,
+            cellsW: battery.cells,
+            maxPct: battery.maxPct,
+            floorPct: battery.floorPct,
+            capacityKwh: battery.capacityKwh,
+          }),
+        )
     : null;
 
   // Today-so-far series for each tile's flip side, from the same `profile`
