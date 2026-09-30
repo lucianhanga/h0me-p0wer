@@ -381,8 +381,15 @@ export default function GraphTab() {
         // one series whose height actually determines how tall the chart
         // needs to be. Battery is signed, so its positive (discharge) and
         // negative (charge) sides are capped independently.
-        const posCap =
-          gi === 0
+        // ONLY the three POWER graphs (2026-09-30, user report): the cap ran
+        // on the °C/% module charts too, computing a ~610 W battery-cells
+        // cap and stretching the axes to 300 °C / 300 % (plus a nonsense
+        // "peak 610 W (off-scale)" note). Module charts get fixed sane
+        // caps instead — a battery never exceeds 60 °C or 100 %.
+        const isModuleChart = gi >= 3;
+        const posCap = isModuleChart
+          ? null
+          : gi === 0
             ? robustCap(homeSeries)
             : gi === 1
               ? robustCap(rows.map((r) => r.pv))
@@ -403,8 +410,10 @@ export default function GraphTab() {
 
         chart.setOption({
           yAxis: {
-            max: posCap ? posCap.cap : null,
-            min: negCap ? -negCap.cap : null,
+            max: isModuleChart ? (def.unit === "°C" ? 60 : 100) : posCap ? posCap.cap : null,
+            // Temperatures can go below 0 in winter (outside line) — auto min;
+            // SOC is exactly 0..100.
+            min: isModuleChart ? (def.unit === "%" ? 0 : null) : negCap ? -negCap.cap : null,
           },
           series: def.series.map((s) => ({
             name: s.name,

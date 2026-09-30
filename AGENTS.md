@@ -5554,3 +5554,15 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified: fresh-sync flow identity closes (Δ 0), Grid tile == arc ==
   House tile; welcome error gone from the log; build + node --check pass;
   scrollW == 390.
+
+## Module charts: fixed caps, no power-robustCap (2026-09-30, user report)
+
+- User screenshots (30d): the battery-temperature chart scaled to 300 °C
+  and charge-per-module to 300 %, each with a nonsense "peak 610 W
+  (off-scale)" note. Root cause: applyRows() ran robustCap() (built for
+  power graphs) on the °C/% module charts too — battCellsOf() over the
+  shared timeseries rows yields real battery watts, so the axis cap became
+  ~610 (in °C/%!) and the clipped-peak note showed W. robustCap() now runs
+  ONLY on the three power graphs (gi <= 2); module charts get fixed caps:
+  °C → max 60 (min auto — outside temps go below 0 in winter), % → exactly
+  0..100. The off-scale note can no longer fire there.
