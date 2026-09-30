@@ -278,9 +278,13 @@ export function registerStatsRoute(app, deps) {
       return t >= weekStartMs && t < weekEndMs;
     });
   
-    // --- Year: monthly kWh from cloud_history year rows.
-    const yearRows = sn
-      ? getCloudTrend(sn, "year", String(new Date().getFullYear())).rows.map((r) => ({
+    // --- Year: monthly kWh from cloud_history year rows, aggregated across
+    // ALL meters (2026-09-30, user report: "This year" read 98.85 kWh while
+    // "This month" read 364.73 — the year read a SINGLE meter's year rows,
+    // missing the other meter's share after the meter-1 → meter-2 swap;
+    // month/week already aggregate via getCloudTrendMulti).
+    const yearRows = meterSns.length
+      ? getCloudTrendMulti(meterSns, "year", String(new Date().getFullYear())).rows.map((r) => ({
           label: r.time,
           importKwh: r.import_energy ?? 0,
           exportKwh: r.export_energy ?? 0,
@@ -733,8 +737,8 @@ export function registerStatsRoute(app, deps) {
       const year = dayStart.getFullYear() - offset;
       periodStart = `${year}-01-01`;
       label = String(year);
-      const yearRows = sn
-        ? getCloudTrend(sn, "year", String(year)).rows.map((r) => ({
+      const yearRows = meterSns.length
+        ? getCloudTrendMulti(meterSns, "year", String(year)).rows.map((r) => ({
             label: r.time,
             importKwh: r.import_energy ?? 0,
           }))
