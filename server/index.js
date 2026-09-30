@@ -1640,6 +1640,51 @@ poller.onSnapshot((state) => {
 // still zero). The flag now only latches when days were actually repaired
 // (or verifiably nothing needs repairing), and every branch logs so the
 // server log says what happened on any given boot.
+// Physical per-interval power cap for repaired PV days (2026-09-30, user
+// report: the v2 repair amplified borrowed shapes past the hardware —
+// 2031 W on a 1 kWp day). energy = Σpower/3000 holds via
+// cap-and-redistribute: cap each interval at the system's max for that
+// date, push the excess into the day's other producing intervals.
+// Pre-expansion days (the balcony 2×500 W era, inverter-capped 800 W) get
+// 1050 W; later days get the configured PV_PEAK_KWP × 1050 W/kWp... i.e.
+// ×1000 ×1.05. The expansion (6 more panels) arrived 2026-09-26+.
+const PV_EXPANSION_DATE = "2026-09-26";
+function pvRepairCapW(dateStr) {
+  const kwp = dateStr < PV_EXPANSION_DATE ? 1.0 : Number(process.env.PV_PEAK_KWP ?? 1.0);
+  return Math.round(kwp * 1000 * 1.05);
+}
+function capAndRedistribute(vals, capW) {
+  const out = [...vals];
+  for (let pass = 0; pass < 10; pass++) {
+    let excess = 0;
+    const under = [];
+    for (let i = 0; i < out.length; i++) {
+      if (out[i] > capW) {
+        excess += out[i] - capW;
+        out[i] = capW;
+      } else if (out[i] > 0) {
+        under.push(i);
+      }
+    }
+    if (excess < 1 || !under.length) break;
+    const share = excess / under.length;
+    for (const i of under) out[i] += share;
+  }
+  return out.map((v) => Math.round(v * 10) / 10);
+}
+function repairPvDay(dateStr, shape, shapeSum, producedKwh) {
+  const scale = (producedKwh * 3000) / shapeSum;
+  const powers = capAndRedistribute(shape.map((s) => s.power * scale), pvRepairCapW(dateStr));
+  saveCloudPvTrend(
+    "day",
+    dateStr,
+    shape.map((s, i) => ({
+      time: new Date(s.ts).toTimeString().slice(0, 8),
+      power: powers[i],
+    })),
+  );
+}
+
 function repairZeroedPvHistory() {
   if (kvGet("pv_shape_repair_v2")) return;
   const todayStr = localDate();
@@ -1667,16 +1712,7 @@ function repairZeroedPvHistory() {
     if (d.date >= todayStr || !(d.produced > 0)) continue;
     if (getCloudPvDaySum("day", d.date) > 0) continue; // day is intact
     remaining++;
-    // energy(kWh) = Σ power(W) × (20/60) / 1000 = Σpower / 3000
-    const scale = (d.produced * 3000) / shapeSum;
-    saveCloudPvTrend(
-      "day",
-      d.date,
-      shape.map((s) => ({
-        time: new Date(s.ts).toTimeString().slice(0, 8),
-        power: Math.round(s.power * scale * 10) / 10,
-      })),
-    );
+    repairPvDay(d.date, shape, shapeSum, d.produced);
     repaired++;
   }
   if (repaired > 0 || remaining === 0) {
@@ -1697,6 +1733,41 @@ function repairZeroedPvHistory() {
   }
 }
 
+// v3 (2026-09-30, user report: "there was not such high momentary
+// production in the past" — 30d PV spikes to ~2100 W): v2 amplified the
+// borrowed shape past the hardware's physical max on days whose produced
+// total exceeded the shape day's. Re-repair any day whose stored peak
+// exceeds the physical cap with cap-and-redistribute (totals stay exact).
+// Also fixes the downstream artifact: the Battery chart's impossible
+// −1500..−2000 W "charging" needles were cellsNetOf = battOut − pvHome
+// computed against the inflated PV.
+function repairInflatedPvDays() {
+  if (kvGet("pv_shape_repair_v3")) return;
+  const todayStr = localDate();
+  const shapeDay = getLastNonzeroPvDayBefore(todayStr);
+  if (!shapeDay) return; // nothing to base shapes on — retry next restart
+  const shape = getCloudPvDayPower(shapeDay, shapeDay).filter((r) => r.power != null);
+  const shapeSum = shape.reduce((a, r) => a + r.power, 0);
+  if (!shape.length || shapeSum <= 0) return;
+  let repaired = 0;
+  for (const d of getPvDaily("2020-01-01", todayStr)) {
+    if (d.date >= todayStr || !(d.produced > 0)) continue;
+    const rows = getCloudPvDayPower(d.date, d.date);
+    if (!rows.length) continue;
+    const peak = Math.max(...rows.map((r) => r.power ?? 0));
+    if (peak <= pvRepairCapW(d.date)) continue; // plausible day — leave it
+    repairPvDay(d.date, shape, shapeSum, d.produced);
+    repaired++;
+  }
+  kvSet("pv_shape_repair_v3", { repaired, at: Date.now() });
+  if (repaired) {
+    activity("pv_history_repaired", { n: repaired, shapeDay });
+    console.log(`[cloud-sync] re-repaired ${repaired} inflated PV-history day(s) (capped at each day's physical max)`);
+  } else {
+    console.log("[cloud-sync] PV-history v3 check: no inflated days");
+  }
+}
+
 // Prune samples older than the retention window once an hour; also roll up
 // PV and grid daily energy (raw samples age out after 48 h).
 pruneOld();
@@ -1705,6 +1776,7 @@ pruneCloudGrid();
 rollupPvDaily();
 rollupGridDaily();
 repairZeroedPvHistory();
+repairInflatedPvDays();
 setInterval(() => {
   pruneOld();
   pruneBattery();

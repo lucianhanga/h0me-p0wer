@@ -1,7 +1,7 @@
 {
   "name": "h0me-p0wer-web",
   "private": true,
-  "version": "1.5.136",
+  "version": "1.5.137",
   "type": "module",
   "scripts": {
     "dev": "vite",

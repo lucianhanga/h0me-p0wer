@@ -5613,3 +5613,23 @@ cross-cutting), every finding re-verified by hand before fixing:
   tile showed only one meter's share. Month/week already aggregated via
   getCloudTrendMulti(meterSns, …) — the year paths now do too. Verified
   on dev: year == month (223.58 ≈ 223.6 — only September has data there).
+
+## PV repair v3: physical caps on repaired days (2026-09-30, user report)
+
+- User (30d graphs): "there was not such high momentary production...
+  nor such a high discharge in the past." Production's cloud_pv_history
+  peaked 1454-2140 W on 09-12..25 — the v2 repair amplified the borrowed
+  shape past the hardware when a day's produced total exceeded the shape
+  day's (scale = produced/shapeSum × a narrow tall shape peak = 2000+ W
+  on a 1 kWp system). And the Battery chart's impossible −1500/−2000 W
+  "charging" needles were DOWNSTREAM: cellsNetOf = battOut − pvHome with
+  pvHome computed against the inflated PV. One root cause.
+- Fix: cap-and-redistribute (`capAndRedistribute` + `pvRepairCapW`) —
+  each repaired interval capped at the physical max for its date
+  (pre-expansion ≤ 2026-09-25: 1050 W = the 1 kWp balcony era; later:
+  PV_PEAK_KWP × 1000 × 1.05), the excess redistributed over the day's
+  other producing intervals — totals stay exact. v2's zeroed-day repair
+  uses the same helper now; v3 (`pv_shape_repair_v3`) re-repairs days
+  whose stored peak exceeds the cap (v2 had already latched its flag on
+  production). Verified on dev: 8 days re-repaired, peaks ≤ 807 W,
+  totals match pv_daily exactly (09-15: 5.39 == 5.39).
