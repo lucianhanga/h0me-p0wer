@@ -1955,6 +1955,13 @@ pre {
   margin-top: 0.9rem;
 }
 
+/* Extra headroom on the unit cards (2026-09-30, user report: the tallest
+   cylinder's terminal nub sat right under the card title) — the nub pokes
+   10px above the tube, so 0.9rem was visually tight. */
+.batt-gauge-card .batt-modules {
+  margin-top: 1.3rem;
+}
+
 /* Glass-cylinder battery (2026-09-28, user-provided reference pictures):
    the tube is a dark glass column with a metallic terminal nub and base
    band; each module segment holds a "liquid" fill rising from its bottom
