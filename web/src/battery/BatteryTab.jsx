@@ -85,7 +85,7 @@ export function StatusBadge({ mode }) {
 // applying that same research): the near-full/low SOC zones already had
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
-function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false }) {
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, heightPx = null, slotHeightPx = null }) {
   const t = useT();
 
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
@@ -172,6 +172,8 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           heroZoneLabel={zoneLabel}
           single={aggregate}
           mode={mode}
+          heightPx={heightPx}
+          slotHeightPx={slotHeightPx}
         />
         <div className={`batt-status ${mode}`}>
           <StatusBadge mode={mode} />
@@ -606,6 +608,18 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const batteries = Array.isArray(data.batteries) ? data.batteries : [data];
   const latestTs = batteries.reduce((max, b) => Math.max(max, b.live?.ts ?? 0), 0) || null;
 
+  // Capacity-proportional cylinder heights across the member units
+  // (2026-09-30, user request — "make the battery in the second tile
+  // proportionally smaller than the one in the first tile... tiles and
+  // texts stay the same size and properly aligned"): same heightPx/
+  // slotHeightPx mechanism as the simple view — the slot reserves the
+  // tallest stack's height and bottom-aligns the cylinder inside it, so
+  // cards and text rows stay identical/aligned.
+  const baseH = window.matchMedia("(max-width: 600px)").matches ? 200 : 260;
+  const maxCap = Math.max(...batteries.filter((b) => b.member).map((b) => b.constants?.capacityKwh ?? 0), 0) || 1;
+  const heightOf = (b) =>
+    Math.round(baseH * Math.max(0.55, (b.constants?.capacityKwh ?? maxCap) / maxCap));
+
   return (
     <div>
       <UpdatedStamp at={latestTs}>
@@ -638,6 +652,8 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               // only to the primary (controlled) battery, never to a
               // monitored-only secondary one.
               dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
+              heightPx={heightOf(b)}
+              slotHeightPx={baseH}
               onRefresh={forceRefresh}
             />
           ),
