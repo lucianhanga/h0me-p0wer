@@ -5566,3 +5566,16 @@ cross-cutting), every finding re-verified by hand before fixing:
   ONLY on the three power graphs (gi <= 2); module charts get fixed caps:
   °C → max 60 (min auto — outside temps go below 0 in winter), % → exactly
   0..100. The off-scale note can no longer fire there.
+
+## Strategy cards: capacity-proportional cylinders (2026-09-30, user request)
+
+- User: "make the battery in the second tile proportionally smaller than
+  the one in the first tile... tiles and texts stay the same size and
+  properly aligned." The Strategy unit cards rendered both cylinders at
+  the same fixed height. Now the same heightPx/slotHeightPx mechanism as
+  the simple view: BatteryTab computes maxCap across member units and
+  baseH (260/200px); each BatteryCard forwards heightPx (= baseH ×
+  max(0.55, cap/maxCap)) + slotHeightPx (= baseH) to BatteryModules; the
+  slot's height style no longer requires stacked mode. Result (measured):
+  SB4 cylinder 270px vs Pro 182px (66% ≈ 6.6/10 kWh), both cards exactly
+  392px tall, bottoms aligned, text rows aligned.
