@@ -5579,3 +5579,12 @@ cross-cutting), every finding re-verified by hand before fixing:
   slot's height style no longer requires stacked mode. Result (measured):
   SB4 cylinder 270px vs Pro 182px (66% ≈ 6.6/10 kWh), both cards exactly
   392px tall, bottoms aligned, text rows aligned.
+
+## Unit cards: headroom between title and cylinder (2026-09-30, user request)
+
+- User: "the battery is very close to the title on the left tile." The
+  tallest cylinder (SB4, fills its whole slot) had its terminal nub (10px
+  above the tube) right under the card title — .batt-modules' 0.9rem top
+  margin was visually tight. `.batt-gauge-card .batt-modules` gets
+  margin-top 1.3rem (uniform — equal card heights/alignment unaffected,
+  verified: both cards 398px, bottoms aligned).
