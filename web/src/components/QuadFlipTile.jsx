@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // Round-robin multi-face flip tile (2026-09-29, user request for the simple
 // view's chart tiles — 4 faces: 12h / 24h / 1w / 1h, tapped through in
@@ -11,18 +11,23 @@ export default function QuadFlipTile({ title, faceLabel, onFlip, children }) {
   const [phase, setPhase] = useState("in"); // in | out | prep
   const busy = useRef(false);
   const downPos = useRef(null);
+  const timers = useRef([]);
+  // No setState after unmount (2026-09-29 review): the flip sequence is
+  // setTimeout/rAF-driven.
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+  const later = (fn, ms) => timers.current.push(setTimeout(fn, ms));
 
   const flip = () => {
     if (busy.current) return;
     busy.current = true;
     setPhase("out"); // rotate to edge-on
-    setTimeout(() => {
+    later(() => {
       onFlip?.(); // swap face while invisible
       setPhase("prep"); // jump to the other edge WITHOUT animating
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
           setPhase("in"); // animate back to flat
-          setTimeout(() => {
+          later(() => {
             busy.current = false;
           }, 220);
         }),

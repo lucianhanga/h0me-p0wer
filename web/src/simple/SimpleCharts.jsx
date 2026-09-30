@@ -114,8 +114,15 @@ function SimpleChartTile({ def }) {
   const [spanIdx, setSpanIdx] = useState(0); // first face: 12h
   const [rows, setRows] = useState(null);
   const spanMs = SPANS[spanIdx].ms;
+  // Memoized — a fresh {…def} object per render re-inited ECharts on every
+  // WS push (2026-09-29 review: the dispose/init storm class the
+  // TodayMiniChart fix established we must memoize for).
+  const chartDef = useMemo(() => ({ ...def, spanMs }), [def, spanMs]);
   useEffect(() => {
     let cancelled = false;
+    // Clear on span change — the previous face's data must not render under
+    // the new face's label while the fetch is in flight (2026-09-29 review).
+    setRows(null);
     const load = () => {
       const to = Date.now();
       fetch(`/api/timeseries?from=${to - spanMs}&to=${to}&points=600&view=${spanMs}`)
@@ -140,7 +147,7 @@ function SimpleChartTile({ def }) {
         onFlip={() => setSpanIdx((i) => (i + 1) % SPANS.length)}
       >
         {rows?.length ? (
-          <ChartCanvas def={{ ...def, spanMs }} rows={rows} />
+          <ChartCanvas def={chartDef} rows={rows} />
         ) : (
           <div className="chart-box-sm simple-chart-loading" />
         )}

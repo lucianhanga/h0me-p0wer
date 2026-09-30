@@ -15,6 +15,12 @@ and its own PV-aware power plan that drives the battery's output preset.
 
 ## The six tabs
 
+**Simple vs full view**: a fresh visit starts in the **simple view** — one
+calm screen with the flow diagram, both batteries as vertical stacks (with
+charge state + ETAs), three tap-to-flip history charts (12h/24h/1w/1h), and
+the Today/Week/Month cards. The header's ◐ button switches to the full tab
+interface below; the choice persists.
+
 - **Welcome** — an AI briefing (any OpenAI-compatible endpoint): today's
   weather with a sunrise→sunset arc, week/month sun outlook, estimated PV
   production for your system, measured start-of-day vs. predicted end-of-day
@@ -27,7 +33,8 @@ and its own PV-aware power plan that drives the battery's output preset.
 - **Live** — animated power-flow diagram (PV / grid / home / battery with the
   correct Anker split: PV→home is inverter pass-through, never
   double-counted), main tiles (house, grid, battery with charge/discharge
-  symbols, PV incl. per-string PV1/PV2), per-phase details, and the
+  symbols, PV incl. every MPPT channel per unit, disconnected ones shown
+  disabled), per-phase details, and the
   **Power Plan** status card (see below).
 - **Strategy** — choose how the power plan prioritizes PV/battery/grid (see
   below), plus the battery gauge and every battery parameter (limits,

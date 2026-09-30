@@ -32,7 +32,11 @@ export default function SimpleHome() {
     if (streamMsg?.type === "live" && streamMsg.flow) setFlow(streamMsg.flow);
   }, [streamMsg]);
   useEffect(() => {
-    if (flowRest) setFlow((prev) => prev ?? flowRest);
+    // Unconditional overwrite (2026-09-29 review: `prev ?? flowRest` never
+    // fired after the first WS push, so the REST "safety net" netted
+    // nothing — a stalled socket froze the view on the last pushed values
+    // forever). Same overwrite-the-world contract as LiveTab's poll.
+    if (flowRest) setFlow(flowRest);
   }, [flowRest]);
 
   const primary = params?.batteries?.[0] ?? params;
@@ -42,9 +46,10 @@ export default function SimpleHome() {
   const units = (params?.batteries ?? []).filter((b) => b.member && b.live);
   const stacks = units.length ? units : primary?.live ? [primary] : [];
   // Members carry no config — the ETA targets the SYSTEM's charge ceiling /
-  // discharge floor (the aggregate's config = the primary unit's account
-  // limits, the same values the controller obeys).
-  const sysMin = primary?.config?.dischargeLowerLimitPct ?? null;
+  // discharge floor. Prefer the flow payload's EFFECTIVE floor (account
+  // floor + controller margin, computed server-side) — the bare account
+  // floor here was a third, drifting basis (2026-09-29 review).
+  const sysMin = flow?.battery?.floorPct ?? primary?.config?.dischargeLowerLimitPct ?? null;
   const sysMax = primary?.config?.chargeUpperLimitPct ?? null;
   // Cylinder height ∝ the unit's total capacity (2026-09-28, user request:
   // "display the batteries with different sizes near each other... so the

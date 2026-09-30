@@ -572,9 +572,10 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
           },
         };
       };
-      // The pushed flow.battery describes the PRIMARY battery only (2026-09-24:
-      // merging it into every entry would have shown the SB2's live numbers
-      // on the Solarbank 4's card too).
+      // The pushed flow.battery describes the site AGGREGATE — it merges
+      // only into batteries[0] (the aggregate entry); the per-unit cards
+      // keep their own polled values (2026-09-24: merging into every entry
+      // would have shown one unit's numbers on all cards).
       if (Array.isArray(prev.batteries))
         return {
           ...prev,

@@ -85,20 +85,23 @@ export default function LiveTab() {
 
   const snapshot = live?.snapshot;
   const cloudGrid = snapshot == null ? live?.cloud : null;
-  const grid = snapshot?.primary?.totalPower ?? cloudGrid?.power ?? null;
-  const gridFromCloud = snapshot?.primary?.totalPower == null && cloudGrid != null;
+  // The tile displays the SAME app channels as the flow diagram
+  // (2026-09-29 review: v1.5.127 changed the server but this tile never
+  // consumed flow.grid — it kept reading the meter snapshot, so the exact
+  // tile↔arc divergence the change promised to fix persisted). The meter
+  // reading is now the fallback for when the feed is down (flow.grid
+  // absent), matching the diagram's own fallback.
+  const gridFlow = flow?.grid ? (flow.grid.import ?? 0) - (flow.grid.export ?? 0) : null;
+  const grid = gridFlow ?? snapshot?.primary?.totalPower ?? cloudGrid?.power ?? null;
+  const gridFromCloud = flow?.grid ? flow.grid.source !== "meter" : snapshot?.primary?.totalPower == null && cloudGrid != null;
   const phases = snapshot?.primary?.phases;
   const battery = flow?.battery;
   const pv = flow?.pv;
-  // Display-deadbanded grid (see GRID_DISPLAY_DEADBAND_W above): tile and
-  // flow diagram both use the clamped values, raw stays in the flip-side
-  // chart and everywhere else.
+  // Display-deadbanded grid (see GRID_DISPLAY_DEADBAND_W above): the tile
+  // uses the clamped value; the diagram applies the same deadband inside
+  // flow/model.js (2026-09-29 review: the old flowDisplay wrapper zeroed
+  // flow.grid, which the model no longer reads — dead code, removed).
   const gridDisplay = grid != null && Math.abs(grid) <= GRID_DISPLAY_DEADBAND_W ? 0 : grid;
-  const flowDisplay =
-    flow?.grid &&
-    Math.abs((flow.grid.import ?? 0) - (flow.grid.export ?? 0)) <= GRID_DISPLAY_DEADBAND_W
-      ? { ...flow, grid: { ...flow.grid, import: 0, export: 0 } }
-      : flow;
   // Tweened display values for the tiles (2026-09-23, user request — the
   // Anker app animates number transitions; same cadence, now same glide).
   const homeW = useTweenedWatts(flow?.home?.consumption ?? null);
@@ -192,7 +195,7 @@ export default function LiveTab() {
       </p>
 
       <h3>{t("live.powerFlow")}</h3>
-      <FlowView flow={flowDisplay} />
+      <FlowView flow={flow} />
 
       <div className="cards">
         <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>

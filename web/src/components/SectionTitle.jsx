@@ -4,8 +4,10 @@
 // composition widget — a divider adds structure without showing data).
 // Decoration only — it renders no data and owns no behavior.
 export default function SectionTitle({ children }) {
+  // A real heading for screen readers (2026-09-29 review — was
+  // aria-hidden, leaving the simple view with zero accessible structure).
   return (
-    <div className="section-title" aria-hidden="true">
+    <div className="section-title" role="heading" aria-level={2}>
       <span>{children}</span>
     </div>
   );

@@ -22,12 +22,17 @@ const hhmm = (iso) => iso?.slice(11, 16) ?? null;
 
 function dailyImportRows(sn, monthsBack = 2) {
   // cloud_history month rows: label = yyyy-MM-dd, import_energy per day.
+  // 2026-09-30: this referenced an undefined `meterSns` instead of the
+  // parameter since the meter-swap refactor — every scheduled Welcome
+  // refresh failed with "meterSns is not defined". Accept one SN or an
+  // array (meters never measure simultaneously; getCloudTrendMulti sums).
+  const sns = (Array.isArray(sn) ? sn : [sn]).filter(Boolean);
   const rows = [];
   const now = new Date();
   for (let i = monthsBack; i >= 0; i--) {
     const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
     const ym = localDate(d).slice(0, 7);
-    for (const r of getCloudTrendMulti(meterSns, "month", ym).rows) {
+    for (const r of getCloudTrendMulti(sns, "month", ym).rows) {
       if (r.time && r.import_energy != null) rows.push({ date: r.time, importKwh: r.import_energy });
     }
   }
@@ -158,7 +163,7 @@ export function buildContext({ config, geo, weather, pvgis, statsOverview, deps 
   const gridImportKwhUntilSunrise = integrateGridImportKwh(dayStart.getTime(), sunriseBoundMs);
   const battDischargeKwhUntilSunrise = integrateBatteryCellsKwh(dayStart.getTime(), sunriseBoundMs);
 
-  const imports = sn ? dailyImportRows(sn) : [];
+  const imports = meterSns.length ? dailyImportRows(meterSns) : [];
   const ym = localDate().slice(0, 7);
   // 0-import rows are 0-filled pre-link days (cloud history starts at linking,
   // 2026-09-07), not real measurements — exclude them from every average.

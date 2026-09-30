@@ -298,6 +298,7 @@ export class AnkerClient {
     const list = scene?.solarbank_info?.solarbank_list ?? [];
     if (!list.length) return null;
     const num = (v) => (v === "" || v == null ? 0 : Number(v));
+    const numOrNull = (v) => (v === "" || v == null ? null : Number(v));
     const info = scene.solarbank_info;
     const gridInfo = scene.grid_info ?? {};
     const members = list.map((sb) => {
@@ -359,10 +360,14 @@ export class AnkerClient {
       toHomeW: num(info?.to_home_load),
       // Grid/home channels (grid_info): live values usable when the meter's
       // Modbus is down — gridToHome = import, pvToGrid = PV export, and the
-      // app's Home Load = grid_to_home + to_home_load.
-      gridToHomeW: num(gridInfo.grid_to_home_power),
-      pvToGridW: num(gridInfo.photovoltaic_to_grid_power),
-      homeLoadW: num(scene.home_load_power),
+      // app's Home Load = grid_to_home + to_home_load. NULL-PRESERVING
+      // (2026-09-29 review): the num() coercion maps a missing channel to 0,
+      // which would defeat every `!= null` meter fallback downstream — an
+      // absent grid_info (e.g. meter unbound from a recreated site,
+      // 2026-09-27) must read null, not a fake 0 W.
+      gridToHomeW: numOrNull(gridInfo.grid_to_home_power),
+      pvToGridW: numOrNull(gridInfo.photovoltaic_to_grid_power),
+      homeLoadW: numOrNull(scene.home_load_power),
       // Status/feature fields of the PRIMARY member (per-unit for the rest).
       featureSwitch: primary.featureSwitch,
       chargingStatus: primary.chargingStatus,

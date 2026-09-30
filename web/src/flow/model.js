@@ -24,7 +24,13 @@ export function buildFlowModel(flow, t) {
   // NEGATIVE (e.g. −7) — which drew an export arc labeled "−7 W" next to
   // the import arc. Net them like the old signed value did; the battery
   // pair already follows the same dominant-direction rule.
-  const gridNet = Math.max(0, d.gridToHomeW ?? 0) - Math.max(0, d.pvToGridW ?? 0);
+  // The ±20 W display deadband lives here (2026-09-29 review — it used to
+  // be a LiveTab wrapper zeroing flow.grid, which this model doesn't
+  // read): the meter/net value jitters around zero at near-balanced flow,
+  // and a flickering arc is noise, not signal.
+  const GRID_DEADBAND_W = 20;
+  let gridNet = Math.max(0, d.gridToHomeW ?? 0) - Math.max(0, d.pvToGridW ?? 0);
+  if (Math.abs(gridNet) <= GRID_DEADBAND_W) gridNet = 0;
   return {
     nodes: [
       { id: "pv", label: t("flow.pv"), valueW: d.pvW ?? null, sub: null, color: "#5fce80" },
