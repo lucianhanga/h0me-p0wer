@@ -56,6 +56,8 @@ export const ro = {
     expansion_detected: "Baterie extensie detectată ({n} pachet(e), SN {sn})",
     floor_changed: "Prag de descărcare schimbat: {from}% → {to}%",
     pv_history_repaired: "Istoric PV reparat: {n} zi(le) reconstruite din totaluri zilnice",
+    pin_ip_locked: "PIN: dispozitiv blocat după 3 încercări greșite ({ip})",
+    pin_ip_unlocked: "PIN: dispozitiv deblocat ({ip})",
     meter: {
       up: "Conexiunea cu contorul inteligent restabilită (direct)",
       down: "Conexiunea cu contorul inteligent pierdută — se folosesc date din cloud",
@@ -83,6 +85,9 @@ export const ro = {
     submit: "Confirmă",
     cancel: "Anulează",
     wrong: "PIN greșit — mai încearcă.",
+    attemptsLeft: "{n} încercări rămase",
+    lockedTitle: "Dispozitiv blocat",
+    locked: "Prea multe încercări greșite de PIN — acest dispozitiv este blocat. Proprietarul îl poate debloca cu PIN-ul corect.",
   },
   live: {
     sources: "rețea: {grid} · baterie: {battery}",

@@ -45,6 +45,8 @@ export const en = {
     expansion_detected: "Expansion battery detected ({n} pack(s), SN {sn})",
     floor_changed: "Discharge floor changed: {from}% → {to}%",
     pv_history_repaired: "PV history repaired: {n} day(s) rebuilt from daily totals",
+    pin_ip_locked: "PIN: device blocked after 3 wrong attempts ({ip})",
+    pin_ip_unlocked: "PIN: device unblocked ({ip})",
     meter: {
       up: "Smart meter connection restored (direct)",
       down: "Smart meter connection lost — using cloud data",
@@ -72,6 +74,9 @@ export const en = {
     submit: "Confirm",
     cancel: "Cancel",
     wrong: "Wrong PIN — try again.",
+    attemptsLeft: "{n} attempts left",
+    lockedTitle: "Device blocked",
+    locked: "Too many wrong PIN attempts — this device is blocked. The owner can unblock it with the correct PIN.",
   },
   live: {
     sources: "grid: {grid} · battery: {battery}",

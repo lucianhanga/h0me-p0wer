@@ -77,6 +77,11 @@ export default function StrategyTab() {
   const [pendingPatch, setPendingPatch] = useState(null);
   const [pinValue, setPinValue] = useState("");
   const [pinError, setPinError] = useState(false);
+  // Lockout state (2026-10-01, user request): after 3 wrong PINs the server
+  // blacklists this IP — the modal switches to a locked message instead of
+  // re-asking forever.
+  const [pinLocked, setPinLocked] = useState(false);
+  const [pinAttemptsLeft, setPinAttemptsLeft] = useState(null);
 
   // Ticks once a second so the step-up hold bar below counts down smoothly
   // between the 10s /api/power-plan polls, instead of jumping in 10s steps.
@@ -92,7 +97,7 @@ export default function StrategyTab() {
       body: JSON.stringify({ ...patch, pin }),
     });
     const s = await r.json();
-    if (r.status === 403) return { pinRejected: true };
+    if (r.status === 403) return { pinRejected: true, locked: !!s.locked, attemptsLeft: s.attemptsLeft ?? null };
     if (!r.ok) throw new Error(s.error ?? `HTTP ${r.status}`);
     return { data: s.data };
   }
@@ -111,6 +116,7 @@ export default function StrategyTab() {
       const res = await postStrategy(patch, pin);
       if (res.pinRejected) {
         sessionStorage.removeItem("strategyPin");
+        if (res.locked) return setPinLocked(true);
         return askPin(patch, true);
       }
       setState(res.data);
@@ -128,13 +134,16 @@ export default function StrategyTab() {
     try {
       const res = await postStrategy(pendingPatch, pin);
       if (res.pinRejected) {
+        if (res.locked) return setPinLocked(true);
         setPinError(true);
+        setPinAttemptsLeft(res.attemptsLeft);
         setPinValue("");
         return;
       }
       sessionStorage.setItem("strategyPin", pin);
       setPendingPatch(null);
       setPinError(false);
+      setPinAttemptsLeft(null);
       setState(res.data);
     } catch (err) {
       alert(t("strategy.updateFailed", { error: err.message }));
@@ -356,33 +365,52 @@ export default function StrategyTab() {
             <button className="ask-close" onClick={() => setPendingPatch(null)} aria-label={t("ask.close")}>
               ×
             </button>
-            <h4>{t("pin.title")}</h4>
-            <p className="muted">{t("pin.body")}</p>
-            {pinError && <p className="pin-error">{t("pin.wrong")}</p>}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitPin();
-              }}
-            >
-              <input
-                className="pin-input"
-                type="password"
-                inputMode="numeric"
-                autoComplete="off"
-                autoFocus
-                value={pinValue}
-                onChange={(e) => setPinValue(e.target.value)}
-              />
-              <div className="controls">
-                <button type="submit" disabled={busy || !pinValue.trim()}>
-                  {t("pin.submit")}
-                </button>
-                <button type="button" onClick={() => setPendingPatch(null)}>
-                  {t("pin.cancel")}
-                </button>
-              </div>
-            </form>
+            {pinLocked ? (
+              <>
+                <h4>{t("pin.lockedTitle")}</h4>
+                <p className="pin-error">{t("pin.locked")}</p>
+                <div className="controls">
+                  <button type="button" onClick={() => setPendingPatch(null)}>
+                    {t("pin.cancel")}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h4>{t("pin.title")}</h4>
+                <p className="muted">{t("pin.body")}</p>
+                {pinError && (
+                  <p className="pin-error">
+                    {t("pin.wrong")}
+                    {pinAttemptsLeft != null && ` — ${t("pin.attemptsLeft", { n: pinAttemptsLeft })}`}
+                  </p>
+                )}
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    submitPin();
+                  }}
+                >
+                  <input
+                    className="pin-input"
+                    type="password"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    autoFocus
+                    value={pinValue}
+                    onChange={(e) => setPinValue(e.target.value)}
+                  />
+                  <div className="controls">
+                    <button type="submit" disabled={busy || !pinValue.trim()}>
+                      {t("pin.submit")}
+                    </button>
+                    <button type="button" onClick={() => setPendingPatch(null)}>
+                      {t("pin.cancel")}
+                    </button>
+                  </div>
+                </form>
+              </>
+            )}
           </div>
         </div>
       )}
