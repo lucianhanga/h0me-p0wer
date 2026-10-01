@@ -2436,6 +2436,42 @@ pre {
   text-align: center;
 }
 
+/* Per-module temperature row under each simple-view stack (2026-10-01):
+   cold→hot colored dot per module, ⚠ at the cold/hot bounds (tooltip on
+   the chip explains why). */
+.batt-temps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.15rem 0.6rem;
+  font-size: 0.75rem;
+  margin-top: 0.1rem;
+}
+
+.batt-temp {
+  white-space: nowrap;
+  color: #8b98a5;
+  cursor: default;
+}
+
+.batt-temp-label {
+  color: #5a6672;
+}
+
+.batt-temp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.25rem;
+  vertical-align: -1px;
+}
+
+.batt-temp-warn {
+  color: #f7a44f;
+  font-weight: 600;
+}
+
 @media (max-width: 600px) {
   /* Narrower so the coverage line fits ONE row in a ~173px column
      (2026-09-29, user report: "the last row spans two rows"). */

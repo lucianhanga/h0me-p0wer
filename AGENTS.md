@@ -5743,3 +5743,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   pin_ip_unlocked. Frontend: the PIN modal shows "N attempts left" after
   a wrong try and a locked message instead of the form once blocked
   (i18n pin.* in en/de/ro).
+
+## Simple view: per-module battery temperatures (2026-10-01, user request)
+
+- Each simple-view stack shows a temperature row under the coverage line:
+  solarbank (main unit) + every expansion pack. Progressive cold→hot
+  color: hue 220 (deep blue, ≤ −10 °C) → 0 (dark red, ≥ +40 °C), same
+  progressive approach as the SOC fills. ⚠ at the bounds (≤ +3 °C cold —
+  "charging may be limited"; ≥ +35 °C hot — "performance and lifetime at
+  risk") with the reason in the chip's hover tooltip (i18n
+  battery.tempWarn.cold/hot in en/de/ro). Null temps render nothing
+  (honest unknowns — e.g. a momentary MQTT gap on one unit).

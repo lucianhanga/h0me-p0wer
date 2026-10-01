@@ -241,7 +241,11 @@ export const en = {
       emptyIn: "empty in ≈ {eta}",
       usableWindow: "usable window ≈ {kwh} kWh",
     },
-    coverAvg: "covers ≈ {eta} at average use",    liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
+    coverAvg: "covers ≈ {eta} at average use",
+    tempWarn: {
+      cold: "Battery is cold (≤ 3 °C) — charging may be limited until it warms up.",
+      hot: "Battery is hot (≥ 35 °C) — sustained heat reduces performance and lifetime.",
+    },    liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
     memberNote: "part of the battery system — per-unit live view",
     details: {
       capacityTitle: "Capacity",
