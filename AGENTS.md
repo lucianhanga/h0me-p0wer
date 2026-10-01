@@ -5705,3 +5705,9 @@ cross-cutting), every finding re-verified by hand before fixing:
   via the Cloudflare tunnel; plain LAN http://192.168.1.10:3001 won't
   offer install (Chrome's secure-context rule — the
   unsafely-treat-insecure-origin-as-secure flag is the workaround).
+
+## ROI BOM: NAKA 4-pack added (2026-10-01, user request)
+
+- New entry NAKA4PACK (€419.99, 4× 500 W NAKA panels, sold by Solarway
+  GmbH, same Amazon link as the other panel orders, thumbnail copied from
+  NAKA6PACK). Total invested 6,311.02 → 6,731.01 €.
