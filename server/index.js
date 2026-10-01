@@ -1176,6 +1176,9 @@ registerRoiRoute(app, {
   // ALL battery SNs (live one first) — history spans the 2026-09-26
   // Plus→Pro swap; pre-swap days live under the old SN.
   getBatterySns: () => batterySns(),
+  // The baseline prompt describes the REAL battery stack (capacity matters
+  // for the self-consumption ratio) — built from the live aggregate.
+  getLiveBattery: () => latestBattery ?? getLatestBattery(),
 });
 
 // Dashboard/top-days: same deps shape as registerRoiRoute just above, plus

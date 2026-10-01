@@ -13,6 +13,7 @@ import {
 } from "./welcome-sources.js";
 import { savedEur } from "./savings.js";
 import { getTariff } from "./env.js";
+import { resolveConstants, systemCapacityKwh } from "./battery-params.js";
 
 const KV_KEY = "roi_baseline";
 const r2 = (v) => Math.round(v * 100) / 100;
@@ -44,11 +45,12 @@ const BASELINE_SCHEMA = {
   },
 };
 
-const SYSTEM_PROMPT = `You estimate the EXPECTED yearly electricity savings of a home balcony-solar + battery setup for an ROI payback model. The result becomes a FIXED planning baseline — be CONSERVATIVE: slightly low is better than optimistic.
-Inputs in the JSON context: PV system specs, PVGIS climatology (monthly + yearly kWh for this exact setup, already including 14% system loss), the grid tariff, the household's measured average grid import, the battery, and a short noisy window of measured savings.
+const SYSTEM_PROMPT = `You estimate the EXPECTED yearly electricity savings of a home solar + battery setup for an ROI payback model. The result becomes a FIXED planning baseline — be CONSERVATIVE: slightly low is better than optimistic.
+Inputs in the JSON context: PV system specs (peakKwp, panelCount, panelW), PVGIS climatology (monthly + yearly kWh for this exact setup, already including 14% system loss), the grid tariff, the household's measured average grid import, the battery, and a short noisy window of measured savings.
 Hard rules:
 - annualPvKwh must NOT exceed the PVGIS yearly figure — that is the climatological ceiling for this setup; stay at or below it (shading, soiling, downtime).
-- selfConsumptionRatio: share of PV energy the household actually uses instead of buying from the grid (direct use + battery discharge). This system ENFORCES zero export (0W feed-in on the inverter) and the house baseload always exceeds the 1 kWp production — every produced kWh is consumed on site, so 1.0 is the physically correct value here; only derate (down to 0.9) if you see a structural reason (e.g. battery too small for evening peaks). Stay inside 0.3–1.0.
+- The PVGIS climatology was computed for the EXACT system described by pvSystem (peakKwp × panelCount) — use it AS-IS. NEVER re-scale it by panel count, nameplate guesses, or assumptions about "typical" balcony systems.
+- selfConsumptionRatio: share of PV energy the household actually uses instead of buying from the grid (direct use + battery discharge). The inverter ENFORCES zero export, but production beyond what the house plus battery can absorb at any moment is curtailed and lost. Judge it from the numbers in the context: compare the PVGIS yearly yield against the annual consumption (avgImportKwhPerDay × 365) and the battery capacity. A system whose production is well below the baseload can stay near 1.0; a system producing far above consumption needs a clearly lower ratio. Stay inside 0.3–0.95.
 - annualSavingsEur must equal annualPvKwh × selfConsumptionRatio × tariffEurPerKwh.
 - monthlyDistribution: 12 shares (January…December) of the ANNUAL SAVINGS, summing to 1. It roughly follows PV production but slightly flatter (winter PV is almost fully self-consumed; summer surplus above consumption+battery is lost).
 - reasoning: 1-2 plain sentences.
@@ -78,6 +80,22 @@ function avgDailyImportKwh(sns) {
   const full = rows.filter((r) => r.date !== firstDate);
   if (!full.length) return null;
   return Math.round((full.reduce((a, r) => a + r.kwh, 0) / full.length) * 10) / 10;
+}
+
+// Human-readable battery description for the AI context, built from the
+// LIVE system (dock era: multi-unit aggregate with per-unit members) instead
+// of a hardcoded string — a static description went stale after every
+// hardware change (Plus→Pro swap, SB4 + 2× BP5000) and misled the AI's
+// self-consumption-ratio judgment.
+function describeBattery(live) {
+  const members = (live?.members ?? []).filter((m) => m?.sn);
+  if (!members.length) return "Anker Solarbank home battery system (capacity unknown)";
+  const total = systemCapacityKwh(live);
+  const parts = members.map((m) => {
+    const c = resolveConstants(m.pn, m.expansionPacks ?? 0);
+    return `${c.product} (${c.capacityKwh} kWh${c.expansionPacks > 0 ? ` incl. ${c.expansionPacks} expansion pack(s)` : ""}, AC out ≤ ${c.maxAcOutputW} W)`;
+  });
+  return `${total} kWh total home battery across ${members.length} solarbanks: ${parts.join("; ")}`;
 }
 
 async function callBaselineAI(config, context) {
@@ -176,7 +194,7 @@ export async function computeBaseline(deps = {}, measured = null) {
   const context = config
     ? {
         pvSystem: config.pv,
-        battery: "Anker Solarbank 2 E1600 Plus, 1.6 kWh capacity, inverter AC output capped at 800 W",
+        battery: describeBattery(deps.getLiveBattery?.()),
         pvgisClimatology: pvgis,
         tariffEurPerKwh: tariff,
         consumption: {
