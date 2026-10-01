@@ -52,6 +52,7 @@ import {
   getModuleHistory,
   logActivity,
   getActivity,
+  getHistoryVersion,
 } from "./db.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 
@@ -1076,7 +1077,7 @@ async function timeseriesInner(req, res) {
     }
   }
 
-  res.json({ ok: true, bucketMs, data, modules });
+  res.json({ ok: true, bucketMs, data, modules, historyV: getHistoryVersion() });
 }
 
 // Outside temperature (Open-Meteo hourly, geocoded from HOME_ADDRESS in

@@ -3,6 +3,34 @@ import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
+import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
+
+// Is this past period immutable? (2026-10-01, user request: cache history
+// in the browser — only values that never change.) The cloud sync rewrites
+// today+yesterday, so a period is immutable only when it ENDED before
+// yesterday 00:00 local.
+function periodImmutable(type, offset) {
+  if (offset < 1) return false; // current period — live
+  const bound = immutableBeforeMs();
+  const now = new Date();
+  let endMs;
+  if (type === "day") {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    endMs = d.getTime() - (offset - 1) * 86400000;
+  } else if (type === "week") {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const dow = (d.getDay() + 6) % 7; // Monday = 0
+    endMs = d.getTime() - dow * 86400000 - (offset - 1) * 7 * 86400000;
+  } else if (type === "month") {
+    endMs = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1).getTime();
+  } else {
+    // year
+    endMs = new Date(now.getFullYear() - offset + 1, 0, 1).getTime();
+  }
+  return endMs <= bound;
+}
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -206,8 +234,24 @@ export function SourceCard({ type, title, data, formatLabel }) {
       return;
     }
     try {
-      const j = await fetch(`/api/stats/period?type=${type}&offset=${next}`).then((r) => r.json());
+      const url = `/api/stats/period?type=${type}&offset=${next}`;
+      // Immutable past periods come from the browser cache (2026-10-01).
+      if (periodImmutable(type, next)) {
+        const hit = readCached(url);
+        if (hit?.ok) {
+          if (!hit.data.hasData) {
+            setBlocked(true);
+            return;
+          }
+          setBlocked(!hit.data.hasEarlier);
+          setPast(hit.data);
+          setOffset(next);
+          return;
+        }
+      }
+      const j = await fetch(url).then((r) => r.json());
       if (!j.ok) return;
+      if (periodImmutable(type, next)) writeCached(url, j);
       if (!j.data.hasData) {
         setBlocked(true); // hit the data edge — stay where we are
         return;

@@ -698,6 +698,17 @@ export function getActivity(limit = 50) {
     .map((r) => ({ ...r, params: r.params ? JSON.parse(r.params) : null }));
 }
 
+// Bumped whenever a repair rewrites history (the PV shape repairs) — the
+// browser-side history cache keys on this so a repair invalidates every
+// cached window (2026-10-01, user request: cache historical values in the
+// browser, but only values that don't change anymore — repairs DO change
+// them, once, and this marker is how the browser finds out).
+export function getHistoryVersion() {
+  const v2 = kvGet("pv_shape_repair_v2")?.value?.at ?? 0;
+  const v3 = kvGet("pv_shape_repair_v3")?.value?.at ?? 0;
+  return Math.max(v2, v3);
+}
+
 // --- Cloud PV production day-trend (site-level "solar_production" energy
 // analysis, device_type is site-wide so there's no per-device SN to key on)
 // — a ground-truth backfill source for gaps in local battery_snapshots
