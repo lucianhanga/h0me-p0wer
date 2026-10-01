@@ -11,6 +11,7 @@ import {
   getCloudTrendMulti,
   getBatterySns,
   getEarliestCloudDay,
+  getHistoryVersion,
   getCloudTrend,
   getLatestBattery,
   getGridDaily,
@@ -786,6 +787,7 @@ export function registerStatsRoute(app, deps) {
         exportKwh: exportKwhSum,
         savedEur: savedEur(pvProducedKwhSum, tariff),
         bars,
+        historyV: getHistoryVersion(),
       },
     });
   });

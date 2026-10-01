@@ -3,6 +3,7 @@ import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { battCellsOf, battChgNetOf, rowValue } from "./derive.js";
+import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -445,9 +446,21 @@ export default function GraphTab() {
         );
       }
 
+      // Browser cache for immutable history windows (2026-10-01, user
+      // request): a window is cached only when its end lies before
+      // yesterday 00:00 local — today/yesterday still get rewritten by the
+      // cloud sync loop. Live-edge windows never hit the cache.
       async function fetchTimeseries(params) {
+        const url = `/api/timeseries?${params}`;
+        const toMs = Number(new URLSearchParams(params).get("to"));
+        const immutable = Number.isFinite(toMs) && toMs < immutableBeforeMs();
+        if (immutable) {
+          const hit = readCached(url);
+          if (hit) return hit;
+        }
         try {
-          const payload = await fetch(`/api/timeseries?${params}`).then((r) => r.json());
+          const payload = await fetch(url).then((r) => r.json());
+          if (payload.ok && immutable) writeCached(url, payload);
           return payload.ok ? payload : null;
         } catch {
           return null; // backend unreachable — keep old data

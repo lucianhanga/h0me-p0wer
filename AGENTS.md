@@ -5633,3 +5633,25 @@ cross-cutting), every finding re-verified by hand before fixing:
   whose stored peak exceeds the cap (v2 had already latched its flag on
   production). Verified on dev: 8 days re-repaired, peaks ≤ 807 W,
   totals match pv_daily exactly (09-15: 5.39 == 5.39).
+
+## Browser cache for immutable history (2026-10-01, user request)
+
+- User: "cache historical values in the browser — less data to fetch for
+  visualizations; cache only values which are not changing anymore."
+  `web/src/historyCache.js`: localStorage, version-keyed by
+  __APP_VERSION__ (a deploy evicts automatically), max 12 entries, LRU
+  eviction + quota fallback, and a server-side `historyV` marker
+  (getHistoryVersion in db.js — the pv_shape_repair_v2/v3 timestamps)
+  carried by /api/timeseries and /api/stats/period: a mismatch purges
+  every cached entry (a repair rewrites history exactly once).
+- Immutability rule (`immutableBeforeMs()`): a window/period is cached
+  only when it ENDS before yesterday 00:00 local — today AND yesterday's
+  cloud day-trends are still rewritten by the sync loop, so yesterday is
+  deliberately NOT cached.
+- Consumers: GraphTab's fetchTimeseries (past windows served instantly;
+  live-edge spans never touch the cache) and SourceCard's ‹ › period
+  navigation (offset ≥ 2 days / past weeks/months/years cached).
+  SimpleCharts' windows always end at "now" — never cached by design.
+- Verified via CDP: live-edge 30d span never caches; period nav offset 2+
+  caches; re-navigation serves from cache without a network fetch;
+  yesterday (offset 1) correctly stays uncached.
