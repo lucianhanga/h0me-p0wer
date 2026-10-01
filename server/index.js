@@ -496,29 +496,32 @@ async function computeFlowPayload() {
         : grid != null
           ? Math.max(-grid, 0)
           : null,
-    // Cells discharge is DERIVED, never read from bat_discharge_power
-    // (2026-09-29, user report: "Live tab's battery→home arc shows
-    // NOTHING while the Anker app shows discharging" — the channel read 0
-    // on BOTH units while Σoutput (270) exceeded ΣPV+Σcharge (132), i.e.
-    // ~138 W was provably coming from the cells). The derivation reads the
-    // same app channels and closes the identity exactly
-    // (output = pvThrough + cells, validated 2026-09-13).
-    battToHomeW: cellsW,
+    // The arcs ALWAYS close to Home (2026-10-01, user report: "the values
+    // don't add up" — PV→Home 159 + Grid ~0 ≠ Home 229): compute pvToHome
+    // from the PV-split identity bounded by the house's draw, then let the
+    // BATTERY take the balancing remainder — which is exactly the battery's
+    // physical role in self-consumption, and how the Anker app's flow reads
+    // (it never shows a mismatch). pvToHome can never exceed Home; the
+    // battery arc carries whatever PV+grid don't cover, so
+    // grid + pvToHome + battToHome == homeW by construction.
+    // (bat_discharge_power stays unused — reads 0 while discharging,
+    // 2026-09-29.)
+    battToHomeW: appCh
+      ? Math.max(
+          0,
+          (b.homeLoadW ?? 0) -
+            (b.gridToHomeW ?? 0) -
+            Math.max(
+              0,
+              Math.min(pvW, pvW - chargeW - (b.pvToGridW ?? 0), (b.homeLoadW ?? 0) - (b.gridToHomeW ?? 0)),
+            ),
+        )
+      : cellsW,
     pvToBattW: chargeW,
-    // PV→Home: the PV-split identity (pv − charge − export) BOUNDED by the
-    // house's actual draw (home − grid − battery) — and never above
-    // production. The inverter-output basis read ABOVE Home when the
-    // channels disagreed transiently (2026-10-01, user report: PV→Home 336 W
-    // over a 286 W Home — impossible; the Anker app never shows this). The
-    // double bound keeps every arc into Home ≤ Home by construction.
     pvToHomeW: appCh
       ? Math.max(
           0,
-          Math.min(
-            pvW,
-            pvW - chargeW - (b.pvToGridW ?? 0),
-            (b.homeLoadW ?? 0) - (b.gridToHomeW ?? 0) - cellsW,
-          ),
+          Math.min(pvW, pvW - chargeW - (b.pvToGridW ?? 0), (b.homeLoadW ?? 0) - (b.gridToHomeW ?? 0)),
         )
       : pvToHome,
     batterySoc: b?.soc ?? null,
@@ -565,11 +568,9 @@ async function computeFlowPayload() {
           soc: b.soc,
           discharge: b.outputW,
           charge: chargeW,
-          // Cells-only output to the house — DERIVED (output minus the PV
-          // pass-through): the bat_discharge_power channel proved
-          // unreliable (reads 0 while the cells provably discharge,
-          // 2026-09-29). Same number the diagram's battery→house arc shows.
-          cells: cellsW,
+          // Cells to the house — the SAME balancing value the diagram's
+          // battery→home arc carries (2026-10-01: tile == arc, always).
+          cells: diagram.battToHomeW,
           // Charging sourced from the grid (chargeW beyond what PV covers)
           // — the Home→Battery arc, normally 0.
           gridCharge: gridChargeW,
