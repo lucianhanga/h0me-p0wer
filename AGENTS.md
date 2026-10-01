@@ -5694,3 +5694,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   `curl -s http://192.168.1.10:3001/api/health | jq .data.version`**
   against the version where the fix landed — most "it's not fixed"
   reports so far were simply production lagging behind main.
+
+## PWA: installable app window (2026-10-01, user request)
+
+- User: "Chrome on screen with as small as possible browser overhead."
+  The manifest existed but had `display: "browser"` — never installable.
+  Now `display: standalone` + `display_override: [window-controls-overlay,
+  standalone]` (WCO = slim themed title bar on desktop, no tabs/address
+  bar/menus). Chrome installability requires HTTPS (or localhost): works
+  via the Cloudflare tunnel; plain LAN http://192.168.1.10:3001 won't
+  offer install (Chrome's secure-context rule — the
+  unsafely-treat-insecure-origin-as-secure flag is the workaround).
