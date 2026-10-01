@@ -5719,3 +5719,12 @@ cross-cutting), every finding re-verified by hand before fixing:
   6,989.01 €. The product title couldn't be verified (Amazon robot-wall;
   search backend down) — the name is descriptive from the user-provided
   photo; correct the name if it differs.
+
+## Docker port binding configurable via BIND_IP (2026-10-01, user request)
+
+- User applied a localhost-only binding on production manually (a manual
+  edit gets reverted on the next git pull + recreate). docker-compose.yml
+  now publishes `${BIND_IP:-0.0.0.0}:3001:3001` — compose interpolates
+  from the project .env. Default unchanged (LAN-open). Production sets
+  BIND_IP=127.0.0.1 in the server .env → the app is reachable ONLY via
+  the Cloudflare tunnel. Documented in .env.example.
