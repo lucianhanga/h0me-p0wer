@@ -212,6 +212,11 @@ app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
     data: {
+      // The deployed app version (2026-10-01, user request: "know what
+      // version it is when you make the call") — check THIS before
+      // diagnosing a production screenshot; the same value the WS pushes
+      // carry for the stale-tab self-reload.
+      version: APP_VERSION,
       meterDirect: poller.getState().connected, // Modbus TCP healthy
       cloud: { enabled: anker.configured, lastOkAt: lastCloudOkAt },
       battery: { lastTs: batt?.ts ?? null },

@@ -5684,3 +5684,13 @@ cross-cutting), every finding re-verified by hand before fixing:
   reads the same value (cells: diagram.battToHomeW) — tile == arc.
   Fallback path (feed down) keeps the derived values.
 - Verified live across samples: 6 + 214 + 0 = 220 == home every time.
+
+## /api/health carries the deployed version (2026-10-01, user request)
+
+- User: "to make sure there are no older versions — can't you know what
+  version it is when you make the call?" /api/health's data now includes
+  `version` (the same APP_VERSION the WS pushes carry). **Before
+  diagnosing a production screenshot, check
+  `curl -s http://192.168.1.10:3001/api/health | jq .data.version`**
+  against the version where the fix landed — most "it's not fixed"
+  reports so far were simply production lagging behind main.
