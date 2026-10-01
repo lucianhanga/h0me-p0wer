@@ -35,8 +35,14 @@ export function parseWelcomeConfig(env = process.env) {
   const peakKwp = Number(env.PV_PEAK_KWP ?? 1);
   const tiltDeg = Number(env.PV_TILT_DEG ?? 17);
   const panelW = Number(env.PV_PANEL_W ?? 500);
-  if (!(peakKwp > 0) || !(tiltDeg >= 0 && tiltDeg <= 90) || !(panelW > 0)) {
-    throw new Error(`PV_PEAK_KWP/PV_TILT_DEG/PV_PANEL_W not numeric: ${env.PV_PEAK_KWP}/${env.PV_TILT_DEG}/${env.PV_PANEL_W}`);
+  // Name the exact offending variable — a joined "A/B/C not numeric" message
+  // once sent a user hunting through all three when one had a stray backtick.
+  for (const [key, val, ok] of [
+    ["PV_PEAK_KWP", env.PV_PEAK_KWP, peakKwp > 0],
+    ["PV_TILT_DEG", env.PV_TILT_DEG, tiltDeg >= 0 && tiltDeg <= 90],
+    ["PV_PANEL_W", env.PV_PANEL_W, panelW > 0],
+  ]) {
+    if (val != null && !ok) throw new Error(`${key} not numeric: "${val}"`);
   }
   return {
     address: env.HOME_ADDRESS,
