@@ -473,6 +473,10 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
         data: {
           ...primaryOut,
           batteries: [primaryOut, ...memberCards],
+          // The 7-day-average home consumption behind every coverH figure —
+          // surfaced so the UI can say WHAT "average use" means numerically
+          // (2026-10-01, user request).
+          avgUseKwhPerDay: avgKwhDay,
         },
       });
     } catch (err) {

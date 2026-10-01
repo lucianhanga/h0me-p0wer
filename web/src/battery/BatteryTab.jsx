@@ -85,7 +85,7 @@ export function StatusBadge({ mode }) {
 // applying that same research): the near-full/low SOC zones already had
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
-function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, heightPx = null, slotHeightPx = null }) {
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, heightPx = null, slotHeightPx = null, avgUseKwhPerDay = null }) {
   const t = useT();
 
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
@@ -205,7 +205,12 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
         {/* Coverage at the 7-day-average home consumption (2026-09-29, user
             request) — distinct from the ETA's CURRENT-rate estimate. */}
         {live.coverH != null && (
-          <div className="batt-cover muted">{t("battery.coverAvg", { eta: formatEta(live.coverH) })}</div>
+          <div className="batt-cover muted">
+            {t("battery.coverAvg", {
+              eta: formatEta(live.coverH),
+              avg: avgUseKwhPerDay != null ? Math.round(avgUseKwhPerDay * 10) / 10 : "?",
+            })}
+          </div>
         )}
         {config?.dischargeLowerLimitPct != null && config.dischargeLowerLimitPct <= 5 && (
           // Factory-floor warning (2026-09-27): the E1600 Pro arrived with
@@ -398,7 +403,7 @@ function BatteryDetails({ live, config, features, constants, member = false, onR
 // last-update time bottom-right. Deliberately NO "Battery information"
 // toggle here (same request, follow-up) — per-unit details live on the
 // unit cards.
-function BatterySystemTile({ live, config, features, constants, dischargeTolerancePct }) {
+function BatterySystemTile({ live, config, features, constants, dischargeTolerancePct, avgUseKwhPerDay = null }) {
   const t = useT();
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
 
@@ -524,7 +529,12 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
           </div>
           {/* Coverage at the 7-day-average home consumption (2026-09-29). */}
           {live.coverH != null && (
-            <div className="batt-cover muted">{t("battery.coverAvg", { eta: formatEta(live.coverH) })}</div>
+            <div className="batt-cover muted">
+              {t("battery.coverAvg", {
+                eta: formatEta(live.coverH),
+                avg: avgUseKwhPerDay != null ? Math.round(avgUseKwhPerDay * 10) / 10 : "?",
+              })}
+            </div>
           )}
         </div>
       </div>
@@ -653,6 +663,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               features={b.features}
               constants={b.constants}
               dischargeTolerancePct={dischargeTolerancePct}
+              avgUseKwhPerDay={data.avgUseKwhPerDay}
             />
           ) : (
             <BatteryCard
@@ -670,6 +681,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               heightPx={heightOf(b)}
               slotHeightPx={baseH}
               onRefresh={forceRefresh}
+              avgUseKwhPerDay={data.avgUseKwhPerDay}
             />
           ),
         )}

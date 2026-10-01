@@ -256,7 +256,7 @@ export const de = {
       emptyIn: "leer in ≈ {eta}",
       usableWindow: "nutzbares Fenster ≈ {kwh} kWh",
     },
-    coverAvg: "reicht ≈ {eta} bei Ø-Verbrauch",
+    coverAvg: "reicht ≈ {eta} bei Ø-Verbrauch (≈ {avg} kWh/Tag)",
     tempWarn: {
       cold: "Akku ist kalt (≤ 3 °C) — das Laden kann eingeschränkt sein, bis er sich erwärmt.",
       hot: "Akku ist heiß (≥ 35 °C) — anhaltende Hitze mindert Leistung und Lebensdauer.",
