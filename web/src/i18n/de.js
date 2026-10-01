@@ -60,6 +60,8 @@ export const de = {
     expansion_detected: "Erweiterungsakku erkannt ({n} Pack(s), SN {sn})",
     floor_changed: "Entladegrenze geändert: {from}% → {to}%",
     pv_history_repaired: "PV-Verlauf repariert: {n} Tag(e) aus Tagestotalen wiederhergestellt",
+    pin_ip_locked: "PIN: Gerät nach 3 Fehlversuchen gesperrt ({ip})",
+    pin_ip_unlocked: "PIN: Gerät entsperrt ({ip})",
     meter: {
       up: "Smart-Meter-Verbindung wiederhergestellt (direkt)",
       down: "Smart-Meter-Verbindung verloren — Cloud-Daten werden genutzt",
@@ -87,6 +89,9 @@ export const de = {
     submit: "Bestätigen",
     cancel: "Abbrechen",
     wrong: "Falsche PIN — bitte erneut versuchen.",
+    attemptsLeft: "{n} Versuche übrig",
+    lockedTitle: "Gerät gesperrt",
+    locked: "Zu viele falsche PIN-Versuche — dieses Gerät ist gesperrt. Der Besitzer kann es mit der richtigen PIN entsperren.",
   },
   live: {
     sources: "Netz: {grid} · Akku: {battery}",

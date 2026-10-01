@@ -5728,3 +5728,18 @@ cross-cutting), every finding re-verified by hand before fixing:
   from the project .env. Default unchanged (LAN-open). Production sets
   BIND_IP=127.0.0.1 in the server .env → the app is reachable ONLY via
   the Cloudflare tunnel. Documented in .env.example.
+
+## PIN brute-force lockout (2026-10-01, user request)
+
+- STRATEGY_PIN set in the local .env (production's .env needs the same
+  line by hand — user-managed). After PIN_MAX_ATTEMPTS=3 wrong PINs, the
+  client IP is blacklisted (kv `pin_blacklist`, survives restarts) — even
+  the CORRECT PIN is refused while locked. clientIp() prefers
+  cf-connecting-ip / x-forwarded-for (through the tunnel, remoteAddress
+  would be the tunnel's and every visitor would share one counter).
+  Unblock: POST /api/security/unblock {ip, pin} — requires the CORRECT
+  PIN (owner-only), returns the current blacklist; correct PIN also
+  resets the failure counter. Activity-log events pin_ip_locked/
+  pin_ip_unlocked. Frontend: the PIN modal shows "N attempts left" after
+  a wrong try and a locked message instead of the form once blocked
+  (i18n pin.* in en/de/ro).

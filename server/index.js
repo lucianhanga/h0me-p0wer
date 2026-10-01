@@ -2184,15 +2184,56 @@ app.post("/api/power-plan/disable", async (req, res) => {
     res.status(502).json({ ok: false, error: err.message });
   }
 });
+// PIN brute-force lockout (2026-10-01, user request): after 3 wrong PIN
+// attempts, the client IP is BLACKLISTED (persisted in kv, survives
+// restarts) until the owner unblocks it via POST /api/security/unblock
+// (which itself requires the correct PIN). The client IP prefers the
+// Cloudflare header — through the tunnel, remoteAddress would otherwise be
+// the tunnel's, and every visitor would count as one shared client.
+const PIN_MAX_ATTEMPTS = 3;
+const pinAttempts = new Map(); // ip -> failed count (session-scoped)
+function clientIp(req) {
+  return (
+    req.headers["cf-connecting-ip"] ??
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ??
+    req.socket.remoteAddress ??
+    "unknown"
+  );
+}
+function pinBlacklist() {
+  return kvGet("pin_blacklist")?.value ?? [];
+}
+function pinBlock(ip) {
+  kvSet("pin_blacklist", [...new Set([...pinBlacklist(), ip])]);
+  activity("pin_ip_locked", { ip });
+}
+function pinUnblock(ip) {
+  kvSet("pin_blacklist", [...pinBlacklist()].filter((x) => x !== ip));
+  pinAttempts.delete(ip);
+}
+
 app.post("/api/power-plan/strategy", (req, res) => {
   // Strategy changes are PIN-protected (2026-09-27, user request): the PIN
   // lives in .env (STRATEGY_PIN), default 0000 when unset. Read at REQUEST
   // time, not module top level — remember the dotenv-import-hoisting
   // incident (env.js must evaluate first; reading late is immune by design).
+  const ip = clientIp(req);
+  if (pinBlacklist().includes(ip)) {
+    return res.status(403).json({ ok: false, error: "locked", locked: true });
+  }
   const { pin, strategy, trigger, manualDischarge } = req.body ?? {};
   if (pin !== (process.env.STRATEGY_PIN ?? "0000")) {
-    return res.status(403).json({ ok: false, error: "invalid PIN" });
+    const fails = (pinAttempts.get(ip) ?? 0) + 1;
+    pinAttempts.set(ip, fails);
+    if (fails >= PIN_MAX_ATTEMPTS) {
+      pinBlock(ip);
+      return res.status(403).json({ ok: false, error: "locked", locked: true });
+    }
+    return res
+      .status(403)
+      .json({ ok: false, error: "invalid PIN", attemptsLeft: PIN_MAX_ATTEMPTS - fails });
   }
+  pinAttempts.delete(ip); // correct PIN resets the failure counter
   const strategies = ["house_priority", "battery_priority", "anker_app"];
   const triggers = ["auto", "manual"];
   if (strategy !== undefined && !strategies.includes(strategy)) {
@@ -2206,6 +2247,25 @@ app.post("/api/power-plan/strategy", (req, res) => {
   }
   powerPlan.setStrategy({ strategy, trigger, manualDischarge });
   res.json({ ok: true, data: powerPlan.getState() });
+});
+
+// Unblock a PIN-locked IP (2026-10-01, user request: "until I remove it
+// from the blacklist") — requires the correct PIN, so only the owner can
+// unblock. Body: {ip, pin}. Returns the current blacklist for visibility.
+app.post("/api/security/unblock", (req, res) => {
+  const ip = clientIp(req);
+  const { ip: targetIp, pin } = req.body ?? {};
+  if (pin !== (process.env.STRATEGY_PIN ?? "0000")) {
+    const fails = (pinAttempts.get(ip) ?? 0) + 1;
+    pinAttempts.set(ip, fails);
+    if (fails >= PIN_MAX_ATTEMPTS) pinBlock(ip);
+    return res.status(403).json({ ok: false, error: "invalid PIN" });
+  }
+  pinAttempts.delete(ip);
+  if (!targetIp) return res.status(400).json({ ok: false, error: "missing ip" });
+  pinUnblock(String(targetIp));
+  activity("pin_ip_unlocked", { ip: String(targetIp) });
+  res.json({ ok: true, data: { blacklist: pinBlacklist() } });
 });
 
 setInterval(() => {
