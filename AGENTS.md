@@ -5655,3 +5655,13 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified via CDP: live-edge 30d span never caches; period nav offset 2+
   caches; re-navigation serves from cache without a network fetch;
   yesterday (offset 1) correctly stays uncached.
+
+## PV→Home arc bounded by the house's draw (2026-10-01, user report)
+
+- User screenshot: PV→Home 336 W over a Home of 286 W — impossible; "the
+  Anker app has no problem with this." The arc used the inverter-output
+  basis (Σoutput − export − cells), which transiently disagrees with
+  home_load_power by ~50 W. Now pvToHomeW = clamp(min(pvW, pvW − charge −
+  export, home − grid − cells), 0) — the PV-split identity BOUNDED by the
+  house's actual draw, all from the same payload. Arcs into Home can never
+  exceed Home. Verified live: 318 ≤ 325 (was 348 > 325 before).

@@ -505,17 +505,22 @@ async function computeFlowPayload() {
     // (output = pvThrough + cells, validated 2026-09-13).
     battToHomeW: cellsW,
     pvToBattW: chargeW,
-    // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above).
-    // NOT to_home_load (unit-local behind the dock, v1.5.120) and NOT
-    // output − pv_to_grid − bat_discharge_power (broken channel, above).
-    // PV→Home = Σ output − pv_to_grid − cells (derived cells, see above),
-    // CAPPED at current production (2026-09-29, user report: a "2 W"
-    // PV→Home arc glowed at night with PV at 0 — output/cells channel
-    // wobble left a remainder). PV→home can never exceed production.
-    pvToHomeW:
-      appCh && b.outputW != null
-        ? Math.min(pvW, Math.max(0, b.outputW - (b.pvToGridW ?? 0) - cellsW))
-        : pvToHome,
+    // PV→Home: the PV-split identity (pv − charge − export) BOUNDED by the
+    // house's actual draw (home − grid − battery) — and never above
+    // production. The inverter-output basis read ABOVE Home when the
+    // channels disagreed transiently (2026-10-01, user report: PV→Home 336 W
+    // over a 286 W Home — impossible; the Anker app never shows this). The
+    // double bound keeps every arc into Home ≤ Home by construction.
+    pvToHomeW: appCh
+      ? Math.max(
+          0,
+          Math.min(
+            pvW,
+            pvW - chargeW - (b.pvToGridW ?? 0),
+            (b.homeLoadW ?? 0) - (b.gridToHomeW ?? 0) - cellsW,
+          ),
+        )
+      : pvToHome,
     batterySoc: b?.soc ?? null,
     // Time until the battery reaches its EFFECTIVE FLOOR at the 7-day
     // average consumption rate (2026-09-29, user report: the tile's
