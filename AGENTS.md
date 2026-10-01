@@ -5711,3 +5711,11 @@ cross-cutting), every finding re-verified by hand before fixing:
 - New entry NAKA4PACK (€419.99, 4× 500 W NAKA panels, sold by Solarway
   GmbH, same Amazon link as the other panel orders, thumbnail copied from
   NAKA6PACK). Total invested 6,311.02 → 6,731.01 €.
+
+## ROI BOM: MC4 Y-splitter cables (2026-10-01, user request)
+
+- New entry B0HFJTNQQM (amzn.eu/d/013Slinn): MC4 Y-splitter solar cable
+  sets, 2 pieces, €258 total (€129 each). Total invested 6,731.01 →
+  6,989.01 €. The product title couldn't be verified (Amazon robot-wall;
+  search backend down) — the name is descriptive from the user-provided
+  photo; correct the name if it differs.
