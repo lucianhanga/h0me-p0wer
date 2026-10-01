@@ -5754,3 +5754,33 @@ cross-cutting), every finding re-verified by hand before fixing:
   risk") with the reason in the chip's hover tooltip (i18n
   battery.tempWarn.cold/hot in en/de/ro). Null temps render nothing
   (honest unknowns — e.g. a momentary MQTT gap on one unit).
+
+## ROI baseline: 12 panels / 6 kWp, prompt made physically explicit (2026-10-01, user request)
+
+- User: "update the ROI with calculation based on having 12 PVs installed."
+  Set `PV_PEAK_KWP=6.0` in the local .env and refreshed — but the AI STILL
+  returned annualPvKwh 995, reasoning "The listed two 500 W panels indicate
+  1 kWp, so the 6 kWp PVGIS yield was scaled to 1 kWp". Two root causes in
+  roi-baseline.js: SYSTEM_PROMPT hardcoded "the house baseload always
+  exceeds the 1 kWp production" (stale since the balcony-only era), and
+  the context's battery line was still the hardcoded "Solarbank 2 E1600
+  Plus, 1.6 kWh" — the model invented a small system around them and
+  dutifully down-scaled the 6 kWp PVGIS climatology.
+- Fixes: the prompt no longer asserts ANY system size — it now says the
+  PVGIS climatology is computed for the EXACT pvSystem (peakKwp ×
+  panelCount) and must be used AS-IS, never re-scaled; the
+  selfConsumptionRatio rule is data-driven (compare PVGIS yearly yield
+  vs. avgImportKwhPerDay × 365 and the battery capacity — production far
+  above consumption ⇒ clearly lower ratio, surplus is curtailed under
+  zero export, not consumed). config.pv gains panelW (new optional env
+  PV_PANEL_W, default 500) and panelCount = round(peakKwp×1000/panelW),
+  so the prompt states "12 × 500 W" explicitly. The battery context is
+  built from the LIVE aggregate via resolveConstants/systemCapacityKwh
+  (new describeBattery() — per-unit product names, capacities incl.
+  expansion packs, AC caps; registerRoiRoute gains a getLiveBattery dep)
+  — a hardcoded hardware description went stale after every swap.
+- Verified live: baseline refresh now returns annualPvKwh 5900 (just
+  under the 6287.2 kWh PVGIS ceiling for 6 kWp — used as-is), ratio 0.74
+  (sensible: ~5900 kWh/yr production vs ~4000 kWh/yr consumption),
+  €1339.49/yr, payback 2031-10-22, source "ai". PRODUCTION .env needs
+  PV_PEAK_KWP=6.0 + a baseline refresh (ROI tab ↻) to pick this up.

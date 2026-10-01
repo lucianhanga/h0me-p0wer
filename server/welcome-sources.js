@@ -34,8 +34,9 @@ export function parseWelcomeConfig(env = process.env) {
   if (!env.HOME_ADDRESS) return null; // tab shows setup instructions
   const peakKwp = Number(env.PV_PEAK_KWP ?? 1);
   const tiltDeg = Number(env.PV_TILT_DEG ?? 17);
-  if (!(peakKwp > 0) || !(tiltDeg >= 0 && tiltDeg <= 90)) {
-    throw new Error(`PV_PEAK_KWP/PV_TILT_DEG not numeric: ${env.PV_PEAK_KWP}/${env.PV_TILT_DEG}`);
+  const panelW = Number(env.PV_PANEL_W ?? 500);
+  if (!(peakKwp > 0) || !(tiltDeg >= 0 && tiltDeg <= 90) || !(panelW > 0)) {
+    throw new Error(`PV_PEAK_KWP/PV_TILT_DEG/PV_PANEL_W not numeric: ${env.PV_PEAK_KWP}/${env.PV_TILT_DEG}/${env.PV_PANEL_W}`);
   }
   return {
     address: env.HOME_ADDRESS,
@@ -45,6 +46,8 @@ export function parseWelcomeConfig(env = process.env) {
       aspect: cardinalToAspect(env.PV_ORIENTATION ?? "S"),
       tiltDeg,
       panelType: env.PV_PANEL_TYPE ?? "unknown c-Si",
+      panelW,
+      panelCount: Math.round((peakKwp * 1000) / panelW),
     },
     ai: {
       apiKey: env.AI_API_KEY ?? "",
