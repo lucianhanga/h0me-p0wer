@@ -3,7 +3,11 @@ services:
     build: . # local build only — no registry involved; `docker compose up -d --build` after a git pull
     container_name: h0me-p0wer
     ports:
-      - "3001:3001"
+      # BIND_IP from .env (compose interpolates it there): default 0.0.0.0
+      # (LAN-reachable). Set BIND_IP=127.0.0.1 to expose the app ONLY via
+      # localhost — i.e. reachable exclusively through the Cloudflare
+      # tunnel, not directly on the LAN.
+      - "${BIND_IP:-0.0.0.0}:3001:3001"
     environment:
       TZ: Europe/Berlin # day buckets and cloud day-trend labels are meter-local
       DB_PATH: /data/data.db
