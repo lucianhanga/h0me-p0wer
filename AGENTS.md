@@ -5796,3 +5796,12 @@ cross-cutting), every finding re-verified by hand before fixing:
   the exact key and raw value, and unset optional vars never appear.
 - Note for .env edits on the server: docker compose only picks up env_file
   changes on container RECREATION (docker compose up -d, not restart).
+
+## ROI BOM: real product photo for the Solarbank 4 bundle (2026-10-01, user-provided)
+
+- SOLIX4E5000 (Anker SOLIX Solarbank 4 E5000 Pro + BP5000 + Smart Meter
+  Gen 2) finally gets its real product photo — the user supplied a
+  screenshot of the unit (Solarbank 4 stacked on its BP5000), resized to
+  the established 400px JPEG convention at
+  server/roi-images/SOLIX4E5000.jpg. The earlier placeholder (a broken
+  scrape) is gone.
