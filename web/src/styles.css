@@ -2477,7 +2477,9 @@ pre {
      (2026-09-29, user report: "the last row spans two rows"). */
   .simple-batt .batt-cover {
     font-size: 0.72rem;
-    white-space: nowrap;
+    /* No nowrap — with the average-use value appended the line is longer
+       than a phone-width battery column and must wrap (centered) instead
+       of bleeding into the neighboring column (2026-10-01). */
   }
 }
 

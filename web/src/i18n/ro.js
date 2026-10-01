@@ -252,7 +252,7 @@ export const ro = {
       emptyIn: "goală în ≈ {eta}",
       usableWindow: "fereastră utilizabilă ≈ {kwh} kWh",
     },
-    coverAvg: "acoperă ≈ {eta} la consum mediu",
+    coverAvg: "acoperă ≈ {eta} la consum mediu (≈ {avg} kWh/zi)",
     tempWarn: {
       cold: "Bateria este rece (≤ 3 °C) — încărcarea poate fi limitată până se încălzește.",
       hot: "Bateria este fierbinte (≥ 35 °C) — căldura susținută reduce performanța și durata de viață.",

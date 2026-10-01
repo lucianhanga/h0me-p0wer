@@ -241,7 +241,7 @@ export const en = {
       emptyIn: "empty in ≈ {eta}",
       usableWindow: "usable window ≈ {kwh} kWh",
     },
-    coverAvg: "covers ≈ {eta} at average use",
+    coverAvg: "covers ≈ {eta} at average use (≈ {avg} kWh/day)",
     tempWarn: {
       cold: "Battery is cold (≤ 3 °C) — charging may be limited until it warms up.",
       hot: "Battery is hot (≥ 35 °C) — sustained heat reduces performance and lifetime.",

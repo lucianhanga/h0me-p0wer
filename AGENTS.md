@@ -5805,3 +5805,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   the established 400px JPEG convention at
   server/roi-images/SOLIX4E5000.jpg. The earlier placeholder (a broken
   scrape) is gone.
+
+## "covers ≈ N at average use" now states the average (2026-10-01, user request)
+
+- User: the battery coverage line says "at average use" without saying what
+  that average IS. /api/battery/params now exposes the 7-day-average home
+  consumption behind every coverH figure as data.avgUseKwhPerDay (the same
+  avgDailyHomeKwh7d the coverage math already used — no second derivation),
+  and the battery.coverAvg template gains a {avg} placeholder in en/de/ro:
+  "covers ≈ 8 h at average use (≈ 6 kWh/day)". Threaded as an
+  avgUseKwhPerDay prop into BatteryCard + BatterySystemTile (Strategy tab)
+  and read from params in SimpleHome.
+- Phone-width fix alongside: .simple-batt .batt-cover had white-space:
+  nowrap — fine for the old short line, but with the average appended it
+  overflowed each ~50%-wide battery column and bled into the neighboring
+  one. Dropped the nowrap; the line wraps centered to two lines.
+- Verified by screenshots at 420px emulation: simple view (both stacks,
+  clean two-line wrap) and Strategy tab (system tile + unit cards).

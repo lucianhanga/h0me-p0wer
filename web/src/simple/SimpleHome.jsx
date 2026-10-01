@@ -166,7 +166,10 @@ export default function SimpleHome() {
                     (which uses the CURRENT charge/discharge rate). */}
                 {u.live?.coverH != null && (
                   <div className="batt-cover muted">
-                    {t("battery.coverAvg", { eta: formatEta(u.live.coverH) })}
+                    {t("battery.coverAvg", {
+                      eta: formatEta(u.live.coverH),
+                      avg: params?.avgUseKwhPerDay != null ? Math.round(params.avgUseKwhPerDay * 10) / 10 : "?",
+                    })}
                   </div>
                 )}
                 {/* Per-module temperatures (2026-10-01, user request):
