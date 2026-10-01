@@ -257,6 +257,10 @@ export const de = {
       usableWindow: "nutzbares Fenster ≈ {kwh} kWh",
     },
     coverAvg: "reicht ≈ {eta} bei Ø-Verbrauch",
+    tempWarn: {
+      cold: "Akku ist kalt (≤ 3 °C) — das Laden kann eingeschränkt sein, bis er sich erwärmt.",
+      hot: "Akku ist heiß (≥ 35 °C) — anhaltende Hitze mindert Leistung und Lebensdauer.",
+    },
     liveOnlyNote: "nur Live-Überwachung — nicht Teil des Haussystems, keine Steuerung oder Verlauf",
     memberNote: "Teil des Akku-Systems — Live-Ansicht pro Einheit",
     details: {

@@ -253,6 +253,10 @@ export const ro = {
       usableWindow: "fereastră utilizabilă ≈ {kwh} kWh",
     },
     coverAvg: "acoperă ≈ {eta} la consum mediu",
+    tempWarn: {
+      cold: "Bateria este rece (≤ 3 °C) — încărcarea poate fi limitată până se încălzește.",
+      hot: "Bateria este fierbinte (≥ 35 °C) — căldura susținută reduce performanța și durata de viață.",
+    },
     liveOnlyNote: "doar monitorizare live — nu face parte din sistemul casei, fără control sau istoric",
     memberNote: "parte din sistemul de baterii — vedere live pe unitate",
     details: {

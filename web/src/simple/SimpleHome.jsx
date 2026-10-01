@@ -17,6 +17,26 @@ import { SourceCard } from "../dashboard/Dashboard.jsx";
 // decision panels; the important values live ON the visuals themselves.
 // Same data as the full Live tab (/api/flow + /api/battery/params, WS
 // pushes merged for instant updates).
+
+// Temperature chip for each battery module (2026-10-01, user request):
+// color = progressive cold→hot scale (deep blue ≤ −10 °C → dark red
+// ≥ +40 °C); ⚠ with an explanatory tooltip when cold (≤ +3 °C, charging
+// may be limited) or hot (≥ +35 °C, lifetime/performance at risk).
+function TempChip({ label, tempC }) {
+  const t = useT();
+  if (tempC == null) return null;
+  const warn = tempC <= 3 ? "cold" : tempC >= 35 ? "hot" : null;
+  const hue = Math.round(Math.min(220, Math.max(0, 220 - ((tempC + 10) / 50) * 220)));
+  return (
+    <span className="batt-temp" title={warn ? t(`battery.tempWarn.${warn}`) : undefined}>
+      <span className="batt-temp-dot" style={{ background: `hsl(${hue} 85% 55%)` }} />
+      {label && <span className="batt-temp-label">{label} </span>}
+      {Math.round(tempC)} °C
+      {warn && <span className="batt-temp-warn"> ⚠</span>}
+    </span>
+  );
+}
+
 export default function SimpleHome() {
   const t = useT();
   const { data: flowRest } = usePolledResource("/api/flow", { intervalMs: 10000 });
@@ -149,6 +169,19 @@ export default function SimpleHome() {
                     {t("battery.coverAvg", { eta: formatEta(u.live.coverH) })}
                   </div>
                 )}
+                {/* Per-module temperatures (2026-10-01, user request):
+                    solarbank + each expansion pack, cold→hot colored, ⚠ at
+                    the cold/hot bounds with an explanatory tooltip. */}
+                <div className="batt-temps">
+                  <TempChip label={t("battery.modules.mainUnit")} tempC={u.live?.temperatureC} />
+                  {(u.live?.expansions ?? []).map((e, i) => (
+                    <TempChip
+                      key={e.sn ?? i}
+                      label={t("battery.modules.expansion", { n: i + 1 })}
+                      tempC={e.temperatureC}
+                    />
+                  ))}
+                </div>
               </div>
             );
           })}
