@@ -5665,3 +5665,22 @@ cross-cutting), every finding re-verified by hand before fixing:
   export, home − grid − cells), 0) — the PV-split identity BOUNDED by the
   house's actual draw, all from the same payload. Arcs into Home can never
   exceed Home. Verified live: 318 ≤ 325 (was 348 > 325 before).
+
+## The flow diagram ALWAYS closes to Home (2026-10-01, user report)
+
+- User (production screenshot): "PV→Home 159 + Grid ~0 ≠ Home 229 — it was
+  not fixed; check the live tab in parallel with the Anker app — the values
+  should be consistent." Parallel audit (same-second samples vs raw
+  scen_info) showed the channels themselves don't close moment-to-moment
+  (device-side sample skew; also REST bat_charge_power read 0 while MQTT
+  reported the real 423 W charge). No formula over the raw channels closes
+  in those moments.
+- Final model: pvToHome = clamp(min(pv, pv − charge − export, home − grid),
+  0) — PV-split identity bounded by the house draw (can never exceed Home);
+  battToHome = max(0, home − grid − pvToHome) — the BATTERY as the
+  balancing remainder, which is exactly its physical role in
+  self-consumption and how the Anker app's flow reads. The diagram closes
+  by construction: grid + pvToHome + battToHome == homeW. The Battery TILE
+  reads the same value (cells: diagram.battToHomeW) — tile == arc.
+  Fallback path (feed down) keeps the derived values.
+- Verified live across samples: 6 + 214 + 0 = 220 == home every time.
