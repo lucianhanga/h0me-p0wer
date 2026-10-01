@@ -5784,3 +5784,15 @@ cross-cutting), every finding re-verified by hand before fixing:
   (sensible: ~5900 kWh/yr production vs ~4000 kWh/yr consumption),
   €1339.49/yr, payback 2031-10-22, source "ai". PRODUCTION .env needs
   PV_PEAK_KWP=6.0 + a baseline refresh (ROI tab ↻) to pick this up.
+
+## PV config validation: name the exact bad variable (2026-10-01, production incident)
+
+- User refreshed the ROI baseline on production and got an error: the log
+  said "PV_PEAK_KWP/PV_TILT_DEG/PV_PANEL_W not numeric: 6.0/17\`/undefined"
+  — the real cause was a stray backtick in the .env line PV_TILT_DEG=17\`,
+  but the joined three-variable message (plus "undefined" for the unset
+  optional PV_PANEL_W) sent the user hunting through all three.
+  parseWelcomeConfig() now throws "PV_TILT_DEG not numeric: \"17\`\"" —
+  the exact key and raw value, and unset optional vars never appear.
+- Note for .env edits on the server: docker compose only picks up env_file
+  changes on container RECREATION (docker compose up -d, not restart).
