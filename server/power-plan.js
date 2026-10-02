@@ -210,6 +210,19 @@ const PROBE_MIN_INTERVAL_MS = Number(process.env.PROBE_MIN_INTERVAL_MS ?? 2 * 60
 const EXPORT_CORRECT_MIN_W = Number(process.env.EXPORT_CORRECT_MIN_W ?? 20);
 const EXPORT_RECORRECT_MS = 60 * 1000;
 const EXPORT_WRITE_GAP_MS = 15 * 1000;
+// Passthrough cells correction (2026-10-02, user report: manual +
+// don't-discharge, yet the battery trickled ~15 W from the cells all
+// afternoon). The device covers preset − PV from the CELLS when PV sags
+// below the last written preset, and the 50 W write deadband never
+// corrected a sub-50 W overshoot — the trickle ran indefinitely.
+// passthroughOnly() now retreats by exactly the observed cellsW (the
+// battery_priority probe's mechanism), and the write discipline writes
+// it promptly with this tightened deadband. The interval ≈ the device
+// apply lag (same reasoning as EXPORT_RECORRECT_MS): re-correcting
+// against telemetry that still reflects the PREVIOUS preset would
+// ratchet the preset downward.
+const CELLS_CORRECT_MIN_W = Number(process.env.CELLS_CORRECT_MIN_W ?? 10);
+const CELLS_CORRECT_MIN_INTERVAL_MS = 60 * 1000;
 // Solarbank 2 usage mode for native Self-Consumption (2026-09-22, user
 // request: "House priority should behave exactly like the Anker app's
 // Self-Consumption Mode — use the app's setting directly if there is one").
@@ -443,7 +456,7 @@ export class PowerPlanController {
   // Never ask the battery to discharge: PV (if any) passes straight through
   // to the house, the rest comes from the grid. Used by the manual "don't
   // discharge" toggle only.
-  passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step }) {
+  passthroughOnly({ pvW, demandW, soc, dischargeFloorPct, max, step, cellsW = 0 }) {
     // Hysteresis (2026-09-27, user-observed oscillation): the guard used to
     // block at soc <= floor and release at soc > floor — with the
     // whole-point SOC jittering 8↔9 at the floor, the preset flip-flopped
@@ -463,6 +476,26 @@ export class PowerPlanController {
       this.passthroughBlocked = false;
     }
     if (this.passthroughBlocked) return 0;
+    // Never-discharge guarantee (2026-10-02, user report — see
+    // CELLS_CORRECT_MIN_W's comment): the device covers preset − PV from
+    // the cells when PV sags below the last written preset. Retreat by
+    // EXACTLY the observed cell draw from the verifiably-active preset
+    // (lastWrittenPower, not the stale cloud-reported outputW). The
+    // cooldown is anchored at the last correction WRITE (set in tick's
+    // write block), not at this branch firing — a fire whose write gets
+    // held by the 30 s write gap must NOT burn the cooldown, or the
+    // settling guard then delays the correction by minutes. After a real
+    // write the cooldown paces re-correction so telemetry has time to
+    // reflect the new preset (else it ratchets down).
+    if (
+      cellsW >= CELLS_CORRECT_MIN_W &&
+      this.lastWrittenPower != null &&
+      this.lastWrittenPower > 0 &&
+      Date.now() - (this.lastCellsCorrectWriteAt ?? 0) >= CELLS_CORRECT_MIN_INTERVAL_MS
+    ) {
+      this.passthroughCorrecting = true;
+      return Math.max(0, this.roundDown(this.lastWrittenPower - cellsW, step));
+    }
     return this.roundDown(Math.min(pvW, demandW, max), step);
   }
 
@@ -550,6 +583,9 @@ export class PowerPlanController {
     const max = this.template?.max_load ?? 800;
     const step = this.template?.step ?? 10;
     const args = { ...ctx, max, step };
+    // Reset per-tick — passthroughOnly() raises it only while a cells
+    // correction is the computed target (the write discipline reads it).
+    this.passthroughCorrecting = false;
     if (ctx.trigger === "manual") {
       return ctx.manualDischarge ? this.dischargeToTarget(args) : this.passthroughOnly(args);
     }
@@ -804,17 +840,28 @@ export class PowerPlanController {
         // property — worse since the 3 s scen_info fast path made cellsW
         // arrive well inside the window).
         this.pendingUp = null;
-        const minDelta = exportCorrection ? EXPORT_CORRECT_MIN_W : WRITE_MIN_DELTA_W;
         // Second exemption: battery_priority's hill-climb probe touching
         // real cells — its "never touch the battery" safety property needs
         // the correction written immediately (2026-09-22 code review).
         // Deliberately strategy-scoped: under house_priority/manual,
         // discharge is the INTENT, and a post-up-write step-down is exactly
         // the deflated-demandW false reading the guard exists to suppress.
+        // 2026-10-02: the passthrough path (manual don't-discharge) has
+        // the SAME never-discharge requirement — passthroughCorrecting
+        // gets the settling exemption AND a tightened deadband (10 W) so a
+        // sub-50 W trickle actually gets corrected (user report: ~15 W
+        // cell drain running all afternoon). battery_priority keeps its
+        // proven behavior (settling exemption only, 50 W deadband).
         const probeCorrection = this.strategy === "battery_priority" && cellsW > 0;
+        const cellsCorrection = probeCorrection || this.passthroughCorrecting;
+        const minDelta = exportCorrection
+          ? EXPORT_CORRECT_MIN_W
+          : this.passthroughCorrecting
+            ? CELLS_CORRECT_MIN_W
+            : WRITE_MIN_DELTA_W;
         if (
           !exportCorrection &&
-          !probeCorrection &&
+          !cellsCorrection &&
           this.lastWriteDown === false &&
           this.lastWriteAt > 0 &&
           now - this.lastWriteAt < SETTLE_AFTER_WRITE_MS
@@ -822,7 +869,11 @@ export class PowerPlanController {
           reason = `settling after step up (${Math.round((now - this.lastWriteAt) / 1000)}s/${SETTLE_AFTER_WRITE_MS / 1000}s)`;
         } else if (cur - targetW >= minDelta) {
           shouldWrite = true;
-          reason = exportCorrection ? `export correction (${exportW} W)` : "step down";
+          reason = exportCorrection
+            ? `export correction (${exportW} W)`
+            : this.passthroughCorrecting
+              ? `cells correction (-${cellsW} W)`
+              : "step down";
         } else if (now - this.lastWriteAt >= REFRESH_MS) {
           shouldWrite = true;
           reason = "refresh";
@@ -891,6 +942,9 @@ export class PowerPlanController {
           this.lastWriteDown = targetW < cur; // cur == null handled above (initial)
           this.lastWrittenPower = targetW;
           this.lastWriteAt = now;
+          // Anchor the passthrough cells-correction cooldown at the WRITE
+          // (see passthroughOnly's comment) — not at the branch firing.
+          if (this.passthroughCorrecting) this.lastCellsCorrectWriteAt = now;
           this.pendingUp = null;
           wrote = true;
           this.saveState();

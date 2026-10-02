@@ -5903,3 +5903,35 @@ cross-cutting), every finding re-verified by hand before fixing:
 - The simple view's round-robin chart tiles gained a fifth face: 6h
   (cycle 12h → 24h → 1w → 1h → 6h). The graph.span.6h i18n key already
   existed (Graph tab's span buttons) — SPANS-only change.
+
+## Passthrough trickle discharge: cells correction (2026-10-02, user report)
+
+- User: "strategy house priority, battery on manual + don't discharge —
+  however the battery is discharging, very slow." Verified live on
+  production: preset 260 W (written when PV was higher), PV sagged to
+  245 W, and the device covered the 15 W difference from the CELLS —
+  continuously, all afternoon. Root cause: passthroughOnly() caps the
+  target at CURRENT PV, but the already-written preset only steps down
+  when the gap beats the 50 W write deadband — a sub-50 W PV sag left
+  the preset permanently above PV, and "never discharge under this
+  strategy" was violated by design gap, not by a bug in any single
+  check. The export watchdog can't see it (the house imports plenty;
+  nothing is exported).
+- Fix: passthroughOnly() gains the battery_priority probe's correction
+  mechanism — when cellsW ≥ CELLS_CORRECT_MIN_W (env, default 10), the
+  target retreats by EXACTLY the observed cell draw from
+  lastWrittenPower (ground truth), and the write discipline writes it
+  promptly (settling-guard exemption + 10 W deadband, scoped to
+  passthroughCorrecting — battery_priority keeps its proven 50 W
+  behavior). The correction cooldown (60 s ≈ device apply lag) is
+  anchored at the correction WRITE, not at the branch firing — the sim
+  caught that anchoring at fire-time let a write-gap-blocked correction
+  burn its cooldown and then sit behind the 120 s settling guard for
+  minutes. Small trickles (< 10 W, mostly sensor noise) are ignored.
+- Verified with the closed-loop simulation (real controller + stateful
+  mock device): PV 270 → initial write 270 after the hold; sag to 245 →
+  "cells correction (-25 W)" written at the next writable tick, cells 0;
+  stale telemetry (output still 270) does NOT ratchet (cooldown);
+  cells 5 ignored; second real sag corrected to 210; PV recovery steps
+  back up only through the normal 120 s settling + 90 s hold. Writes:
+  270 → 240 → 210 → 300.
