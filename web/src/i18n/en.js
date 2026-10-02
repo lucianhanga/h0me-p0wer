@@ -351,6 +351,7 @@ export const en = {
       outsideTemp: "Outside",
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
+    tempLimit: { cold: "cold limit {t} °C", hot: "hot limit {t} °C" },
     phases: "L1·L2·L3",
     phasesTip: "per-phase view — the three phase lines instead of the source split",
     reset: "Reset",

@@ -4,6 +4,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { battCellsOf, battChgNetOf, rowValue } from "./derive.js";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
+import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -77,6 +78,9 @@ const GRAPHS = [
     titleKey: "graph.title.battTemp",
     unit: "°C",
     dynamicSeries: "temp",
+    // Threshold lines at the shared comfort bounds (tempLimits.js —
+    // 2026-10-02, user request: show the too-cold/too-hot limits ON the graph).
+    tempLimits: true,
     series: [],
   },
   {
@@ -301,7 +305,7 @@ export default function GraphTab() {
         },
         // Inside zoom only — no range sliders for now.
         dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
-        series: def.series.map((s) => ({
+        series: def.series.map((s, si) => ({
           name: s.name,
           type: "line",
           showSymbol: false,
@@ -312,6 +316,40 @@ export default function GraphTab() {
           itemStyle: { color: s.color },
           areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
           emphasis: { disabled: true },
+          // Comfort-bound threshold lines on the temperature chart (attached
+          // to its first series): cold limit at 3 °C (charging may be
+          // limited), hot limit at 35 °C (lifetime/performance risk) — the
+          // SAME bounds the simple view's ⚠ chips use (tempLimits.js).
+          markLine:
+            def.tempLimits && si === 0
+              ? {
+                  silent: true,
+                  symbol: "none",
+                  animation: false,
+                  data: [
+                    {
+                      yAxis: TEMP_COLD_MAX_C,
+                      lineStyle: { color: "#6bb8f5", type: "dashed", width: 1 },
+                      label: {
+                        color: "#6bb8f5",
+                        fontSize: 10,
+                        position: "insideEndBottom",
+                        formatter: t("graph.tempLimit.cold", { t: TEMP_COLD_MAX_C }),
+                      },
+                    },
+                    {
+                      yAxis: TEMP_HOT_MIN_C,
+                      lineStyle: { color: "#e5544b", type: "dashed", width: 1 },
+                      label: {
+                        color: "#e5544b",
+                        fontSize: 10,
+                        position: "insideEndTop",
+                        formatter: t("graph.tempLimit.hot", { t: TEMP_HOT_MIN_C }),
+                      },
+                    },
+                  ],
+                }
+              : undefined,
           data: [],
         })),
         legend: {
@@ -411,10 +449,11 @@ export default function GraphTab() {
 
         chart.setOption({
           yAxis: {
-            max: isModuleChart ? (def.unit === "°C" ? 60 : 100) : posCap ? posCap.cap : null,
-            // Temperatures can go below 0 in winter (outside line) — auto min;
-            // SOC is exactly 0..100.
-            min: isModuleChart ? (def.unit === "%" ? 0 : null) : negCap ? -negCap.cap : null,
+            // Temperature: FIXED −10…+50 °C (2026-10-02, user request —
+            // the comfort-bound lines at 3/35 °C need a stable scale to
+            // read against); SOC is exactly 0..100.
+            max: isModuleChart ? (def.unit === "°C" ? 50 : 100) : posCap ? posCap.cap : null,
+            min: isModuleChart ? (def.unit === "°C" ? -10 : 0) : negCap ? -negCap.cap : null,
           },
           series: def.series.map((s) => ({
             name: s.name,
