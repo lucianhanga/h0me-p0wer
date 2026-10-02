@@ -5897,3 +5897,9 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified: rendered stack status changed "idle → discharging 10 W" and
   "6 W → 4 W" between two samples 4 s apart inside ONE 10 s poll window
   — push-cadence updates, no JS errors.
+
+## Simple view charts: 6h face (2026-10-02, user request)
+
+- The simple view's round-robin chart tiles gained a fifth face: 6h
+  (cycle 12h → 24h → 1w → 1h → 6h). The graph.span.6h i18n key already
+  existed (Graph tab's span buttons) — SPANS-only change.
