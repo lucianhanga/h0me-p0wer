@@ -5874,3 +5874,26 @@ cross-cutting), every finding re-verified by hand before fixing:
   ("covers ≈ < 1 min") — present and truthful; null only for genuine
   unknowns (no avg data / no soc). Verified: system 11% → 0.6 h, SB4 →
   0.4 h, Pro 13% → 0.7 h; node == tile, all consistent.
+
+## Simple view: battery stacks at WS push cadence (2026-10-02, user request)
+
+- User: "have the simple view pulling with the same speed like the
+  extended view the ones which are displayed in the simple view." The
+  simple view's flow diagram already updated at push cadence (~1-5 s),
+  but the battery stacks (SOC, status, module segments, temps) waited
+  for their 30 s /api/battery/params poll — the one surface in the app
+  with no WS merge.
+- /api/flow's battery payload gains `members` — per-unit {sn, soc,
+  chargeW, cellsW (per-unit deriveBatteryFlow), outputW, temperatureC,
+  mainSoc, expansions, ts} from latestBattery.members (the MQTT-preserved
+  per-unit objects). Shared REST↔WS, so both channels carry it.
+- SimpleHome merges the pushed members into its params state BY SN (same
+  merge pattern as BatteryTab's aggregate merge — soc/charge/cells/temps/
+  expansions + storedKwh recomputed from the pushed soc so "X kWh of
+  Y kWh" can't disagree with the %), and the params poll drops 30 s →
+  10 s (matching BatteryTab; it now only covers the slow fields: config,
+  coverH, limits). Single-battery setups merge too: the aggregate entry
+  carries the primary unit's sn.
+- Verified: rendered stack status changed "idle → discharging 10 W" and
+  "6 W → 4 W" between two samples 4 s apart inside ONE 10 s poll window
+  — push-cadence updates, no JS errors.
