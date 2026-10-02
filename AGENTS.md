@@ -5953,3 +5953,11 @@ cross-cutting), every finding re-verified by hand before fixing:
 - The °C chart's y-axis is now FIXED −10…+50 (was max 60, auto min) so
   the threshold lines have a stable scale to read against; SOC stays
   0..100.
+
+## ROI BOM: Anker SOLIX Y-Kabel (2er-Pack) removed (2026-10-02, user request)
+
+- User: "remove this Anker SOLIX Y-Kabel für Solarpanels (2er-Pack) from
+  ROI — both of them." Deleted the B0F4QH9F1Q entry (qty 2 × €19.90)
+  and its thumbnail. totalInvestedEur 6860.01 → 6820.21. The separate
+  €129 MC4 Y-parallel splitter (B0HFJTNQQM) is a different item and
+  stays.
