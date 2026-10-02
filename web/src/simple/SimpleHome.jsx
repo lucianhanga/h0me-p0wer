@@ -40,7 +40,7 @@ function TempChip({ label, tempC }) {
 export default function SimpleHome() {
   const t = useT();
   const { data: flowRest } = usePolledResource("/api/flow", { intervalMs: 10000 });
-  const { data: params } = usePolledResource("/api/battery/params", { intervalMs: 30000 });
+  const { data: params, setData: setParams } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
   // The Today dashboard tile at the end of the simple view (2026-09-28,
   // user request — "but just for today", flipping included).
   const { data: overview } = usePolledResource("/api/stats/overview", { intervalMs: 60000 });
@@ -58,6 +58,47 @@ export default function SimpleHome() {
     // forever). Same overwrite-the-world contract as LiveTab's poll.
     if (flowRest) setFlow(flowRest);
   }, [flowRest]);
+
+  // Per-unit WS merge (2026-10-02, user request: simple view at the same
+  // speed as the extended view): the battery stacks move at push cadence
+  // (~1-5 s) like the Strategy tab's cards, not just at the 10 s params
+  // poll — which stays for the slow fields (config, coverH, limits).
+  useEffect(() => {
+    const pushed = streamMsg?.flow?.battery?.members;
+    if (!Array.isArray(pushed) || !pushed.length) return;
+    setParams((prev) => {
+      if (!prev) return prev;
+      const mergeUnit = (entry) => {
+        if (!entry?.live?.sn) return entry;
+        const p = pushed.find((x) => x.sn === entry.live.sn);
+        if (!p) return entry;
+        const cap = entry.constants?.capacityKwh;
+        return {
+          ...entry,
+          live: {
+            ...entry.live,
+            soc: p.soc ?? entry.live.soc,
+            chargeW: p.chargeW ?? entry.live.chargeW,
+            cellsW: p.cellsW ?? entry.live.cellsW,
+            outputW: p.outputW ?? entry.live.outputW,
+            temperatureC: p.temperatureC ?? entry.live.temperatureC,
+            mainSoc: p.mainSoc ?? entry.live.mainSoc,
+            expansions: p.expansions ?? entry.live.expansions,
+            ts: p.ts ?? entry.live.ts,
+            // storedKwh derives from soc — recompute against the pushed soc
+            // so "X kWh of Y kWh" can't disagree with the %.
+            storedKwh:
+              p.soc != null && cap != null
+                ? Math.round(((p.soc / 100) * cap) * 100) / 100
+                : entry.live.storedKwh,
+          },
+        };
+      };
+      return Array.isArray(prev.batteries)
+        ? { ...prev, batteries: prev.batteries.map(mergeUnit) }
+        : mergeUnit(prev);
+    });
+  }, [streamMsg]);
 
   const primary = params?.batteries?.[0] ?? params;
   // Both batteries as parallel vertical stacks (2026-09-28, user request):

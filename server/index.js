@@ -590,6 +590,24 @@ async function computeFlowPayload() {
           // marker). Watts come from MQTT — scen_info's pv_power block is
           // frozen (2026-10-02, see livePvUnits).
           pvUnits: livePvUnits(b),
+          // Per-unit live values at push cadence (2026-10-02, user request:
+          // the simple view's battery stacks must update as fast as the
+          // extended view). Clients rendering units individually merge
+          // these by sn instead of waiting for the params poll. cellsW is
+          // derived per unit with the same shared deriveBatteryFlow.
+          members: (b.members ?? [])
+            .filter((m) => m?.sn)
+            .map((m) => ({
+              sn: m.sn,
+              soc: m.soc ?? null,
+              chargeW: m.chargeW ?? 0,
+              cellsW: deriveBatteryFlow(m).cellsW,
+              outputW: m.outputW ?? 0,
+              temperatureC: m.temperatureC ?? null,
+              mainSoc: m.mainSoc ?? null,
+              expansions: m.expansions ?? null,
+              ts: m.ts ?? null,
+            })),
           ts: b.ts ?? null,
           source: "online", // battery data is always cloud (REST/MQTT)
           // Charge/discharge ETA inputs — see the note above the route.
