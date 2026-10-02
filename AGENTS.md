@@ -5850,3 +5850,27 @@ cross-cutting), every finding re-verified by hand before fixing:
   screenshot pass). Caveat: when a unit's MQTT stalls, per-string watts
   read "—" (connected flags survive via the sticky markers) — the frozen
   REST numbers are gone for good.
+
+## Coverage figures: device floor (no +3 margin), clamp at 0 instead of hiding (2026-10-02, user report)
+
+- User: "the estimation for how much will cover the batteries... is again
+  missing" on production. Diagnosis: SOC was 11%, the account floor 10%,
+  and the coverage figures (flow node's timeToEmptyH, params route's
+  coverH) measured to floor + DISCHARGE_TOLERANCE_PCT (13% on the preset
+  path — production runs house_priority + manual trigger). 11 < 13 →
+  aboveFloorKwh 0 → both values returned null and the lines vanished.
+  Nothing had regressed in code — the 2026-09-29 "null at/below the
+  floor" design met a low battery.
+- Fix: the coverage figures now measure to the DEVICE's own account
+  cutoff (no margin). The +3 margin is the controller's cushion for its
+  OWN preset writes, not a property of how much energy the battery can
+  still deliver — native mode already dropped it for exactly this reason,
+  and the user's question ("how long will the battery cover the house")
+  is about capability. The margin stays in the two places it belongs:
+  power-plan's dischargeToTarget (unchanged controller behavior) and the
+  tile's current-rate "empty in" ETA (battery.floorPct in /api/flow —
+  the user's explicit 2026-09-18 "including the extra amount" request).
+- And instead of HIDING at/below the floor, both figures now clamp to 0
+  ("covers ≈ < 1 min") — present and truthful; null only for genuine
+  unknowns (no avg data / no soc). Verified: system 11% → 0.6 h, SB4 →
+  0.4 h, Pro 13% → 0.7 h; node == tile, all consistent.
