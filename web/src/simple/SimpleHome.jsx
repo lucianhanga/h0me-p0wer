@@ -3,6 +3,7 @@ import FlowView from "../flow/FlowView.jsx";
 import BatteryModules from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
+import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
@@ -20,12 +21,12 @@ import { SourceCard } from "../dashboard/Dashboard.jsx";
 
 // Temperature chip for each battery module (2026-10-01, user request):
 // color = progressive cold→hot scale (deep blue ≤ −10 °C → dark red
-// ≥ +40 °C); ⚠ with an explanatory tooltip when cold (≤ +3 °C, charging
-// may be limited) or hot (≥ +35 °C, lifetime/performance at risk).
+// ≥ +40 °C); ⚠ with an explanatory tooltip at the shared comfort bounds
+// (tempLimits.js — cold: charging may be limited; hot: lifetime risk).
 function TempChip({ label, tempC }) {
   const t = useT();
   if (tempC == null) return null;
-  const warn = tempC <= 3 ? "cold" : tempC >= 35 ? "hot" : null;
+  const warn = tempC <= TEMP_COLD_MAX_C ? "cold" : tempC >= TEMP_HOT_MIN_C ? "hot" : null;
   const hue = Math.round(Math.min(220, Math.max(0, 220 - ((tempC + 10) / 50) * 220)));
   return (
     <span className="batt-temp" title={warn ? t(`battery.tempWarn.${warn}`) : undefined}>

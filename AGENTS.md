@@ -5935,3 +5935,21 @@ cross-cutting), every finding re-verified by hand before fixing:
   cells 5 ignored; second real sag corrected to 210; PV recovery steps
   back up only through the normal 120 s settling + 90 s hold. Writes:
   270 → 240 → 210 → 300.
+
+## Temperature graph: comfort-bound threshold lines + fixed −10…+50 °C scale (2026-10-02, user requests)
+
+- User: "on the temperature graph add display also the values which are
+  considered limits for too hot and too cold as described in the code"
+  and "the scale for temperature should be between −10 and +50".
+- The bounds were magic numbers (3 / 35) inside SimpleHome's TempChip —
+  now ONE shared source: web/src/tempLimits.js (TEMP_COLD_MAX_C=3,
+  TEMP_HOT_MIN_C=35), imported by both TempChip and GraphTab.
+- The Battery temperature chart gains two dashed markLines with i18n
+  labels (graph.tempLimit.cold/hot in en/de/ro, {t} = the bound): blue
+  "cold limit 3 °C" (charging may be limited) and red "hot limit 35 °C"
+  (lifetime/performance risk) — the same semantics as the simple view's
+  ⚠ chips. Attached to the chart's first series at init (survives the
+  applyRows data merges).
+- The °C chart's y-axis is now FIXED −10…+50 (was max 60, auto min) so
+  the threshold lines have a stable scale to read against; SOC stays
+  0..100.
