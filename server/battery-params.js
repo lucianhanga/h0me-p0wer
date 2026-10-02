@@ -317,15 +317,15 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
       // "How long the stored energy covers the AVERAGE home consumption"
       // (2026-09-29, user request — average over the last 7 days, computed
       // in index.js where the energy-day helpers live). Per unit AND system.
-      // 2026-09-29 follow-up (user: "the value in the tile is not right"):
-      // measured to the EFFECTIVE FLOOR (same floorEffPct the diagram node
-      // uses), never to zero — and null at/below the floor.
+      // Floor: the DEVICE's own cutoff via getFloorPct (2026-10-02 — was
+      // floor+margin, which vanished the line below 13% while the battery
+      // still had energy above its real 10% floor). Clamps to 0 at/below
+      // the floor — the line stays visible ("≈ 0") instead of disappearing.
       const avgKwhDay = getAvgHomeKwh7d?.() ?? null;
       const floorPct = getFloorPct?.() ?? null;
       const coverH = (soc, capKwh) => {
         if (soc == null || capKwh == null || !avgKwhDay || floorPct == null) return null;
         const aboveFloorKwh = Math.max(0, ((soc - floorPct) / 100) * capKwh);
-        if (aboveFloorKwh <= 0) return null;
         return Math.round((aboveFloorKwh / (avgKwhDay / 24)) * 10) / 10;
       };
       const b = getLiveBattery() ?? null;

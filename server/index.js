@@ -465,14 +465,17 @@ async function computeFlowPayload() {
   );
   const ppState = powerPlan.getState();
   const dischargeTolerancePct = ppState.dischargeTolerancePct ?? 0;
-  // The EFFECTIVE floor (account floor + controller margin) — shared by the
-  // tile ETA, the diagram node, and the params route's coverage figure via
-  // the getFloorPct dep (2026-09-29: one basis everywhere). In NATIVE
-  // self-consumption mode the margin doesn't exist — the device enforces
-  // the bare account cutoff directly (2026-09-29 review: StrategyTab's
-  // gauge already hides the margin there; the server figures matched it
-  // only by accident before).
-  const floorEffPct = dischargeFloorPct + (ppState.lastDecision?.nativeMode ? 0 : dischargeTolerancePct);
+  // The floor for the COVERAGE display figures (diagram node's timeToEmptyH
+  // + the params route's coverH via getFloorPct): the DEVICE's own account
+  // cutoff, WITHOUT the controller's +3 margin (2026-10-02, user report:
+  // the coverage values vanished at 11% SOC — the margin (13%) zeroed them
+  // while the battery still held usable energy above its real 10% floor,
+  // and a missing line reads as broken). The margin stays where it belongs:
+  // the controller's own preset writes (power-plan) and the tile's
+  // current-rate "empty in" ETA (battery.floorPct below — the 2026-09-18
+  // user request, "including the extra amount"). It is not a property of
+  // how much energy the battery can still deliver.
+  const floorEffPct = dischargeFloorPct;
   latestFloorEffPct = floorEffPct;
   refreshHomeConsumption(); // keep the controller's despiked value fresh
   // The flow DIAGRAM displays the same channels the Anker app does
@@ -530,15 +533,14 @@ async function computeFlowPayload() {
         )
       : pvToHome,
     batterySoc: b?.soc ?? null,
-    // Time until the battery reaches its EFFECTIVE FLOOR at the 7-day
-    // average consumption rate (2026-09-29, user report: the tile's
-    // current-rate "< 1 min" and the node's zero-basis "≈ 3h 54m"
-    // contradicted each other). One basis everywhere now: floor + average
-    // rate. null at/below the floor (the node then shows just the %).
+    // Time until the battery reaches its floor at the 7-day average
+    // consumption rate — one basis for the node and the params route's
+    // coverH (2026-09-29). Clamps to 0 at/below the floor instead of
+    // hiding (2026-10-02): a missing line reads as broken, "≈ 0" is the
+    // honest answer. null only for genuine unknowns (no data).
     timeToEmptyH: (() => {
       if (storedKwh == null || !avgKwhDay || b?.soc == null) return null;
       const aboveFloorKwh = Math.max(0, ((b.soc - floorEffPct) / 100) * (capKwh ?? 0));
-      if (aboveFloorKwh <= 0) return null;
       return Math.round((aboveFloorKwh / (avgKwhDay / 24)) * 10) / 10;
     })(),
     ts: b?.ts ?? null,
