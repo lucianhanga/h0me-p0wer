@@ -43,6 +43,14 @@ const FIELDS_0405 = {
   b7: { key: "dischargeW", factor: 0.01 }, // bat_discharge_power — CELLS-only!
   d3: { key: "outputW", factor: 0.1 }, // output_power (TOTAL — the one to use)
   c4: { key: "homeLoadW", factor: 0.1 }, // home_demand ≈ home_load_power
+  // Per-string PV (community _A17C1_0405: ca-cd, deciwatts like the other
+  // power fields). scen_info's pv_power block is NOT a live per-string
+  // channel (verified 2026-10-02: values frozen for 20+ min while
+  // photovoltaic_power moved) — MQTT is the only truthful per-string source.
+  ca: { key: "pv1W", factor: 0.1 }, // pv_1_power
+  cb: { key: "pv2W", factor: 0.1 }, // pv_2_power
+  cc: { key: "pv3W", factor: 0.1 }, // pv_3_power
+  cd: { key: "pv4W", factor: 0.1 }, // pv_4_power
   // (c4 used to be mapped to "toHomeW" — home_demand ≠ scen_info's
   // to_home_load, the same alternating-semantics bug as b7/d3; REST owns
   // toHomeW now.)
@@ -491,11 +499,17 @@ export class AnkerMqtt {
       if (out.pvW != null) data.pvW = out.pvW;
       if (out.temperatureC != null) data.temperatureC = out.temperatureC;
       if (out.homeLoadW != null) data.homeLoadW = out.homeLoadW;
+      // Per-string PV — both maps carry it now (A17C1 ca-cd ×0.1, AE103
+      // c6-c9 raw W); MQTT is the ONLY truthful per-string source
+      // (scen_info's pv_power block is frozen — verified 2026-10-02).
+      for (const k of ["pv1W", "pv2W", "pv3W", "pv4W"]) {
+        if (out[k] != null) data[k] = out[k];
+      }
       // AE103 extras (raw pass-through; consumers pick what they know):
       // gridSignedW = the docked system's grid flow as the unit sees it,
-      // per-string pv1-4W, batteryStatus, heatingPower, maxLoadW.
+      // batteryStatus, heatingPower, maxLoadW.
       if (isAE103) {
-        for (const k of ["gridSignedW", "pv1W", "pv2W", "pv3W", "pv4W", "batteryStatus", "heatingPower", "maxLoadW", "batteryPowerSignedW"]) {
+        for (const k of ["gridSignedW", "batteryStatus", "heatingPower", "maxLoadW", "batteryPowerSignedW"]) {
           if (out[k] != null) data[k] = out[k];
         }
       }

@@ -585,10 +585,9 @@ async function computeFlowPayload() {
           // Per-unit PV strings for the Live tab's expanded Solar PV section
           // (2026-09-28, user request): every MPPT channel of every unit,
           // each flagged connected/disconnected (sticky "seen producing"
-          // marker — see decoratePvChannels).
-          pvUnits: (b.members ?? [])
-            .filter((m) => m.pvChannels?.length)
-            .map((m) => ({ sn: m.sn, name: m.name, channels: m.pvChannels })),
+          // marker). Watts come from MQTT — scen_info's pv_power block is
+          // frozen (2026-10-02, see livePvUnits).
+          pvUnits: livePvUnits(b),
           ts: b.ts ?? null,
           source: "online", // battery data is always cloud (REST/MQTT)
           // Charge/discharge ETA inputs — see the note above the route.
@@ -1827,16 +1826,42 @@ const batteryMqtts = new Map(); // SN -> AnkerMqtt (one client per unit)
 // is sticky in kv (`pvSeen:<unitSn>:<n>`). A newly wired string lights up
 // with its first sunny hour.
 const PV_CONNECTED_MIN_W = 5;
+// Sticky "seen producing" marker + connected flag for one channel. watts may
+// be null (no live per-string data) — a null never marks a string seen.
+function pvSeenConnected(sn, n, watts) {
+  const key = `pvSeen:${sn}:${n}`;
+  if (watts != null && watts > PV_CONNECTED_MIN_W && kvGet(key) == null) kvSet(key, Date.now());
+  return (watts != null && watts > PV_CONNECTED_MIN_W) || kvGet(key) != null;
+}
 function decoratePvChannels(m) {
   if (!m.pvChannels?.length) return m;
   return {
     ...m,
-    pvChannels: m.pvChannels.map((c) => {
-      const key = `pvSeen:${m.sn}:${c.n}`;
-      if (c.watts > PV_CONNECTED_MIN_W && kvGet(key) == null) kvSet(key, Date.now());
-      return { ...c, connected: c.watts > PV_CONNECTED_MIN_W || kvGet(key) != null };
-    }),
+    pvChannels: m.pvChannels.map((c) => ({ ...c, connected: pvSeenConnected(m.sn, c.n, c.watts) })),
   };
+}
+
+// Live per-string watts for /api/flow's pvUnits (2026-10-02, user report:
+// PV total 220 W vs per-string sum 21 W). scen_info's pv_power block is
+// FROZEN (verified: identical values for 20+ min while photovoltaic_power
+// moved) — it is NOT a live channel. MQTT is the only truthful per-string
+// source (A17C1 0405 ca-cd, AE103 c6-c9). When the unit's MQTT isn't fresh,
+// watts read null (honest gap) — never the frozen REST number.
+function livePvUnits(b) {
+  return (b.members ?? [])
+    .filter((m) => m.pvChannels?.length)
+    .map((m) => {
+      const liveM = latestBatteries.get(m.sn);
+      const fresh = batteryMqtts.get(m.sn)?.isFresh?.() ?? false;
+      return {
+        sn: m.sn,
+        name: m.name,
+        channels: m.pvChannels.map((c) => {
+          const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
+          return { ...c, watts: w, connected: pvSeenConnected(m.sn, c.n, w ?? c.watts) };
+        }),
+      };
+    });
 }
 
 function upsertMember(m) {

@@ -344,7 +344,10 @@ export default function LiveTab() {
                     <FlipTile key={c.n}>
                       <div className="phase-card">
                         <span className="phase-name">{c.name}</span>
-                        <span className="phase-power">{`${c.watts} W`}</span>
+                        {/* watts is null while the unit's MQTT push channel
+                            is stalled — an honest "—", never the frozen
+                            scen_info pv_power number. */}
+                        <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
                       </div>
                     </FlipTile>
                   ) : (

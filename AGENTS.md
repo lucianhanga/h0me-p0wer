@@ -5822,3 +5822,31 @@ cross-cutting), every finding re-verified by hand before fixing:
   one. Dropped the nowrap; the line wraps centered to two lines.
 - Verified by screenshots at 420px emulation: simple view (both stacks,
   clean two-line wrap) and Strategy tab (system tile + unit cards).
+
+## Per-string PV: scen_info's pv_power is FROZEN — MQTT is the only truthful source (2026-10-02, user report)
+
+- User screenshot: Live tab's expanded Solar PV section showed PV total
+  220 W while the per-string cards summed to 21 W (SB4 PV1 12, Pro PV1 5,
+  PV2 4). Investigation against the raw scen_info payload: per-unit
+  photovoltaic_power moved normally (140/123 → 140/121 W across a minute)
+  while the pv_power {pv1..pv4} block returned BYTE-IDENTICAL values the
+  whole time — it is not a live channel (update cadence unknown, possibly
+  device-config-rate). The site-level solar_power_N fields are equally
+  misleading: solar_power_1 read exactly the SB4's unit TOTAL, not a
+  string. (This also retroactively explains the 2026-09-28 note "PV field
+  factors unverifiable tonight" — the REST side was never going to match.)
+- Fix: per-string watts now come from MQTT only. A17C1's 0405 map gains
+  ca-cd = pv_1..4_power ×0.1 (community _A17C1_0405 — found via
+  thomluther/anker-solix-api src/anker_solix_api/mqttmap.py; the repo
+  moved, old path 404s); AE103 already had c6-c9 raw W. mqtt.js forwards
+  pv1W-4W for ALL units (was gated on isAE103). /api/flow's pvUnits are
+  built by livePvUnits(): channel list/names still from scen_info (that's
+  metadata, fine), but watts overridden from the unit's MQTT fields when
+  fresh, else null (honest gap) — never the frozen REST number. The
+  LiveTab card renders "—" for null watts. The sticky pvSeen marker now
+  also feeds from MQTT watts (extracted pvSeenConnected helper).
+- Verified live: SB4 PV1 130 == unit total 130; Pro PV1 62 + PV2 53 =
+  115 == unit total 115; section sum == PV total (245, then 281 on the
+  screenshot pass). Caveat: when a unit's MQTT stalls, per-string watts
+  read "—" (connected flags survive via the sticky markers) — the frozen
+  REST numbers are gone for good.
