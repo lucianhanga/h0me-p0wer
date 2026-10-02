@@ -9,8 +9,9 @@ import QuadFlipTile from "../components/QuadFlipTile.jsx";
 // total power production, battery charging/discharging. The SAME series
 // definitions as the Graph tab's first three charts — derivations shared
 // via graph/derive.js — but deliberately interaction-free: no zoom/pan.
-// 2026-09-29 (user request): each tile is a 4-face round-robin flipper —
-// tap the title (or the tile) to cycle 12h → 24h → 1w → 1h.
+// 2026-09-29 (user request): each tile is a round-robin flipper — tap the
+// title (or the tile) to cycle 12h → 24h → 1w → 1h → 6h (6h added
+// 2026-10-02, user request).
 const DEFS = [
   {
     titleKey: "graph.title.home",
@@ -34,12 +35,13 @@ const DEFS = [
   },
 ];
 
-// Face order per the user's spec: 12h, 24h, 1w, 1h — round robin.
+// Face order per the user's spec: 12h, 24h, 1w, 1h, 6h — round robin.
 const SPANS = [
   { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
   { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
   { key: "graph.span.1h", ms: 3600 * 1000 },
+  { key: "graph.span.6h", ms: 6 * 3600 * 1000 },
 ];
 
 const REFRESH_MS = 60000;
