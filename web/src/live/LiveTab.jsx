@@ -266,7 +266,12 @@ export default function LiveTab() {
                 ? (battery.cells ?? 0) > 0
                   ? t("live.battery.dischargingSoc", { soc: battery.soc })
                   : battery.charge > 0
-                    ? t("live.battery.chargingSoc", { soc: battery.soc })
+                    ? (battery.gridCharge ?? 0) > 0
+                      ? t("live.battery.chargingGridSoc", {
+                          soc: battery.soc,
+                          grid: `${Math.round(battery.gridCharge)} W`,
+                        })
+                      : t("live.battery.chargingSoc", { soc: battery.soc })
                     : t("live.battery.idleSoc", { soc: battery.soc })
                 : t("live.battery.offline")}
             </div>

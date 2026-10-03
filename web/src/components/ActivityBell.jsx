@@ -25,6 +25,8 @@ export function activityText(t, entry) {
       return t(`activity.manualDischarge.${p.on ? "on" : "off"}`);
     case "floor_guard":
       return t(`activity.floorGuard.${p.phase}`, p);
+    case "gridCharge":
+      return t(`activity.gridCharge.${p.state}`, p);
     default:
       return t(`activity.${entry.kind}`, p);
   }

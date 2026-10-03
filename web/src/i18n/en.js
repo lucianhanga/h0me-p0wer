@@ -45,6 +45,10 @@ export const en = {
     expansion_detected: "Expansion battery detected ({n} pack(s), SN {sn})",
     floor_changed: "Discharge floor changed: {from}% → {to}%",
     pv_history_repaired: "PV history repaired: {n} day(s) rebuilt from daily totals",
+    gridCharge: {
+      start: "Battery started charging from the grid ({w} W) — low-battery recovery",
+      stop: "Battery stopped charging from the grid",
+    },
     pin_ip_locked: "PIN: device blocked after 3 wrong attempts ({ip})",
     pin_ip_unlocked: "PIN: device unblocked ({ip})",
     meter: {
@@ -99,6 +103,7 @@ export const en = {
       charging: "Charging",
       dischargingSoc: "discharging · {soc}%",
       chargingSoc: "charging · {soc}%",
+      chargingGridSoc: "charging · {soc}% · {grid} from grid",
       idleSoc: "idle · {soc}%",
       offline: "offline",
       emptyIn: "empty in ≈ {eta}",
@@ -235,6 +240,8 @@ export const en = {
     },
     status: {
       charging: "charging {w}",
+      chargingSplit: "charging {w} · {grid} from grid",
+      chargingFromGrid: "charging {grid} from grid",
       discharging: "discharging {w}",
       idle: "idle",
       fullIn: "full in ≈ {eta}",

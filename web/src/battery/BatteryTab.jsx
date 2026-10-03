@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
-import { batteryEtaHours, formatEta } from "../batteryEta.js";
+import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
 import BatteryModules from "./BatteryModules.jsx";
@@ -108,7 +108,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
   // discharge.
   const chargeW = live.chargeW ?? 0;
   const cellsW = live.cellsW ?? 0;
+  const gridChgW = live.gridToBatteryW ?? 0;
   const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
+  const chargeStatus = chargingStatus(t, chargeW, gridChgW);
   const minPct = config?.dischargeLowerLimitPct;
   const maxPct = config?.chargeUpperLimitPct;
   // The account's configured floor is not where the controller actually
@@ -183,11 +185,11 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           heightPx={heightPx}
           slotHeightPx={slotHeightPx}
         />
-        <div className={`batt-status ${mode}`}>
+        <div className={`batt-status ${mode}${mode === "charging" && chargeStatus.gridDominant ? " grid-dom" : ""}`}>
           <StatusBadge mode={mode} />
           {mode === "charging" && (
             <>
-              <span className="batt-status-main">{t("battery.status.charging", { w: fmtW(chargeW) })}</span>
+              <span className="batt-status-main">{chargeStatus.text}</span>
               {etaLabel && <span className="batt-status-eta">{t("battery.status.fullIn", { eta: etaLabel })}</span>}
             </>
           )}
@@ -426,7 +428,9 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
 
   const chargeW = live.chargeW ?? 0;
   const cellsW = live.cellsW ?? 0;
+  const gridChgW = live.gridToBatteryW ?? 0;
   const mode = chargeW > cellsW ? "charging" : cellsW > chargeW ? "discharging" : "idle";
+  const chargeStatus = chargingStatus(t, chargeW, gridChgW);
   const etaLabel =
     // Discharge shows NO separate ETA (2026-09-30, user report: the
     // current-rate estimate jumped with every feed change): the coverage
@@ -513,9 +517,9 @@ function BatterySystemTile({ live, config, features, constants, dischargeToleran
               <b>{cap != null ? `${cap} kWh` : "—"}</b>
             </div>
           </div>
-          <div className={`batt-sys-status ${mode}`}>
+          <div className={`batt-sys-status ${mode}${mode === "charging" && chargeStatus.gridDominant ? " grid-dom" : ""}`}>
             <StatusBadge mode={mode} />
-            {mode === "charging" && t("battery.status.charging", { w: fmtW(chargeW) })}
+            {mode === "charging" && chargeStatus.text}
             {mode === "discharging" && t("battery.status.discharging", { w: fmtW(cellsW) })}
             {mode === "idle" && t("battery.status.idle")}
             {etaLabel && (

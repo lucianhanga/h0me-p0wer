@@ -56,6 +56,10 @@ export const ro = {
     expansion_detected: "Baterie extensie detectată ({n} pachet(e), SN {sn})",
     floor_changed: "Prag de descărcare schimbat: {from}% → {to}%",
     pv_history_repaired: "Istoric PV reparat: {n} zi(le) reconstruite din totaluri zilnice",
+    gridCharge: {
+      start: "Bateria a început încărcarea din rețea ({w} W) — protecție la descărcare",
+      stop: "Bateria nu se mai încarcă din rețea",
+    },
     pin_ip_locked: "PIN: dispozitiv blocat după 3 încercări greșite ({ip})",
     pin_ip_unlocked: "PIN: dispozitiv deblocat ({ip})",
     meter: {
@@ -110,6 +114,7 @@ export const ro = {
       charging: "Se încarcă",
       dischargingSoc: "se descarcă · {soc}%",
       chargingSoc: "se încarcă · {soc}%",
+      chargingGridSoc: "se încarcă · {soc}% · {grid} din rețea",
       idleSoc: "inactivă · {soc}%",
       offline: "offline",
       emptyIn: "goală în ≈ {eta}",
@@ -246,6 +251,8 @@ export const ro = {
     },
     status: {
       charging: "se încarcă {w}",
+      chargingSplit: "se încarcă {w} · {grid} din rețea",
+      chargingFromGrid: "se încarcă {grid} din rețea",
       discharging: "se descarcă {w}",
       idle: "inactivă",
       fullIn: "plină în ≈ {eta}",

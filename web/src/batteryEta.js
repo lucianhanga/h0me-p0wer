@@ -42,3 +42,24 @@ export function formatEta(hours) {
   if (m === 0) return `${h} h`;
   return `${h}h ${m}m`;
 }
+
+// Charging status text with the grid-sourced portion (2026-10-03, user
+// request — "how do you recommend to display when the battery is charging
+// from the grid? go for it"): "charging 129 W · 40 W from grid" for a
+// PV+grid mix, "charging 40 W from grid" when purely grid-sourced, plain
+// "charging N W" otherwise. ONE helper for every battery status line
+// (Strategy cards, system tile, simple-view stacks) so they can't drift.
+// gridDominant flags when the grid supplies at least half the charge —
+// the call sites tint the status orange (grid money) instead of green.
+export function chargingStatus(t, chargeW, gridChargeW = 0) {
+  const w = `${Math.round(chargeW)} W`;
+  const g = `${Math.round(gridChargeW)} W`;
+  const gridDominant = gridChargeW > 0 && gridChargeW >= chargeW / 2;
+  const text =
+    gridChargeW > 0 && gridChargeW < chargeW
+      ? t("battery.status.chargingSplit", { w, grid: g })
+      : gridChargeW > 0
+        ? t("battery.status.chargingFromGrid", { grid: g })
+        : t("battery.status.charging", { w });
+  return { text, gridDominant };
+}

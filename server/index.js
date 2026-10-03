@@ -608,6 +608,7 @@ async function computeFlowPayload() {
               soc: m.soc ?? null,
               chargeW: m.chargeW ?? 0,
               cellsW: deriveBatteryFlow(m).cellsW,
+              gridChargeW: deriveBatteryFlow(m).gridChargeW,
               outputW: m.outputW ?? 0,
               temperatureC: m.temperatureC ?? null,
               mainSoc: m.mainSoc ?? null,
@@ -1935,6 +1936,42 @@ function recomputeAggregate() {
       ? { homeLoadW: members[0].homeLoadW }
       : {}),
   };
+  trackGridCharge();
+}
+
+// Grid-charge activity tracker (2026-10-03, user request — with the
+// explicit "don't make it too granular" constraint): gridChargeW flickers
+// around 0 from sensor noise and PV wobble, so naive start/stop detection
+// would spam the log several times a minute. Guards: a 20 W noise floor,
+// a 60 s continuous-above hold to ENTER and a 120 s continuous-below hold
+// to EXIT — one pair per genuine episode, none for flicker.
+const GRID_CHARGE_LOG_MIN_W = 20;
+const GRID_CHARGE_ENTER_MS = 60 * 1000;
+const GRID_CHARGE_EXIT_MS = 120 * 1000;
+const gridChargeLog = { active: false, aboveSince: null, belowSince: null };
+function trackGridCharge() {
+  if (!latestBattery) return;
+  const { gridChargeW } = deriveBatteryFlow(latestBattery);
+  const now = Date.now();
+  if (gridChargeW >= GRID_CHARGE_LOG_MIN_W) {
+    gridChargeLog.belowSince = null;
+    if (!gridChargeLog.active) {
+      gridChargeLog.aboveSince ??= now;
+      if (now - gridChargeLog.aboveSince >= GRID_CHARGE_ENTER_MS) {
+        gridChargeLog.active = true;
+        activity("gridCharge", { state: "start", w: Math.round(gridChargeW) });
+      }
+    }
+  } else {
+    gridChargeLog.aboveSince = null;
+    if (gridChargeLog.active) {
+      gridChargeLog.belowSince ??= now;
+      if (now - gridChargeLog.belowSince >= GRID_CHARGE_EXIT_MS) {
+        gridChargeLog.active = false;
+        activity("gridCharge", { state: "stop" });
+      }
+    }
+  }
 }
 
 // MQTT telemetry maps are verified per model. The Solarbank 2 family
