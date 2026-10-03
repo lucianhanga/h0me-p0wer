@@ -6032,3 +6032,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   totalInvestedEur; the curve crosses invested exactly at paybackDate
   by construction. Baseline basis (the section IS the baseline
   estimate); i18n roi.projection.breakEven/profitThatYear in en/de/ro.
+
+## ROI Projection: break-even tile sorted into the year sequence, same shape (2026-10-03, user follow-up)
+
+- User: "put the break even tile in the right order of years, make it
+  look like the others, just change its color a bit to be somehow
+  highlighted." The tile now sorts among the year tiles by
+  daysToPayback/365.25 (between 5 and 10 YEARS at a ~5.1-year payback),
+  carries the same shape (small title "BREAK-EVEN 2031", big cumulative
+  € figure at the break-even point walked from forecastSeries, the
+  profit-that-year sub-line), and is distinguished only by a subtle
+  green highlight (.tile.roi-be — green-tinted background + border).

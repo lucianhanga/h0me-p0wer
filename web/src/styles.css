@@ -1669,6 +1669,13 @@ pre {
   color: #5fce80;
 }
 
+/* Break-even tile in the Projection row (2026-10-03): identical shape to
+   the year tiles, just a subtle green highlight so it stands out. */
+.tile.roi-be {
+  border-color: rgba(95, 206, 128, 0.45);
+  background: #16241b;
+}
+
 .roi-neg {
   color: #e05c5c;
 }
