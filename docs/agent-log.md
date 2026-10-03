@@ -6109,3 +6109,22 @@ cross-cutting), every finding re-verified by hand before fixing:
   discarding it.
 - Note: headless verification isn't possible (no mic in headless Chrome) —
   build green, logic reviewed; needs a real-mic pass by the user.
+
+## Read-aloud: units pronounced as words per language (2026-10-03, user request)
+
+- User: "in Romanian kWh should be called 'kilowați oră' when you read it
+  loud." speech.js's speakText() now expands units for the UTTERANCE only:
+  kWh/kWp/kW/W/°C → ro "kilowați oră"/"kilowați vârf"/"kilowați"/"wați"/
+  "grade Celsius", de "Kilowattstunden"/"Kilowatt-Peak"/"Kilowatt"/"Watt"/
+  "Grad Celsius", en "kilowatt-hours"/"kilowatt-peak"/"kilowatts"/"watts"/
+  "degrees Celsius". Applies to EVERY read-aloud (Welcome cards, whole-tab
+  summary, Ask answers, activity log).
+- The word-by-word highlight (SyncedSpeech onboundary charIndex) needed the
+  indices to still point at the DISPLAYED text: expandUnits() builds a
+  char-level map from expanded positions back to the original string and
+  speakText translates the boundary index through it. Two real bugs caught
+  by the isolated test before shipping: replace() callbacks receive
+  (match, ...groups, offset, string) — rest.at(-2) is the offset, not
+  at(-1) — and the splice must fill with map[offset] (the ORIGINAL index),
+  not the intermediate-string offset. Verified in isolation across all
+  three languages, mapping included.
