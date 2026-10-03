@@ -60,6 +60,10 @@ export const de = {
     expansion_detected: "Erweiterungsakku erkannt ({n} Pack(s), SN {sn})",
     floor_changed: "Entladegrenze geändert: {from}% → {to}%",
     pv_history_repaired: "PV-Verlauf repariert: {n} Tag(e) aus Tagestotalen wiederhergestellt",
+    gridCharge: {
+      start: "Akku lädt jetzt aus dem Netz ({w} W) — Schutz bei niedrigem Ladestand",
+      stop: "Akku lädt nicht mehr aus dem Netz",
+    },
     pin_ip_locked: "PIN: Gerät nach 3 Fehlversuchen gesperrt ({ip})",
     pin_ip_unlocked: "PIN: Gerät entsperrt ({ip})",
     meter: {
@@ -114,6 +118,7 @@ export const de = {
       charging: "Lädt",
       dischargingSoc: "entlädt · {soc}%",
       chargingSoc: "lädt · {soc}%",
+      chargingGridSoc: "lädt · {soc}% · {grid} aus dem Netz",
       idleSoc: "inaktiv · {soc}%",
       offline: "offline",
       emptyIn: "leer in ≈ {eta}",
@@ -250,6 +255,8 @@ export const de = {
     },
     status: {
       charging: "lädt {w}",
+      chargingSplit: "lädt {w} · {grid} aus dem Netz",
+      chargingFromGrid: "lädt {grid} aus dem Netz",
       discharging: "entlädt {w}",
       idle: "inaktiv",
       fullIn: "voll in ≈ {eta}",

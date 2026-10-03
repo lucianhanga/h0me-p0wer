@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
 import BatteryModules from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
-import { batteryEtaHours, formatEta } from "../batteryEta.js";
+import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { usePolledResource } from "../usePolledResource.js";
@@ -141,6 +141,7 @@ export default function SimpleHome() {
             const uCellsW = u.live?.cellsW ?? 0;
             const uMode = uChargeW > uCellsW ? "charging" : uCellsW > uChargeW ? "discharging" : "idle";
             const uW = uMode === "charging" ? uChargeW : uCellsW;
+            const uChargeStatus = chargingStatus(t, uChargeW, u.live?.gridToBatteryW ?? 0);
             const uEta =
               // Discharge shows NO separate ETA (2026-09-30 — the coverage
               // line below already carries the stable 7-day-average figure);
@@ -188,12 +189,14 @@ export default function SimpleHome() {
                 {/* State + ETA until full/empty, same as the Strategy cards
                     (2026-09-28, user request) — replaces the per-module legend
                     here (removed per the same request). */}
-                <div className={`batt-status simple-batt-status ${uMode}`}>
+                <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
                   <StatusBadge mode={uMode} />
                   <span className="batt-status-main">
                     {uMode === "idle"
                       ? t("battery.status.idle")
-                      : t(`battery.status.${uMode}`, { w: `${Math.round(uW)} W` })}
+                      : uMode === "charging"
+                        ? uChargeStatus.text
+                        : t("battery.status.discharging", { w: `${Math.round(uW)} W` })}
                   </span>
                   {uEta && (
                     <span className="batt-status-eta">

@@ -5998,3 +5998,26 @@ cross-cutting), every finding re-verified by hand before fixing:
   can be off by the grid-charge amount — Anker's grid_to_home channel
   doesn't carry that energy, the battery side is the only truthful
   source for it.
+
+## Grid-charging display: status text + anti-flap activity log (2026-10-03, user request)
+
+- Follow-up to the Home→Battery arc (#316): "how do you recommend to
+  display when the battery is charging from the grid? go for it" — with
+  the user's own constraint: "take care with the activity log, if you do
+  it too granular you might have few-times-per-minute changes."
+- Status text: ONE shared chargingStatus(t, chargeW, gridChargeW) helper
+  (batteryEta.js) — "charging 129 W · 40 W from grid" for a PV+grid mix,
+  "charging 40 W from grid" when purely grid-sourced, plain "charging
+  N W" otherwise — plus gridDominant (grid ≥ half the charge) which
+  tints the status ORANGE (grid money) instead of PV green. Applied at
+  every battery status line: Strategy-tab unit cards + system tile,
+  simple-view stacks, and the Live tile's sub-label ("charging · 10% ·
+  40 W from grid"). The WS per-unit member push gained gridChargeW so
+  the simple-view stacks see it at push cadence.
+- Activity log: gridCharge start/stop — deliberately anti-flap per the
+  user's constraint: a 20 W noise floor, a 60 s continuous-above hold
+  to ENTER and a 120 s continuous-below hold to EXIT (one pair per
+  genuine episode, never per-minute spam). Tracked in
+  recomputeAggregate() (runs on every REST sync + MQTT merge). i18n
+  kinds activity.gridCharge.start/stop in en/de/ro; ActivityBell
+  resolves the nested state key.
