@@ -332,6 +332,7 @@ export const ro = {
     producedKwh: "{kwh} kWh produși",
     coverage: "⚠ {pct}% din ziua de azi acoperit, chiar și după recuperarea a ce s-a putut din cloudul Anker — totalurile reale pot fi încă mai mari decât cele afișate",
     stored: "stocat",
+    storedShare: "stocat · {pct} % din producție",
     spentSaved: "cheltuit €{grid} · economisit €{saved}",
     olderPeriod: "Perioadă mai veche",
     newerPeriod: "Perioadă mai nouă",

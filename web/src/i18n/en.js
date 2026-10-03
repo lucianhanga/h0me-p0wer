@@ -318,6 +318,7 @@ export const en = {
     producedKwh: "{kwh} kWh produced",
     coverage: "⚠ {pct}% of today covered, even after recovering what we could from Anker's cloud — actual totals may still be higher than shown",
     stored: "stored",
+    storedShare: "stored · {pct} % of production",
     spentSaved: "spent €{grid} · saved €{saved}",
     olderPeriod: "Older period",
     newerPeriod: "Newer period",

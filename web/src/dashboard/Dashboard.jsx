@@ -190,9 +190,9 @@ function TopDaysCard({ title, rows }) {
 // server/savings.js) isn't their sum, so a per-row € next to them would
 // look inconsistent with the summary.
 const SRC_ROWS = [
-  { key: "gridKwh", labelKey: "dashboard.rows.grid", color: "#f7a44f" },
-  { key: "pvKwh", labelKey: "dashboard.rows.pvDirect", color: "#5fce80" },
-  { key: "battKwh", labelKey: "dashboard.rows.fromBattery", color: "#c084fc" },
+  { key: "gridKwh", labelKey: "dashboard.rows.grid", color: "#f7a44f", share: true },
+  { key: "pvKwh", labelKey: "dashboard.rows.pvDirect", color: "#5fce80", share: true },
+  { key: "battKwh", labelKey: "dashboard.rows.fromBattery", color: "#c084fc", share: true },
 ];
 const BATT_IN_ROW = { key: "battInKwh", labelKey: "dashboard.rows.toBattery", color: "#8b98a5", stored: true };
 // Residual grid export (2026-09-23, user request) — shown on every period
@@ -307,7 +307,24 @@ export function SourceCard({ type, title, data, formatLabel }) {
                 <span className="src-label">{t(r.labelKey)}</span>
                 <span className="src-value">
                   <span className="src-kwh">{active[r.key]} kWh</span>
-                  {r.stored && <span className="src-eur">{t("dashboard.stored")}</span>}
+                  {/* Share of the period's house consumption (2026-10-03, user
+                      request). The books balance (house = grid + PV-direct +
+                      battery), so the three sum to 100%. For TODAY this is
+                      "of what the house has consumed so far" — PV parked in
+                      the battery isn't consumed yet and counts when it comes
+                      back as discharge; that pending share is made explicit
+                      on the To-battery row below instead of being guessed
+                      into the percentages. */}
+                  {r.share && active.homeKwh > 0 && (
+                    <span className="src-pct">{Math.round((active[r.key] / active.homeKwh) * 100)} %</span>
+                  )}
+                  {r.stored && (
+                    <span className="src-eur">
+                      {active.pvProducedKwh > 0
+                        ? t("dashboard.storedShare", { pct: Math.round((active[r.key] / active.pvProducedKwh) * 100) })
+                        : t("dashboard.stored")}
+                    </span>
+                  )}
                 </span>
               </div>
             ))}
