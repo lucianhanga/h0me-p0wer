@@ -9,6 +9,7 @@ import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
+import HouseView from "./HouseView.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
 
@@ -38,7 +39,7 @@ function TempChip({ label, tempC }) {
   );
 }
 
-export default function SimpleHome() {
+export default function SimpleHome({ artistic = false } = {}) {
   const t = useT();
   const { data: flowRest } = usePolledResource("/api/flow", { intervalMs: 10000 });
   const { data: params, setData: setParams } = usePolledResource("/api/battery/params", { intervalMs: 10000 });
@@ -124,11 +125,20 @@ export default function SimpleHome() {
 
   return (
     <div className="simple-home">
-      <SectionTitle>{t("live.powerFlow")}</SectionTitle>
-      <div className="simple-flow">
-        <FlowView flow={flow} />
-      </div>
-      {stacks.length > 0 && (
+      {artistic ? (
+        // The house picture with the live flow drawn ON it (2026-10-03,
+        // user request — the artistic view replaces the flow diagram AND
+        // the battery stacks with this one composition).
+        <HouseView flow={flow} params={params} t={t} />
+      ) : (
+        <>
+          <SectionTitle>{t("live.powerFlow")}</SectionTitle>
+          <div className="simple-flow">
+            <FlowView flow={flow} />
+          </div>
+        </>
+      )}
+      {!artistic && stacks.length > 0 && (
         <>
           <SectionTitle>{t("simple.batteries")}</SectionTitle>
           <div className="simple-batt-row">

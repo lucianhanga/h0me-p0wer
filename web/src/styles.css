@@ -2814,3 +2814,137 @@ pre {
 .batt-sys-bar-labels span {
   white-space: nowrap;
 }
+
+/* Artistic view — the house picture with the live flow on it (2026-10-03,
+   user request). Percent-positioned overlays scale with any width while
+   the image keeps its full 1536×1024 resolution for zooming. */
+.house-view {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #2a3238;
+  background: #000;
+}
+.house-view img {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+.hv-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.hv-chip {
+  position: absolute;
+  background: rgba(16, 22, 27, 0.72);
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 0.2rem 0.55rem;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.hv-chip-label {
+  font-size: 0.68rem;
+  color: #8b98a5;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hv-chip-value {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.hv-dock-label {
+  font-size: 0.6rem;
+}
+.hv-batt {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 4px;
+  overflow: hidden;
+}
+.hv-batt-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  opacity: 0.45;
+  transition: height 1s ease;
+}
+.hv-batt-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.1rem;
+  text-shadow: 0 0 4px #10161b, 0 0 2px #10161b;
+}
+.hv-batt-soc {
+  font-size: 1rem;
+  font-weight: 700;
+}
+.hv-batt-name {
+  font-size: 0.62rem;
+  color: #c6cdd4;
+}
+.hv-batt-mode {
+  font-size: 0.62rem;
+  color: #e8ecef;
+}
+@media (max-width: 600px) {
+  .hv-chip-value { font-size: 0.85rem; }
+  .hv-batt-soc { font-size: 0.85rem; }
+  .hv-chip-label { font-size: 0.58rem; }
+}
+
+/* Battery fill sheen in the house view: charging = light swept top→down
+   (energy poured in), discharging = the mirror. */
+.hv-batt-fill::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 45%;
+  background: linear-gradient(to bottom, transparent, #ffffff26, transparent);
+  opacity: 0;
+}
+.hv-batt-fill.hv-charging::before {
+  opacity: 1;
+  animation: hv-sheen-down 2.2s linear infinite;
+}
+.hv-batt-fill.hv-discharging::before {
+  opacity: 1;
+  animation: hv-sheen-up 2.2s linear infinite;
+}
+@keyframes hv-sheen-down {
+  from { top: -45%; }
+  to { top: 100%; }
+}
+@keyframes hv-sheen-up {
+  from { top: 100%; }
+  to { top: -45%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hv-batt-fill.hv-charging::before,
+  .hv-batt-fill.hv-discharging::before { animation: none; opacity: 0; }
+}
+
+.hv-edge-label {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-shadow: 0 0 4px #10161b, 0 0 2px #10161b, 0 0 2px #10161b;
+  pointer-events: none;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .hv-edge-label { font-size: 0.68rem; }
+}
