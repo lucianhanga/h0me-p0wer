@@ -5,7 +5,7 @@
 // the fallback. The route never throws and never leaks config.
 import { kvGet, kvSet, getModuleHistory } from "./db.js";
 import {
-  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson, isWelcomeLang,
+  parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson, isWelcomeLang, localDate,
 } from "./welcome-sources.js";
 import {
   buildContext,
@@ -358,6 +358,14 @@ export function registerWelcomeRoute(app, deps) {
           : null,
       ]);
       const context = buildContext({ config, geo, weather, pvgis, statsOverview: overview?.data ?? null, deps });
+      // Everything the simple view shows, so questions asked FROM that
+      // screen are answerable (2026-10-03, user request): the flow
+      // diagram's own channel values (arcs + nodes), the per-solarbank
+      // unit states (the simple view's stacks), the usual-consumption
+      // figure, and today's AI day briefing (production forecast + expected
+      // consumption split + expected night SOC).
+      const flowPayload = deps.getFlowPayload ? await deps.getFlowPayload().catch(() => null) : null;
+      const dayBrief = kvGet(`daybrief:${lang}:${localDate()}`)?.value ?? null;
 
       // Per-module battery state + 24h history (same request): main unit
       // SOC/temp, each expansion pack's SOC/SOH/temp (MQTT-only — null while
@@ -381,6 +389,27 @@ export function registerWelcomeRoute(app, deps) {
       const live = {
         liveGridW: deps.getLivePower?.() ?? null,
         liveBattery: context.battery,
+        // The flow diagram's exact displayed values (arcs close to Home by
+        // construction): homeW, gridToHomeW, pvToGridW (export),
+        // pvToHomeW, pvToBattW, battToHomeW, homeToBattW (grid-sourced
+        // charging), pvW (production), batterySoc, timeToEmptyH (to the
+        // device floor at the 7-day-average rate).
+        flow: flowPayload?.diagram ?? null,
+        usualHomeW: flowPayload?.home?.usualW ?? null,
+        // Per-solarbank unit state (the simple view shows one stack per
+        // unit): sn, soc, chargeW, cellsW (per-unit derived cells power),
+        // outputW, temperatureC, mainSoc, expansions[] — from the flow
+        // payload's per-unit member list.
+        batteryUnits: Array.isArray(flowPayload?.battery?.members) ? flowPayload.battery.members : null,
+        // Today's once-per-day AI briefing (null until generated).
+        dayBrief: dayBrief
+          ? {
+              forecastPvKwh: dayBrief.forecastPvKwh,
+              peakKwp: dayBrief.peakKwp,
+              usage: dayBrief.usage,
+              note: dayBrief.note,
+            }
+          : null,
         batteryModules: lb
           ? {
               soc: lb.soc ?? null,

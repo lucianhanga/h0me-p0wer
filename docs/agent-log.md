@@ -6064,3 +6064,26 @@ cross-cutting), every finding re-verified by hand before fixing:
   cloud + strokes, snow = cloud + dots, thunder = cloud + lightning,
   partly = small sun + cloud, sun/cloud standalone. Verified by rendering
   all 11 glyphs side-by-side and by a live screenshot (fog, code 45).
+
+## Ask AI: full simple-view context (2026-10-03, user request)
+
+- User: "in the simple screen I tried to ask something — make sure you give
+  the AI all the data in the context." The 2026-09-27 ask context predated
+  the simple view; it was missing exactly what that screen shows. The
+  /api/ask handler now additionally threads:
+  - live.flow — the flow diagram's own channel values (pvW, pvToHomeW,
+    pvToBattW, battToHomeW, gridToHomeW, pvToGridW, homeToBattW, homeW,
+    batterySoc, timeToEmptyH) via a new getFlowPayload dep on
+    registerWelcomeRoute (wraps index.js's computeFlowPayload);
+  - live.usualHomeW — the 56-day profile's current weekday+hour cell;
+  - live.batteryUnits[] — per-solarbank state (soc/chargeW/cellsW/outputW/
+    temperature/mainSoc/expansions) from the flow payload's members;
+  - live.dayBrief — today's once-a-day briefing (production forecast,
+    expected house total + grid/battery split, expected night SOC, note).
+  ASK_SYSTEM_PROMPT documents all four blocks (including "answer
+  per-solarbank questions from batteryUnits, system totals from
+  batteryModules").
+- Verified live: "what is expected for today, will the battery last
+  through the night" → quoted the day brief (10.9 kWh PV, 10.2 house,
+  3 grid + 7.2 battery, night 10%) AND the live state; "how full is each
+  solarbank, is anything charging" → per-unit answer from batteryUnits.
