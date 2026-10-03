@@ -6120,3 +6120,19 @@ cross-cutting), every finding re-verified by hand before fixing:
   The .house-view container no longer paints a black background or
   border — the app's own dark background shows through the cutout.
   (Processing script: /tmp — redo if the source image ever changes.)
+
+## Artistic view (iteration 4): per-unit dock links on the RED cables only, geometry re-measured (2026-10-03, user's annotated image)
+
+- User supplied the image with annotations: BLUE = connections not
+  required to be displayed, RED = the solarbank↔Power Dock connections.
+  Between each solarbank and the dock the picture paints TWO cables —
+  the per-unit animated edges now follow only the UPPER (red) pair, as
+  direction-aware quadratic curves (d = unit→dock, dRev = dock→unit);
+  the lower (blue) pair stays untouched (we never drew on it).
+- Geometry re-measured against that native-resolution crop: the
+  solarbank box tops sit at ~69-70.5% height (my it2/it3 overlay rects
+  started at 64.5/67.5 — the fill would have painted the wall above the
+  boxes at high SOC): BATT_RECTS now SB4 (43/69.3/8.8/21.5), SB2
+  (66.5/70.5/8.7/20.3); the roof cables land on the box tops (69.3 /
+  70.5); the dock's vertical house cable is x≈58.4 from y≈69.3; the
+  grid chain sits at y≈71 (SB2 → junction → meter → pylon).

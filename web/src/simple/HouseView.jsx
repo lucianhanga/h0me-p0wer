@@ -23,8 +23,8 @@ const GRID_POS = { x: 95.5, y: 75.5 };
 // Battery stack overlays — each rect covers the solarbank AND its BP5000
 // below it in the picture (one fill for the unit's total SOC).
 const BATT_RECTS = [
-  { pn: "AE103", left: 43.5, top: 64.5, width: 8.5, height: 26.5 }, // Solarbank 4 (left, bigger)
-  { pn: "A17C1", left: 67.5, top: 67.5, width: 8, height: 23.5 }, // Solarbank 2 Pro (right)
+  { pn: "AE103", left: 43, top: 69.3, width: 8.8, height: 21.5 }, // Solarbank 4 (left, bigger)
+  { pn: "A17C1", left: 66.5, top: 70.5, width: 8.7, height: 20.3 }, // Solarbank 2 Pro (right)
 ];
 
 // The painted roof cable bundles (verified against the user's highlighted
@@ -32,31 +32,33 @@ const BATT_RECTS = [
 // each with the bend where it curves from the roof edge into the
 // vertical wall run.
 const PV_CABLES = [
-  { pn: "AE103", d: "M 46.5 36.8 L 47 37.5 Q 47.3 38 47.3 39.2 L 47.3 64.5", lx: 43.5, ly: 52 },
-  { pn: "A17C1", d: "M 69.5 32.7 L 70.6 33.2 Q 71.4 33.5 71.4 34.7 L 71.4 67.5", lx: 74.5, ly: 52 },
+  { pn: "AE103", d: "M 46.5 36.8 L 47 37.5 Q 47.3 38 47.3 39.2 L 47.3 69.3", lx: 43.5, ly: 52 },
+  { pn: "A17C1", d: "M 69.5 32.7 L 70.6 33.2 Q 71.4 33.5 71.4 34.7 L 71.4 70.5", lx: 74.5, ly: 52 },
 ];
 
-// Each solarbank's own cable to the Power Dock.
+// Each solarbank's own cable to the Power Dock — the UPPER (red) cables
+// of the picture; the LOWER (blue-marked) pair is deliberately not drawn
+// (user's annotated image 2026-10-03: blue = not required to display).
 const UNIT_EDGE = {
-  AE103: { from: { x: 52.2, y: 69 }, to: { x: 55.7, y: 70 }, lx: 51.5, ly: 66.5 },
-  A17C1: { from: { x: 67.2, y: 70 }, to: { x: 61.7, y: 70.5 }, lx: 64.4, ly: 67 },
+  AE103: { d: "M 52.1 72.3 Q 54 75 55.7 74.2", dRev: "M 55.7 74.2 Q 54 75 52.1 72.3", lx: 53.8, ly: 69.5 },
+  A17C1: { d: "M 66.4 69.8 Q 64 71.5 61.5 72.3", dRev: "M 61.5 72.3 Q 64 71.5 66.4 69.8", lx: 64, ly: 68.5 },
 };
 
-// The dock's own vertical cable up the wall (x ≈ 58.6) — it carries
+// The dock's own vertical wall cable (x ≈ 58.4) — it carries
 // EVERYTHING between the battery system and the house, so the three
 // logical flows run as hair-offset parallel dashes on it: PV→home (green,
 // up), battery→home (purple, up), home→battery = grid charging (orange,
 // down).
 const DOCK_CABLE = {
-  "pv-home": { d: "M 58.2 70 L 58.2 55", color: "#5fce80", lx: 54.5, ly: 57 },
-  "batt-home": { d: "M 59 70 L 59 55", color: "#c084fc", lx: 62, ly: 57 },
-  "home-batt": { d: "M 58.6 55 L 58.6 70", color: "#f7a44f", lx: 58.6, ly: 50.5 },
+  "pv-home": { d: "M 58.1 69.3 L 58.1 55", color: "#5fce80", lx: 54.5, ly: 57 },
+  "batt-home": { d: "M 58.7 69.3 L 58.7 55", color: "#c084fc", lx: 62, ly: 57 },
+  "home-batt": { d: "M 58.4 55 L 58.4 69.3", color: "#f7a44f", lx: 58.4, ly: 50.5 },
 };
 
-// The grid chain on the right: house junction box → meter → pylon.
+// The grid chain on the right: SB2 → house junction box → meter → pylon.
 const GRID_EDGE = {
-  "grid-home": { d: "M 96 68.4 L 80.5 68.4", color: "#f7a44f", lx: 88, ly: 65.5 },
-  "home-grid": { d: "M 80.5 68.4 L 96 68.4", color: "#f7a44f", lx: 88, ly: 65.5 },
+  "grid-home": { d: "M 96.5 71 L 79.5 71", color: "#f7a44f", lx: 87.5, ly: 67.8 },
+  "home-grid": { d: "M 79.5 71 L 96.5 71", color: "#f7a44f", lx: 87.5, ly: 67.8 },
 };
 
 const lvlColor = (soc) =>
@@ -157,9 +159,8 @@ export default function HouseView({ flow, params }) {
           const cellsW = u?.live?.cellsW ?? 0;
           const discharging = cellsW > chargeW && cellsW > 0;
           const w = discharging ? cellsW : chargeW > 0 ? chargeW : 0;
-          const from = discharging ? geo.from : geo.to;
-          const to = discharging ? geo.to : geo.from;
-          return <Cable key={rect.pn} d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`} watts={w} color="#c084fc" />;
+          // d = unit → dock (discharging), dRev = dock → unit (charging).
+          return <Cable key={rect.pn} d={discharging ? geo.d : geo.dRev} watts={w} color="#c084fc" />;
         })}
         {/* The dock's vertical house cable: the three logical flows as
             parallel dashes. */}
