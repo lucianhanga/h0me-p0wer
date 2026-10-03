@@ -4,45 +4,57 @@ import { buildFlowModel } from "../flow/model.js";
 import { useTweenedWatts } from "../useTweenedValue.js";
 
 // The artistic view (2026-10-03, user request): the house picture with the
-// live energy flow drawn ON it — PV production on the roof, the battery
-// stacks as semi-transparent SOC fills (Solarbank 4 left, bigger; Solarbank
-// 2 right), both connected to the Power Dock which pushes power to the
-// house, and the grid symbol far right. Values come from the SAME
-// buildFlowModel the basic diagram uses — the WHAT can never drift, only
-// the HOW.
+// live energy flow drawn ON it — animated along the connections ALREADY
+// PAINTED in the picture (iteration 2, user request): the two roof cable
+// bundles feed the solarbanks directly, each solarbank connects to the
+// Power Dock, the dock's own vertical cable feeds the house, and the
+// junction → meter → pylon chain on the right is the grid. Values come
+// from the SAME buildFlowModel the basic diagram uses — the WHAT can
+// never drift, only the HOW.
 //
-// Geometry: percent of the 1536×1024 image (web/public/house.jpg), so it
-// scales with any display width while keeping full resolution for zooming.
+// Geometry: percent of the 1536×1024 image (web/public/house.jpg), traced
+// against the painted hardware at native resolution. The SVG uses
+// viewBox 0 0 100 100 preserveAspectRatio="none", so all coordinates are
+// plain image percents; labels are HTML (SVG text would distort).
 const PV_POS = { x: 50, y: 18 };
 const HOME_POS = { x: 33, y: 46 };
-const DOCK_POS = { x: 58.5, y: 70 };
-const GRID_POS = { x: 95, y: 68 };
+const GRID_POS = { x: 95.5, y: 75.5 };
 
-// Battery stack overlays — aligned with the hardware in the picture:
-// each rect covers the solarbank AND its BP5000 below it (one fill for
-// the unit's total SOC).
+// Battery stack overlays — each rect covers the solarbank AND its BP5000
+// below it in the picture (one fill for the unit's total SOC).
 const BATT_RECTS = [
-  { pn: "AE103", left: 44.5, top: 63, width: 8.5, height: 27 }, // Solarbank 4 (left, bigger)
-  { pn: "A17C1", left: 66.5, top: 63, width: 8.5, height: 27 }, // Solarbank 2 Pro (right)
+  { pn: "AE103", left: 43.5, top: 64.5, width: 8.5, height: 26.5 }, // Solarbank 4 (left, bigger)
+  { pn: "A17C1", left: 67.5, top: 67.5, width: 8, height: 23.5 }, // Solarbank 2 Pro (right)
 ];
 
-// Edge paths in image-percent coordinates (SVG viewBox 0 0 100 100 with
-// preserveAspectRatio="none" — plain image percents on both axes).
-// Labels are HTML (lx/ly), never SVG text: non-uniform viewBox scaling
-// would distort them.
-const EDGE_PATHS = {
-  "pv-batt": { d: "M 50 26 L 50 55 L 58.5 66", lx: 51.5, ly: 44 },
-  "pv-home": { d: "M 44 26 L 44 38 L 36 43", lx: 40, ly: 34 },
-  "batt-home": { d: "M 56 65 L 46 52", lx: 49, ly: 55 },
-  "home-batt": { d: "M 46 52 L 56 65", lx: 49, ly: 55 },
-  "grid-home": { d: "M 96 68 L 81 68", lx: 88, ly: 65 },
-  "home-grid": { d: "M 81 68 L 96 68", lx: 88, ly: 65 },
+// The painted roof cable bundles (verified against the user's highlighted
+// picture 2026-10-03): left → Solarbank 4 Pro, right → Solarbank 2.
+const PV_CABLES = [
+  { pn: "AE103", d: "M 47 38 L 47 64.5", lx: 43.5, ly: 52 },
+  { pn: "A17C1", d: "M 71.5 34 L 71.5 67.5", lx: 74.5, ly: 52 },
+];
+
+// Each solarbank's own cable to the Power Dock.
+const UNIT_EDGE = {
+  AE103: { from: { x: 52.2, y: 69 }, to: { x: 55.7, y: 70 }, lx: 51.5, ly: 66.5 },
+  A17C1: { from: { x: 67.2, y: 70 }, to: { x: 61.7, y: 70.5 }, lx: 64.4, ly: 67 },
 };
 
-// Per-unit connections to the Power Dock (horizontal, into the dock).
-const UNIT_EDGE = {
-  AE103: { from: { x: 53, y: 70 }, to: { x: 55.5, y: 70 }, lx: 54.2, ly: 66.5 },
-  A17C1: { from: { x: 66, y: 70 }, to: { x: 62.5, y: 70 }, lx: 64.2, ly: 66.5 },
+// The dock's own vertical cable up the wall (x ≈ 58.6) — it carries
+// EVERYTHING between the battery system and the house, so the three
+// logical flows run as hair-offset parallel dashes on it: PV→home (green,
+// up), battery→home (purple, up), home→battery = grid charging (orange,
+// down).
+const DOCK_CABLE = {
+  "pv-home": { d: "M 58.2 70 L 58.2 55", color: "#5fce80", lx: 54.5, ly: 57 },
+  "batt-home": { d: "M 59 70 L 59 55", color: "#c084fc", lx: 62, ly: 57 },
+  "home-batt": { d: "M 58.6 55 L 58.6 70", color: "#f7a44f", lx: 58.6, ly: 50.5 },
+};
+
+// The grid chain on the right: house junction box → meter → pylon.
+const GRID_EDGE = {
+  "grid-home": { d: "M 96 68.4 L 80.5 68.4", color: "#f7a44f", lx: 88, ly: 65.5 },
+  "home-grid": { d: "M 80.5 68.4 L 96 68.4", color: "#f7a44f", lx: 88, ly: 65.5 },
 };
 
 const lvlColor = (soc) =>
@@ -60,11 +72,11 @@ function EdgeLabel({ x, y, watts, color }) {
   );
 }
 
-function Edge({ id, def, watts, color }) {
+function Cable({ d, watts, color }) {
   const active = (watts ?? 0) > 0;
   return (
     <path
-      d={def.d}
+      d={d}
       fill="none"
       stroke={active ? color : "#2a3238"}
       strokeWidth={active ? 0.7 : 0.5}
@@ -75,7 +87,7 @@ function Edge({ id, def, watts, color }) {
 }
 
 // One battery stack: a semi-transparent fill (height = unit SOC) over the
-// hardware in the picture, tinted by level, with the flow streak while
+// hardware in the picture, tinted by level, with the flow sheen while
 // charging/discharging, plus the SOC figure and the unit's name.
 function BatteryOverlay({ rect, unit, t }) {
   const soc = unit?.live?.soc ?? null;
@@ -105,9 +117,9 @@ function BatteryOverlay({ rect, unit, t }) {
   );
 }
 
-function Chip({ pos, color, children, align = "center" }) {
+function Chip({ pos, color, children }) {
   return (
-    <div className="hv-chip" style={{ left: `${pos.x}%`, top: `${pos.y}%`, color, transform: `translate(-50%, -50%)`, textAlign: align }}>
+    <div className="hv-chip" style={{ left: `${pos.x}%`, top: `${pos.y}%`, color, transform: "translate(-50%, -50%)" }}>
       {children}
     </div>
   );
@@ -128,18 +140,12 @@ export default function HouseView({ flow, params }) {
     <div className="house-view">
       <img src="/house.jpg" alt={t("simple.houseAlt")} draggable="false" />
       <svg className="hv-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
-        {Object.entries(EDGE_PATHS).map(([id, def]) => {
-          const colors = {
-            "pv-batt": "#5fce80",
-            "pv-home": "#5fce80",
-            "batt-home": "#c084fc",
-            "home-batt": "#f7a44f",
-            "grid-home": "#f7a44f",
-            "home-grid": "#f7a44f",
-          };
-          return <Edge key={id} id={id} def={def} watts={edgeWatts[id] ?? 0} color={colors[id]} />;
-        })}
-        {/* Per-unit flows into the Power Dock: discharge = unit → dock,
+        {/* The painted roof cables: PV DC into each solarbank (the unit's
+            own pvW — what the panels on its strings deliver right now). */}
+        {PV_CABLES.map((c) => (
+          <Cable key={c.pn} d={c.d} watts={unitOf(c.pn)?.live?.pvW ?? 0} color="#5fce80" />
+        ))}
+        {/* Each solarbank ↔ Power Dock: discharge = unit → dock,
             charge = dock → unit. */}
         {BATT_RECTS.map((rect) => {
           const u = unitOf(rect.pn);
@@ -147,36 +153,26 @@ export default function HouseView({ flow, params }) {
           const chargeW = u?.live?.chargeW ?? 0;
           const cellsW = u?.live?.cellsW ?? 0;
           const discharging = cellsW > chargeW && cellsW > 0;
-          const charging = chargeW > 0 && chargeW >= cellsW;
-          const w = discharging ? cellsW : charging ? chargeW : 0;
+          const w = discharging ? cellsW : chargeW > 0 ? chargeW : 0;
           const from = discharging ? geo.from : geo.to;
           const to = discharging ? geo.to : geo.from;
-          return (
-            <path
-              key={rect.pn}
-              d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`}
-              fill="none"
-              stroke={w > 0 ? "#c084fc" : "#2a3238"}
-              strokeWidth={w > 0 ? 0.7 : 0.5}
-              strokeDasharray={w > 0 ? "1.6 1.6" : undefined}
-              className={w > 0 ? "flow-edge-anim" : undefined}
-            />
-          );
+          return <Cable key={rect.pn} d={`M ${from.x} ${from.y} L ${to.x} ${to.y}`} watts={w} color="#c084fc" />;
         })}
+        {/* The dock's vertical house cable: the three logical flows as
+            parallel dashes. */}
+        {Object.entries(DOCK_CABLE).map(([id, def]) => (
+          <Cable key={id} d={def.d} watts={edgeWatts[id] ?? 0} color={def.color} />
+        ))}
+        {/* Grid chain: junction → meter → pylon (dominant direction). */}
+        {Object.entries(GRID_EDGE).map(([id, def]) => (
+          <Cable key={id} d={def.d} watts={edgeWatts[id] ?? 0} color={def.color} />
+        ))}
       </svg>
 
-      {/* HTML edge labels (outside the distorted SVG coordinate space). */}
-      {Object.entries(EDGE_PATHS).map(([id, def]) => {
-        const colors = {
-          "pv-batt": "#5fce80",
-          "pv-home": "#5fce80",
-          "batt-home": "#c084fc",
-          "home-batt": "#f7a44f",
-          "grid-home": "#f7a44f",
-          "home-grid": "#f7a44f",
-        };
-        return <EdgeLabel key={id} x={def.lx} y={def.ly} watts={edgeWatts[id] ?? 0} color={colors[id]} />;
-      })}
+      {/* HTML labels (outside the distorted SVG coordinate space). */}
+      {PV_CABLES.map((c) => (
+        <EdgeLabel key={c.pn} x={c.lx} y={c.ly} watts={unitOf(c.pn)?.live?.pvW ?? 0} color="#5fce80" />
+      ))}
       {BATT_RECTS.map((rect) => {
         const u = unitOf(rect.pn);
         const geo = UNIT_EDGE[rect.pn];
@@ -185,6 +181,9 @@ export default function HouseView({ flow, params }) {
         const w = cellsW > chargeW ? cellsW : chargeW > 0 ? chargeW : 0;
         return <EdgeLabel key={rect.pn} x={geo.lx} y={geo.ly} watts={w} color="#c084fc" />;
       })}
+      {Object.entries({ ...DOCK_CABLE, ...GRID_EDGE }).map(([id, def]) => (
+        <EdgeLabel key={id} x={def.lx} y={def.ly} watts={edgeWatts[id] ?? 0} color={def.color} />
+      ))}
 
       {BATT_RECTS.map((rect) => (
         <BatteryOverlay key={rect.pn} rect={rect} unit={unitOf(rect.pn)} t={t} />
@@ -197,9 +196,6 @@ export default function HouseView({ flow, params }) {
       <Chip pos={HOME_POS} color="#e8ecef">
         <div className="hv-chip-label">{t("flow.home")}</div>
         <div className="hv-chip-value">{d?.homeW != null ? `${Math.round(d.homeW)} W` : "—"}</div>
-      </Chip>
-      <Chip pos={DOCK_POS} color="#8b98a5">
-        <div className="hv-chip-label hv-dock-label">{t("flow.powerDock")}</div>
       </Chip>
       <Chip pos={GRID_POS} color="#f7a44f">
         <div className="hv-chip-label">{t("flow.grid")}</div>

@@ -6082,3 +6082,24 @@ cross-cutting), every finding re-verified by hand before fixing:
   uses viewBox 0 0 100 100 preserveAspectRatio="none" so all
   coordinates are plain image percents.
 - i18n: view.artisticTip, flow.powerDock, simple.houseAlt (en/de/ro).
+
+## Artistic view (iteration 2): animations follow the picture's PAINTED cables (2026-10-03, user request)
+
+- User: "use the already existing painted connections from the picture
+  to animate the flow of current" — and supplied a highlighted copy of
+  the image (red = PV → Solarbank 4 Pro) to trace the circuit (the app
+  keeps using the ORIGINAL, unhighlighted house.jpg — the highlighted
+  one was only for tracing). All edges re-traced at native resolution:
+  - the two roof cable bundles feed the solarbanks DIRECTLY (left at
+    x≈47 from y≈38 to the SB4, right at x≈71.5 from y≈34 to the SB2),
+    each animating with its own unit's pvW (physically the DC arrival)
+  - per-unit dock links along the painted SB4→Dock / SB2→Dock cables
+  - the dock's own vertical wall cable (x≈58.6) carries the three
+    logical flows as hair-offset parallel dashes: PV→home (green, up),
+    battery→home (purple, up), home→battery = grid charging (orange,
+    down)
+  - the grid is the right-side chain: house junction → meter → pylon
+    (y≈68.4, dominant direction)
+  - battery overlay rects re-measured against the actual boxes (SB4
+    43.5/64.5/8.5/26.5, SB2 67.5/67.5/8/23.5); the dock label chip was
+    dropped (the picture itself prints "Solar Power Dock")
