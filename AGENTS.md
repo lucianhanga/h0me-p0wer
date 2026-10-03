@@ -6158,3 +6158,30 @@ cross-cutting), every finding re-verified by hand before fixing:
   /api/flow's pv object gains peakW (PV_PEAK_KWP × 1000 — 12 × 500 W =
   6000 W) and the PV node's sub-line reads "13 % of 6 kWp"
   (flow.pvOfMax in en/de/ro).
+
+## Home node: "usual ≈ N W" from the 56-day home_usage profile (2026-10-03, user request)
+
+- User: "in the Home rectangle I want an estimation of the usual consume
+  in that period of time on that day — calculate it based on the
+  historic values; remake the historic values calculations in the
+  backend regularly."
+- Source: the site-level device_type "home_usage" day-trend (73× 20-min
+  power points/day — probed: exact home consumption). New
+  cloud_home_history table (same shape/guards as cloud_pv_history:
+  label normalization, zero-clobber guard), synced today+yesterday every
+  15 min alongside solar_production and backfilled 30 days by
+  catchUpBatteryPvHistory (own missing-day set, 6 s/day throttle).
+  GOTCHA found the hard way: home_usage returns ALL-ZERO trends when
+  device_sn is a solarbank SN — it needs device_sn="" (verified by
+  direct probe); the first sync stored 31 zero days, wiped via the kv
+  flag home_history_zero_fix_v1.
+- Profile: computeConsumptionProfile(56) (db.js) = avg W per
+  (weekday, hour), skipping partial days (< 20 covered hours) and
+  ALL-ZERO days (the recreated site returns zeros for every
+  pre-creation day — 25 of the first 31 days were data holes and
+  dragged every cell ~6x low before this filter). Recomputed HOURLY
+  into kv consumption_profile_v1 ("regularly", per the user) and served
+  as /api/flow's home.usualW (null until ≥ 5 usable days). The flow
+  model renders it as the Home node's sub-line ("usual ≈ 422 W",
+  flow.usualW in en/de/ro). Verified live: live 436 W next to usual
+  422 W on a Saturday evening.

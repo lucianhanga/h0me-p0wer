@@ -144,6 +144,7 @@ export const de = {
     home: "Haus",
     battery: "Akku",
     pvOfMax: "{pct} % von {kwp} kWp",
+    usualW: "üblich ≈ {w} W",
     eta: "≈ {eta}",
     ariaLabel: "Energiefluss",
   },

@@ -819,6 +819,142 @@ const selectCloudPvDayRows = db.prepare(`
   WHERE period_type = 'day' AND period_start >= ? AND period_start <= ?
 `);
 
+// --- Home-consumption day-trends (device_type "home_usage") ---------------
+// Same shape as cloud_pv_history: 20-min power averages per day, kept
+// forever. This is the source for the "usual consumption" profile the
+// flow diagram's Home node shows (2026-10-03, user request) — Anker's
+// cloud records it independently of whether OUR poller was running.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS cloud_home_history (
+    period_type TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    label TEXT NOT NULL,
+    power REAL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (period_type, period_start, label)
+  )
+`);
+
+const upsertCloudHomeRow = db.prepare(`
+  INSERT OR REPLACE INTO cloud_home_history (period_type, period_start, label, power, fetched_at)
+  VALUES (?, ?, ?, ?, ?)
+`);
+
+const selectHomePeriodStarts = db.prepare(`
+  SELECT DISTINCT period_start FROM cloud_home_history WHERE period_type = ?
+`);
+
+export function getStoredHomePeriodStarts(type = "day") {
+  return new Set(selectHomePeriodStarts.all(type).map((r) => r.period_start));
+}
+
+// One-time cleanup for the 2026-10-03 device_sn bug (first home_usage sync
+// passed the solarbank SN, which makes the endpoint return all-zero
+// trends) — wipe so the backfill refetches with the fixed call.
+export function wipeCloudHomeHistory() {
+  db.exec("DELETE FROM cloud_home_history");
+}
+
+const selectCloudHomeDaySum = db.prepare(`
+  SELECT COALESCE(SUM(power), 0) AS s FROM cloud_home_history WHERE period_type = ? AND period_start = ?
+`);
+
+export function saveCloudHomeTrend(type, start, dataTrend) {
+  const now = Date.now();
+  // Same zero-clobber guard as saveCloudPvTrend (the 2026-09-26 recreated-
+  // site incident class). A real home never draws exactly 0 W for a whole
+  // day, so the guard is safe.
+  const incomingSum = dataTrend.reduce((a, t) => a + (num(t.power) ?? 0), 0);
+  if (incomingSum === 0 && selectCloudHomeDaySum.get(type, start)?.s > 0) {
+    console.warn(`[db] refused to overwrite nonzero home history for ${start} with an all-zero trend`);
+    return;
+  }
+  db.exec("BEGIN");
+  try {
+    for (const t of dataTrend) {
+      // Normalize labels to "HH:MM:SS" (same mixed-format lesson as
+      // saveCloudPvTrend, 2026-09-27).
+      const label = String(t.time).length === 5 ? `${t.time}:00` : String(t.time);
+      upsertCloudHomeRow.run(type, start, label, num(t.power), now);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+// Usual-consumption profile: average W per (weekday, hour) over the last
+// `days` days of home-usage history, skipping poorly-covered days. Used by
+// /api/flow's home.usualW (2026-10-03, user request — recomputed hourly).
+const selectHomeRowsSince = db.prepare(`
+  SELECT period_start, label, power FROM cloud_home_history
+  WHERE period_type = 'day' AND period_start >= ?
+`);
+
+export function computeConsumptionProfile(days = 56) {
+  const since = new Date(Date.now() - days * 86400000);
+  const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
+  const byDay = new Map(); // period_start -> Map(hour -> [w, w, w])
+  for (const r of selectHomeRowsSince.all(sinceStr)) {
+    if (r.power == null) continue;
+    const hour = Number(String(r.label).slice(0, 2));
+    if (!byDay.has(r.period_start)) byDay.set(r.period_start, new Map());
+    const hours = byDay.get(r.period_start);
+    if (!hours.has(hour)) hours.set(hour, []);
+    hours.get(hour).push(r.power);
+  }
+  // Weekday per date, averaged per (weekday, hour). Two day-level filters:
+  // partial days (< 20 covered hours skew the profile), and ALL-ZERO days —
+  // a real home never draws exactly 0 W for 24 h, so an all-zero day is a
+  // data hole (the recreated site returns zeros for every pre-creation day,
+  // 2026-10-03: 25 of 31 days were zeros and dragged every cell ~6x low).
+  const cells = {}; // dow -> hour -> {sum, n}
+  let daysUsed = 0;
+  for (const [dateStr, hours] of byDay) {
+    if (hours.size < 20) continue;
+    let daySum = 0;
+    for (const ws of hours.values()) daySum += ws.reduce((a, v) => a + v, 0);
+    if (daySum === 0) continue;
+    daysUsed += 1;
+    const dow = new Date(`${dateStr}T12:00:00`).getDay();
+    if (!cells[dow]) cells[dow] = {};
+    for (const [hour, ws] of hours) {
+      const avg = ws.reduce((a, v) => a + v, 0) / ws.length;
+      if (!cells[dow][hour]) cells[dow][hour] = { sum: 0, n: 0 };
+      cells[dow][hour].sum += avg;
+      cells[dow][hour].n += 1;
+    }
+  }
+  const profile = {};
+  for (const [dow, hours] of Object.entries(cells)) {
+    profile[dow] = {};
+    for (const [hour, { sum, n }] of Object.entries(hours)) {
+      profile[dow][hour] = Math.round(sum / n);
+    }
+  }
+  return { at: Date.now(), daysUsed, cells: profile };
+}
+
+const selectCloudHomeDayRows = db.prepare(`
+  SELECT period_start, label, power FROM cloud_home_history
+  WHERE period_type = 'day' AND period_start >= ? AND period_start <= ?
+`);
+
+export function getCloudHomeDayPower(fromDate, toDate) {
+  // Same per-interval dedupe as getCloudPvDayPower (label-format lesson).
+  const byInterval = new Map();
+  for (const r of selectCloudHomeDayRows.all(fromDate, toDate)) {
+    const key = `${r.period_start}T${String(r.label).slice(0, 5)}`;
+    const cur = byInterval.get(key);
+    if (cur == null || (r.power ?? 0) > (cur.power ?? 0)) byInterval.set(key, r);
+  }
+  return [...byInterval.values()].map((r) => ({
+    ts: new Date(`${r.period_start}T${r.label}`).getTime(),
+    power: r.power,
+  }));
+}
+
 export function getCloudPvDayPower(fromDate, toDate) {
   // Dedupe per 20-min interval, preferring NONZERO (2026-09-27): the
   // recreated h-solar site returns solar_production labels as "HH:MM" while
