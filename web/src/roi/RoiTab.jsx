@@ -77,14 +77,21 @@ export default function RoiTab() {
   // cumulative baseline savings at Dec 31 minus the investment (the
   // forecast curve crosses invested exactly at paybackDate).
   const breakEvenYear = data.paybackDate ? new Date(`${data.paybackDate}T00:00:00`).getFullYear() : null;
-  const breakEvenYearProfitEur = (() => {
-    if (breakEvenYear == null) return null;
-    const eoy = `${breakEvenYear}-12-31`;
+  // Cumulative baseline savings at a date, walked from the payload's
+  // forecastSeries (dates are ISO strings, series is sorted).
+  const cumulativeAt = (iso) => {
     let cum = null;
     for (const p of data.forecastSeries ?? []) {
-      if (p.date <= eoy) cum = p.cumulativeEur;
+      if (p.date <= iso) cum = p.cumulativeEur;
       else break;
     }
+    return cum;
+  };
+  const breakEvenCumulativeEur =
+    data.paybackDate != null ? cumulativeAt(data.paybackDate) : null;
+  const breakEvenYearProfitEur = (() => {
+    if (breakEvenYear == null) return null;
+    const cum = cumulativeAt(`${breakEvenYear}-12-31`);
     return cum != null ? Math.round((cum - data.totalInvestedEur) * 100) / 100 : null;
   })();
 
@@ -199,34 +206,50 @@ export default function RoiTab() {
 
       <h4>{t("roi.projection.title")}</h4>
       <div className="tiles roi-proj">
-        {breakEvenYear != null && (
-          <div className="tile">
-            <div className="tile-title">{t("roi.projection.breakEven")}</div>
-            <div className="tile-main">{breakEvenYear}</div>
-            {breakEvenYearProfitEur != null && (
-              <div className={`tile-sub ${breakEvenYearProfitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
-                {t("roi.projection.profitThatYear", {
-                  sign: breakEvenYearProfitEur >= 0 ? "+" : "−",
-                  eur: fmtEur(Math.abs(breakEvenYearProfitEur)),
-                })}
+        {[
+          ...data.projections.map((p) => ({ years: p.years, key: `y${p.years}`, proj: p })),
+          ...(data.daysToPayback != null && breakEvenYear != null
+            ? [{ years: data.daysToPayback / 365.25, key: "be" }]
+            : []),
+        ]
+          // Break-even tile sorts INTO the year sequence (2026-10-03, user
+          // request: "put the break even tile in the right order of years,
+          // make it look like the others, just highlighted").
+          .sort((a, b) => a.years - b.years)
+          .map((entry) =>
+            entry.proj ? (
+              <div className="tile" key={entry.key}>
+                <div className="tile-title">
+                  {entry.proj.years} {t(entry.proj.years === 1 ? "roi.projection.year" : "roi.projection.years")}
+                </div>
+                <div className="tile-main">{fmtEur(entry.proj.cumulativeSavingsEur)}</div>
+                <div className={`tile-sub ${entry.proj.profitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
+                  {t("roi.projection.profit", {
+                    sign: entry.proj.profitEur >= 0 ? "+" : "−",
+                    eur: fmtEur(Math.abs(entry.proj.profitEur)),
+                  })}
+                </div>
               </div>
-            )}
-          </div>
-        )}
-        {data.projections.map((p) => (
-          <div className="tile" key={p.years}>
-            <div className="tile-title">
-              {p.years} {t(p.years === 1 ? "roi.projection.year" : "roi.projection.years")}
-            </div>
-            <div className="tile-main">{fmtEur(p.cumulativeSavingsEur)}</div>
-            <div className={`tile-sub ${p.profitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
-              {t("roi.projection.profit", {
-                sign: p.profitEur >= 0 ? "+" : "−",
-                eur: fmtEur(Math.abs(p.profitEur)),
-              })}
-            </div>
-          </div>
-        ))}
+            ) : (
+              <div className="tile roi-be" key={entry.key}>
+                <div className="tile-title">
+                  {t("roi.projection.breakEven")} {breakEvenYear}
+                </div>
+                {/* Same shape as the year tiles: cumulative savings at the
+                    break-even point (≈ the invested sum by construction),
+                    then the profit earned inside that year. */}
+                <div className="tile-main">{fmtEur(breakEvenCumulativeEur ?? data.totalInvestedEur)}</div>
+                {breakEvenYearProfitEur != null && (
+                  <div className={`tile-sub ${breakEvenYearProfitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
+                    {t("roi.projection.profitThatYear", {
+                      sign: breakEvenYearProfitEur >= 0 ? "+" : "−",
+                      eur: fmtEur(Math.abs(breakEvenYearProfitEur)),
+                    })}
+                  </div>
+                )}
+              </div>
+            ),
+          )}
       </div>
 
       <p className="muted">
