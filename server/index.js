@@ -35,6 +35,10 @@ import {
   getPvStringKwhForDay,
   saveCloudPvTrend,
   getStoredPvPeriodStarts,
+  saveCloudHomeTrend,
+  getStoredHomePeriodStarts,
+  computeConsumptionProfile,
+  wipeCloudHomeHistory,
   pruneBattery,
   savePvDaily,
   saveGridDaily,
@@ -650,6 +654,15 @@ async function computeFlowPayload() {
       // equal the diagram's Home node; the despiked value stays with the
       // controller). Meter-derived fallback only when the feed is down.
       consumption: appCh ? b.homeLoadW : latestHomeConsumptionW,
+      // Usual consumption for this weekday+hour from the 56-day profile
+      // (2026-10-03, user request — see refreshConsumptionProfile). null
+      // until enough history exists (< 5 usable days).
+      usualW: (() => {
+        const p = kvGet("consumption_profile_v1")?.value;
+        if (!p || (p.daysUsed ?? 0) < 5) return null;
+        const now = new Date();
+        return p.cells?.[now.getDay()]?.[now.getHours()] ?? null;
+      })(),
     },
   };
 }
@@ -1384,6 +1397,31 @@ async function syncCloudHistory() {
         console.warn(`[cloud-sync] solar production day ${day} failed: ${err.message}`);
       }
     }
+
+    // Home-consumption day trend, site-level device_type "home_usage" —
+    // the source for the "usual consumption" profile on the flow diagram's
+    // Home node (2026-10-03, user request). Own table (cloud_home_history),
+    // same zero-clobber/label guards as the PV trend.
+    for (const dayOffset of [0, 1]) {
+      const d = new Date(now.getTime() - dayOffset * 86400000);
+      const day = iso(d);
+      try {
+        const data = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          // device_sn MUST be empty for home_usage (verified 2026-10-03):
+          // with a solarbank SN the endpoint returns all-zero trends.
+          deviceSn: "",
+          deviceType: "home_usage",
+          type: "day",
+          startTime: day,
+          endTime: "",
+        });
+        const rows = (data?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
+        saveCloudHomeTrend("day", day, rows);
+      } catch (err) {
+        console.warn(`[cloud-sync] home usage day ${day} failed: ${err.message}`);
+      }
+    }
   }
 }
 
@@ -1535,6 +1573,44 @@ async function catchUpBatteryPvHistory() {
         saveCloudPvTrend("day", start, pvRows);
       } catch (err) {
         console.warn(`[cloud-sync] PV backfill day ${start} failed: ${err.message}`);
+        completed = false;
+        break;
+      }
+      await sleep(6000);
+    }
+  }
+
+  // Home-usage backfill (2026-10-03 — feeds the "usual consumption"
+  // profile): its own missing-day set, same independent-missing rule as PV
+  // (2026-09-26 lesson — never let an unrelated fresh SN trigger a
+  // site-level refetch).
+  if (completed) {
+    const storedHome = getStoredHomePeriodStarts("day");
+    const missingHome = [];
+    for (let i = BACKFILL_DAYS; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const start = localDate(d);
+      if (!storedHome.has(start)) missingHome.push(start);
+    }
+    if (missingHome.length) {
+      console.log(`[cloud-sync] backfilling home usage (${missingHome.length} day(s))…`);
+    }
+    for (const start of missingHome) {
+      try {
+        const homeData = await anker.getEnergyAnalysis({
+          siteId: latestBattery.siteId,
+          // device_sn MUST be empty for home_usage (verified 2026-10-03).
+          deviceSn: "",
+          deviceType: "home_usage",
+          type: "day",
+          startTime: start,
+          endTime: "",
+        });
+        const homeRows = (homeData?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
+        saveCloudHomeTrend("day", start, homeRows);
+      } catch (err) {
+        console.warn(`[cloud-sync] home-usage backfill day ${start} failed: ${err.message}`);
         completed = false;
         break;
       }
@@ -1829,6 +1905,34 @@ setInterval(() => {
   rollupPvDaily();
   rollupGridDaily();
 }, 3600 * 1000).unref();
+
+// Usual-consumption profile for the flow diagram's Home node (2026-10-03,
+// user request — "remake the historic values calculations in the backend
+// regularly"): average W per (weekday, hour) over the last 56 days of the
+// home_usage cloud history, recomputed hourly into kv.
+// One-time cleanup (kv flag): the first sync passed the solarbank SN as
+// device_sn, which makes home_usage return all-ZERO trends (verified
+// 2026-10-03 — the endpoint needs device_sn="") — 31 days of useless zero
+// rows were stored. Delete them so the backfill refetches with the fixed
+// call (stored zero days would otherwise count as "not missing").
+if (!kvGet("home_history_zero_fix_v1")) {
+  try {
+    wipeCloudHomeHistory();
+    kvSet("home_history_zero_fix_v1", { at: Date.now() });
+    console.log("[cloud-sync] wiped the all-zero home_usage rows (device_sn bug) — refetching");
+  } catch (err) {
+    console.warn(`[cloud-sync] home-history cleanup failed: ${err.message}`);
+  }
+}
+function refreshConsumptionProfile() {
+  try {
+    kvSet("consumption_profile_v1", computeConsumptionProfile(56));
+  } catch (err) {
+    console.warn(`[profile] recompute failed: ${err.message}`);
+  }
+}
+refreshConsumptionProfile();
+setInterval(refreshConsumptionProfile, 3600 * 1000).unref();
 
 // Battery (Solarbank) live data: MQTT push (~3-5 s, same channel as the Anker
 // app) is the primary source once connected; the 30 s REST scen_info sync is

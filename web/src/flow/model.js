@@ -53,7 +53,15 @@ export function buildFlowModel(flow, t) {
       },
       // No value on the Grid node (user instruction) — arcs carry the usage.
       { id: "grid", label: t("flow.grid"), valueW: null, sub: null, color: "#f7a44f" },
-      { id: "home", label: t("flow.home"), valueW: d.homeW ?? null, sub: null, color: "#e8ecef" },
+      {
+        id: "home",
+        label: t("flow.home"),
+        valueW: d.homeW ?? null,
+        // Usual consumption for this weekday+hour from the 56-day
+        // home_usage profile (2026-10-03, user request).
+        sub: flow.home?.usualW != null ? t("flow.usualW", { w: flow.home.usualW }) : null,
+        color: "#e8ecef",
+      },
       {
         id: "batt",
         label: flow.battery?.name ?? t("flow.battery"),
