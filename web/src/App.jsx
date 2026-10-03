@@ -54,14 +54,13 @@ function Shell() {
         <h1>h0me-p0wer</h1>
         <AskButton />
         <ActivityBell />
-        {/* View cycle: full ◉ → simple ◑ → artistic 🏠 → full (2026-10-03). */}
         <button
           className={`view-toggle${view !== "full" ? " nav-active" : ""}`}
           onClick={() => setView(views[(views.indexOf(view) + 1) % views.length])}
           title={t(`view.${view}Tip`)}
           aria-label={t(`view.${view}Tip`)}
         >
-          {{ full: "◉", simple: "◑", artistic: "🏠" }[view]}
+          {{ full: "◉", simple: "◑" }[view]}
         </button>
         <button
           className="lang-btn"
@@ -88,7 +87,7 @@ function Shell() {
       </header>
       <main>
         {view !== "full" ? (
-          <SimpleHome artistic={view === "artistic"} />
+          <SimpleHome />
         ) : page === "welcome" ? (
           <WelcomeTab />
         ) : page === "live" ? (

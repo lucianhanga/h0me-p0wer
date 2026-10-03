@@ -6136,3 +6136,15 @@ cross-cutting), every finding re-verified by hand before fixing:
   (66.5/70.5/8.7/20.3); the roof cables land on the box tops (69.3 /
   70.5); the dock's vertical house cable is x≈58.4 from y≈69.3; the
   grid chain sits at y≈71 (SB2 → junction → meter → pylon).
+
+## Artistic view REMOVED (2026-10-03, user decision: "does not look right — remove the code and the artistic tab")
+
+- Four iterations (#321-#324, v1.5.166-v1.5.169) of the house-picture
+  view were built, tried, and ultimately rejected by the user. All of it
+  is removed: the third view mode (toggle is full ◉ / simple ◑ again),
+  HouseView.jsx, house.png (the alpha-cutout), all .house-view/.hv-*
+  CSS, and the view.artisticTip / flow.powerDock / simple.houseAlt i18n
+  keys. A stored "artistic" preference in a browser's localStorage falls
+  back to simple (VIEWS validation in ViewProvider). The iterations stay
+  in git history if the idea ever comes back — the flow-model split
+  (model.js WHAT vs variants HOW) remains the right seam for it.

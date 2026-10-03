@@ -20,7 +20,6 @@ export const de = {
   view: {
     simpleTip: "Einfache Ansicht — ein ruhiger Bildschirm",
     fullTip: "Volle Ansicht — alle Tabs und Details",
-    artisticTip: "Künstlerische Ansicht — das Haus mit dem Live-Fluss",
   },
   simple: {
     batteries: "Akkus",
@@ -144,7 +143,6 @@ export const de = {
     grid: "Netz",
     home: "Haus",
     battery: "Akku",
-    powerDock: "Power Dock",
     eta: "≈ {eta}",
     ariaLabel: "Energiefluss",
   },
