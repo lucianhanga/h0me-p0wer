@@ -897,7 +897,13 @@ export function computeConsumptionProfile(days = 56) {
   const sinceStr = `${since.getFullYear()}-${String(since.getMonth() + 1).padStart(2, "0")}-${String(since.getDate()).padStart(2, "0")}`;
   const byDay = new Map(); // period_start -> Map(hour -> [w, w, w])
   for (const r of selectHomeRowsSince.all(sinceStr)) {
-    if (r.power == null) continue;
+    // Skip null AND exact-zero rows (2026-10-03): today's trend pads the
+    // open and future 20-min intervals with 0 (verified: 574 W at 20:40,
+    // then 0 from 21:00 on while the house drew ~450 W) — a real home never
+    // averages exactly 0 W over a closed 20-min interval, so a zero is a
+    // data hole, not a measurement. Storing them poisoned the current
+    // hour's cell (Saturday 21:00 read "usual 0 W").
+    if (!r.power) continue;
     const hour = Number(String(r.label).slice(0, 2));
     if (!byDay.has(r.period_start)) byDay.set(r.period_start, new Map());
     const hours = byDay.get(r.period_start);
@@ -910,6 +916,9 @@ export function computeConsumptionProfile(days = 56) {
   // data hole (the recreated site returns zeros for every pre-creation day,
   // 2026-10-03: 25 of 31 days were zeros and dragged every cell ~6x low).
   const cells = {}; // dow -> hour -> {sum, n}
+  const cellsAny = {}; // hour -> {sum, n} — fallback when the weekday cell
+  // has no data yet (e.g. today's remaining evening hours with a young
+  // history where the current weekday has only ever produced past hours).
   let daysUsed = 0;
   for (const [dateStr, hours] of byDay) {
     if (hours.size < 20) continue;
@@ -924,6 +933,9 @@ export function computeConsumptionProfile(days = 56) {
       if (!cells[dow][hour]) cells[dow][hour] = { sum: 0, n: 0 };
       cells[dow][hour].sum += avg;
       cells[dow][hour].n += 1;
+      if (!cellsAny[hour]) cellsAny[hour] = { sum: 0, n: 0 };
+      cellsAny[hour].sum += avg;
+      cellsAny[hour].n += 1;
     }
   }
   const profile = {};
@@ -933,7 +945,11 @@ export function computeConsumptionProfile(days = 56) {
       profile[dow][hour] = Math.round(sum / n);
     }
   }
-  return { at: Date.now(), daysUsed, cells: profile };
+  const profileAny = {};
+  for (const [hour, { sum, n }] of Object.entries(cellsAny)) {
+    profileAny[hour] = Math.round(sum / n);
+  }
+  return { at: Date.now(), daysUsed, cells: profile, cellsAny: profileAny };
 }
 
 const selectCloudHomeDayRows = db.prepare(`
