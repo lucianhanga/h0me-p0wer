@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
-import { battCellsOf, battChgNetOf, rowValue } from "./derive.js";
+import { robustCap, rowValue, tightAxisBounds } from "./derive.js";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 
@@ -103,39 +103,8 @@ const MODULE_COLORS = ["#5fce80", "#c084fc", "#6bb8f5", "#f7a44f", "#e5544b", "#
 // resets only on a full page reload.
 const savedSpanMs = GRAPHS.map(() => null);
 
-// Robust axis cap: a rare, narrow spike (a handful of points out of ~800)
-// shouldn't set the whole chart's scale and flatten the normal range into a
-// thin band near the bottom (screenshot report, 2026-09-21: a brief
-// transient to ~2500 W squashed the usual ~200-800 W variation). The 98th
-// percentile barely differs from the true max on a genuine sustained peak
-// (many points near it stay in the top 2%), but excludes a narrow 1-2-point
-// transient — so this self-corrects: an ordinary window is untouched
-// (returns null, meaning "let the axis auto-scale as before"), only a real
-// outlier gets capped. `values` must already be non-negative (callers pass
-// `Math.abs()`'d magnitudes for a signed series' negative side).
-//
-// A spike only counts as an outlier when it beats the typical range by BOTH
-// a ratio AND an absolute margin (2026-09-22, user rule: mostly ~100 W with
-// one 1000 W -> outlier; mostly 0 W with one 100-200 W -> NOT an outlier).
-// A percentile-only test breaks down exactly on a near-zero baseline
-// (verified against live data: a window that's mostly 0 W with a brief
-// legit 150 W got capped at 0 W, hiding the real values entirely), and a
-// ratio-only test would cap e.g. 500 W baseline + 900 W peak, which is just
-// normal house variation. Hence both tests.
-const MIN_OUTLIER_DELTA_W = 300; // must be > the user's "100 or 200 over 0" case
-const MIN_OUTLIER_RATIO = 2;
-function robustCap(values) {
-  const sorted = values.filter((v) => v != null && Number.isFinite(v)).sort((a, b) => a - b);
-  if (!sorted.length) return null;
-  const rawMax = sorted[sorted.length - 1];
-  const p98 = sorted[Math.min(sorted.length - 1, Math.floor(0.98 * sorted.length))];
-  const cap = Math.max(50, Math.ceil((p98 * 1.15) / 50) * 50);
-  const isOutlier =
-    rawMax > cap &&
-    rawMax - p98 >= MIN_OUTLIER_DELTA_W &&
-    (p98 <= 0 || rawMax >= p98 * MIN_OUTLIER_RATIO);
-  return isOutlier ? { cap, rawMax } : null;
-}
+// robustCap() lives in derive.js (shared with the simple view's
+// charts since 2026-10-03) — the comment history moved with it.
 
 export default function GraphTab() {
   const t = useT();
@@ -415,25 +384,47 @@ export default function GraphTab() {
         // real transients it was eating. Exact sum = consistent by
         // construction.
         const homeSeries = rows.map((r) => rowValue("home", r));
+        const seriesData = def.series.map((s) =>
+          s.key === "home"
+            ? rows.map((r, i) => [r.t, homeSeries[i]])
+            : rows.map((r) => [r.t, rowValue(s.key, r)]),
+        );
 
         // Robust axis scaling (see robustCap()) — per-graph "envelope": the
-        // one series whose height actually determines how tall the chart
-        // needs to be. Battery is signed, so its positive (discharge) and
-        // negative (charge) sides are capped independently.
+        // per-row max/min across the graph's series (for the stacked charts
+        // the home/pv line IS the stack top, so the max covers the stack).
+        // Battery is signed, so its positive (discharge) and negative
+        // (charge) sides are capped independently.
         // ONLY the three POWER graphs (2026-09-30, user report): the cap ran
         // on the °C/% module charts too, computing a ~610 W battery-cells
         // cap and stretching the axes to 300 °C / 300 % (plus a nonsense
         // "peak 610 W (off-scale)" note). Module charts get fixed sane
         // caps instead — a battery never exceeds 60 °C or 100 %.
         const isModuleChart = gi >= 3;
-        const posCap = isModuleChart
-          ? null
-          : gi === 0
-            ? robustCap(homeSeries)
-            : gi === 1
-              ? robustCap(rows.map((r) => r.pv))
-              : robustCap(rows.map((r) => battCellsOf(r)));
-        const negCap = gi === 2 ? robustCap(rows.map((r) => -battChgNetOf(r))) : null;
+        const posEnv = rows.map((_, i) => {
+          let m = null;
+          for (const d of seriesData) {
+            const v = d[i][1];
+            if (v != null && Number.isFinite(v)) m = m == null ? v : Math.max(m, v);
+          }
+          return m;
+        });
+        const negEnv = rows.map((_, i) => {
+          let m = null;
+          for (const d of seriesData) {
+            const v = d[i][1];
+            if (v != null && Number.isFinite(v)) m = m == null ? v : Math.min(m, v);
+          }
+          return m;
+        });
+        const envOf = (arr) => arr.filter((v) => v != null && Number.isFinite(v));
+        const posCap = isModuleChart ? null : robustCap(posEnv);
+        // Negative-side capping for ALL power graphs now (2026-10-03 — was
+        // Battery-only): a brief export/charge blip stretches the axis floor
+        // the same way a spike stretches the top (the 12h screenshot that
+        // triggered the tight-axis request had a −1000 W floor from a few
+        // export buckets over a 200-800 W night).
+        const negCap = isModuleChart ? null : robustCap(negEnv.map((v) => -(v ?? 0)));
         setClippedArr((arr) =>
           arr.map((c, i) =>
             i === gi
@@ -447,20 +438,30 @@ export default function GraphTab() {
           ),
         );
 
+        // Tight axis bounds for the power graphs (2026-10-03, user request:
+        // "make the Y range as small as possible to accommodate the values")
+        // — the 2026-09-20 always-include-zero default wasted most of the
+        // chart height on typical windows. Capped extrema win over raw ones.
+        const posVals = envOf(posEnv);
+        const negVals = envOf(negEnv);
+        const tight = isModuleChart
+          ? null
+          : tightAxisBounds(
+              negCap ? -negCap.cap : negVals.length ? Math.min(...negVals) : null,
+              posCap ? posCap.cap : posVals.length ? Math.max(...posVals) : null,
+            );
+
         chart.setOption({
           yAxis: {
             // Temperature: FIXED −10…+50 °C (2026-10-02, user request —
             // the comfort-bound lines at 3/35 °C need a stable scale to
             // read against); SOC is exactly 0..100.
-            max: isModuleChart ? (def.unit === "°C" ? 50 : 100) : posCap ? posCap.cap : null,
-            min: isModuleChart ? (def.unit === "°C" ? -10 : 0) : negCap ? -negCap.cap : null,
+            max: isModuleChart ? (def.unit === "°C" ? 50 : 100) : (tight?.max ?? null),
+            min: isModuleChart ? (def.unit === "°C" ? -10 : 0) : (tight?.min ?? null),
           },
-          series: def.series.map((s) => ({
+          series: def.series.map((s, si) => ({
             name: s.name,
-            data:
-              s.key === "home"
-                ? rows.map((r, i) => [r.t, homeSeries[i]])
-                : rows.map((r) => [r.t, rowValue(s.key, r)]),
+            data: seriesData[si],
           })),
         });
       }

@@ -5979,3 +5979,27 @@ cross-cutting), every finding re-verified by hand before fixing:
 - CSS: .src-label nowrap+ellipsis (the new %-column squeezed labels into
   wraps), .src-pct muted tabular column. i18n dashboard.storedShare
   (en/de/ro). Verified desktop + 390px German phone (scrollW == 390).
+
+## Power charts: tight Y range (2026-10-03, user request + screenshot)
+
+- User (12h Home Power Usage screenshot, axis −1000…3000 W over mostly
+  200-800 W data): "maximize the shown data, make the Y range as small as
+  possible to accommodate the values. Temperature and load charts keep
+  their fixed ranges."
+- New tightAxisBounds(dataMin, dataMax) in graph/derive.js (shared Graph
+  tab + simple view): 8% padding snapped outward to a 1-2-5 nice step
+  (round tick labels — the 2026-09-20 lesson); all-positive charts keep 0
+  as floor only when the data actually comes near it. robustCap() moved
+  from GraphTab into derive.js unchanged (dual threshold: ratio AND ≥300 W
+  margin).
+- GraphTab applyRows: the envelope is now the per-row max/min across the
+  graph's series (covers the stack tops — home/pv lines equal them — and
+  the phase view's L1-L3), and NEGATIVE-side capping now applies to every
+  power graph (was Battery-only): a brief export blip stretched the floor
+  the same way spikes stretched the top. Axis = tight bounds around the
+  capped extrema; the "off-scale" note keeps working.
+- SimpleCharts: same tight bounds + same cap (a capped spike flat-tops
+  silently — no note mechanism in the glance view).
+- °C (−10…+50) and SOC (0…100) charts untouched per the request.
+- Verified: the 12h Home chart now renders 0…1500 W with "peak 2169 W
+  (off-scale)"; simple view −500…1000 W; module charts fixed as before.

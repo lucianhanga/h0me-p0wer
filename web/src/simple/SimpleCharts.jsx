@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
-import { rowValue } from "../graph/derive.js";
+import { robustCap, rowValue, tightAxisBounds } from "../graph/derive.js";
 import QuadFlipTile from "../components/QuadFlipTile.jsx";
 
 // Simple view's three read-only charts (2026-09-28, user request): house
@@ -50,6 +50,27 @@ function ChartCanvas({ def, rows }) {
   const ref = useRef(null);
   useEffect(() => {
     if (!rows?.length) return undefined;
+    const seriesData = def.series.map((s) => rows.map((r) => [r.t, rowValue(s.key, r)]));
+    // Tight y-axis around the data (2026-10-03, user request — same rule as
+    // the Graph tab's power charts, INCLUDING the same outlier cap: a kettle
+    // spike would otherwise stretch the glance view's axis exactly the way
+    // it used to stretch the Graph tab's; here a capped spike simply
+    // flat-tops silently, no "off-scale" note mechanism in this view). The
+    // stacked charts' line series (home / pv) equals the stack top, so the
+    // per-row max covers the stack.
+    let dataMin = null;
+    let dataMax = null;
+    for (const d of seriesData) {
+      for (const p of d) {
+        const v = p[1];
+        if (v == null || !Number.isFinite(v)) continue;
+        dataMin = dataMin == null ? v : Math.min(dataMin, v);
+        dataMax = dataMax == null ? v : Math.max(dataMax, v);
+      }
+    }
+    const posCap = robustCap(seriesData.flatMap((d) => d.map((p) => p[1])));
+    const negCap = robustCap(seriesData.flatMap((d) => d.map((p) => (p[1] != null ? -p[1] : null))));
+    const tight = tightAxisBounds(negCap ? -negCap.cap : dataMin, posCap ? posCap.cap : dataMax);
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption({
       animation: false,
@@ -84,11 +105,13 @@ function ChartCanvas({ def, rows }) {
       yAxis: {
         type: "value",
         splitNumber: 3,
+        min: tight?.min ?? null,
+        max: tight?.max ?? null,
         axisLabel: { color: "#8b98a5", fontSize: 11, formatter: (v) => `${Math.round(v)} W` },
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
       legend: { show: false }, // the title button carries the tile's identity
-      series: def.series.map((s) => ({
+      series: def.series.map((s, si) => ({
         name: s.name,
         type: "line",
         showSymbol: false,
@@ -98,7 +121,7 @@ function ChartCanvas({ def, rows }) {
         itemStyle: { color: s.color },
         areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
         emphasis: { disabled: true },
-        data: rows.map((r) => [r.t, rowValue(s.key, r)]),
+        data: seriesData[si],
       })),
     });
     const ro = new ResizeObserver(() => chart.resize());
