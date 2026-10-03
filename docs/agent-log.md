@@ -6054,3 +6054,13 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified: regenerated today's briefing with the new prompt ("Foggy today,
   with temperatures…", code 45 → fog glyph), screenshots desktop + 390px
   phone (scrollW == 390).
+
+## Weather glyphs redrawn as recognizable conditions (2026-10-03, user request)
+
+- User: "when you show the weather, put actually an appropriate icon which
+  represents the weather" — the bare-lines fog glyph read as a hamburger
+  menu. Glyph.jsx's weather set is now built on one shared cloud-silhouette
+  path (cloudPath(dy)) with condition marks: fog = cloud + lines, rain =
+  cloud + strokes, snow = cloud + dots, thunder = cloud + lightning,
+  partly = small sun + cloud, sun/cloud standalone. Verified by rendering
+  all 11 glyphs side-by-side and by a live screenshot (fog, code 45).
