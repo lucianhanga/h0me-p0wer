@@ -8,16 +8,17 @@ import { useT } from "../../i18n/LanguageProvider.jsx";
 // semantics never do. An artistic variant would swap node/edge rendering
 // (icons, richer visuals) against the same model.
 const POS = {
-  pv: { x: 220, y: 40 },
-  grid: { x: 55, y: 150 },
-  home: { x: 220, y: 150 },
-  batt: { x: 385, y: 150 },
+  pv: { x: 220, y: 46 },
+  grid: { x: 64, y: 152 },
+  home: { x: 220, y: 152 },
+  batt: { x: 376, y: 152 },
 };
 
-// Nodes 110×72 (2026-10-03, user request: "make the rectangles a bit
-// bigger" — exactly fills the 440-wide viewBox edge to edge).
-const NODE_W = 110;
-const NODE_H = 72;
+// Nodes 128×84 — bigger rectangles (2026-10-03, user request: "make the
+// rectangles bigger... cover a bit more from the space"), still exactly
+// edge to edge in the 440-wide viewBox.
+const NODE_W = 128;
+const NODE_H = 84;
 
 function Node({ node }) {
   const p = POS[node.id];
@@ -29,10 +30,10 @@ function Node({ node }) {
   // ALWAYS at the same y (user request 2026-10-03 — same bottom position in
   // every rectangle, including the value-less Grid node).
   const compact = hasValue && node.sub && node.contrib;
-  const labelY = compact ? p.y - 25 : hasValue ? p.y - 18 : node.contrib ? p.y - 8 : p.y + 4;
-  const valueY = compact ? p.y - 7 : p.y + 3;
-  const subY = compact ? p.y + 10 : p.y + 21;
-  const contribY = p.y + 27;
+  const labelY = compact ? p.y - 29 : hasValue ? p.y - 18 : node.contrib ? p.y - 8 : p.y + 4;
+  const valueY = compact ? p.y - 10 : p.y + 3;
+  const subY = compact ? p.y + 9 : p.y + 21;
+  const contribY = p.y + 31;
   return (
     <g>
       <rect
@@ -64,9 +65,21 @@ function Node({ node }) {
         </text>
       )}
       {node.contrib && (
-        <text x={p.x} y={contribY} textAnchor="middle" fill={node.color} fontSize="10" fontWeight="600">
-          {node.contrib}
-        </text>
+        <>
+          {/* separator rule delimiting the contribution line (2026-10-03,
+              user request) */}
+          <line
+            x1={p.x - NODE_W / 2 + 10}
+            y1={p.y + 20}
+            x2={p.x + NODE_W / 2 - 10}
+            y2={p.y + 20}
+            stroke="#2a3238"
+            strokeWidth="1"
+          />
+          <text x={p.x} y={contribY} textAnchor="middle" fill={node.color} fontSize="10" fontWeight="600">
+            {node.contrib}
+          </text>
+        </>
       )}
     </g>
   );

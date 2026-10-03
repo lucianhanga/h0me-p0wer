@@ -5949,3 +5949,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   across rectangles. contribY is now ALWAYS p.y + 27 regardless of how many
   rows the node has. Screenshot-verified: Grid's "0 % of house" and Battery
   system's "98 % of house" share the same bottom line.
+
+## Flow nodes: separator rule + bigger rectangles + wider battery cylinders (2026-10-03, user requests)
+
+- "Put a -------- over the percentage to delimit it" — a muted separator
+  rule (same #2a3238 as inactive edges) now sits above the contribution
+  line in every flow node that has one.
+- "Make the rectangles bigger / the batteries a bit more wider / cover a
+  bit more from the space": flow nodes 110×72 → 128×84 (positions adjusted,
+  still edge-to-edge in the 440 viewBox); battery cylinders 84→104px wide
+  desktop / 72→88px phone, terminal nub 30→36px. Verified: desktop + 390px
+  phone (scrollW == 390), simple view and full Live tab.
