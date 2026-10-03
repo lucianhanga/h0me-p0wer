@@ -5960,3 +5960,22 @@ cross-cutting), every finding re-verified by hand before fixing:
   still edge-to-edge in the 440 viewBox); battery cylinders 84→104px wide
   desktop / 72→88px phone, terminal nub 30→36px. Verified: desktop + 390px
   phone (scrollW == 390), simple view and full Live tab.
+
+## Dashboard period tiles: per-source % of consumption + Today's "stored" share (2026-10-03, user request)
+
+- User: "in the tiles with today/week/month put the percentage of how the
+  consumption was done: grid, pv, battery." Each consumption-source row
+  (Grid / PV direct / From battery) now shows its share of the period's
+  homeKwh (the books balance — house = grid + PV-direct + battery — so they
+  sum to 100%). Computed client-side from the existing kWh fields, works on
+  current AND navigated past periods.
+- **Today solution** (user flagged the partial-day complication: PV parked
+  in the battery now is consumed later): the percentages stay honest
+  "of what the house has consumed so far" — energy counts when it reaches
+  the house, same rule as every historical tile — and the pending part is
+  made explicit on the To-battery row: "stored · N % of production"
+  (battInKwh / pvProducedKwh) instead of the bare "stored" label. No
+  invented projected split.
+- CSS: .src-label nowrap+ellipsis (the new %-column squeezed labels into
+  wraps), .src-pct muted tabular column. i18n dashboard.storedShare
+  (en/de/ro). Verified desktop + 390px German phone (scrollW == 390).

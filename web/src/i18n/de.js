@@ -336,6 +336,7 @@ export const de = {
     producedKwh: "{kwh} kWh produziert",
     coverage: "⚠ {pct}% des heutigen Tages abgedeckt, selbst nach Wiederherstellung aus Ankers Cloud — die tatsächlichen Summen können höher sein als angezeigt",
     stored: "gespeichert",
+    storedShare: "gespeichert · {pct} % der Produktion",
     spentSaved: "ausgegeben €{grid} · gespart €{saved}",
     olderPeriod: "Älterer Zeitraum",
     newerPeriod: "Neuerer Zeitraum",
