@@ -661,7 +661,10 @@ async function computeFlowPayload() {
         const p = kvGet("consumption_profile_v1")?.value;
         if (!p || (p.daysUsed ?? 0) < 5) return null;
         const now = new Date();
-        return p.cells?.[now.getDay()]?.[now.getHours()] ?? null;
+        // Weekday+hour cell first; the all-days hour average is the fallback
+        // for cells a young history hasn't produced yet (e.g. this weekday's
+        // remaining evening hours on day one).
+        return p.cells?.[now.getDay()]?.[now.getHours()] ?? p.cellsAny?.[now.getHours()] ?? null;
       })(),
     },
   };
@@ -1422,6 +1425,10 @@ async function syncCloudHistory() {
         console.warn(`[cloud-sync] home usage day ${day} failed: ${err.message}`);
       }
     }
+    // Keep the usual-consumption profile in step with freshly stored trends
+    // (2026-10-03 — startup+hourly alone left usualW null for up to an hour
+    // after the data actually landed).
+    refreshConsumptionProfile();
   }
 }
 
@@ -1587,7 +1594,11 @@ async function catchUpBatteryPvHistory() {
   if (completed) {
     const storedHome = getStoredHomePeriodStarts("day");
     const missingHome = [];
-    for (let i = BACKFILL_DAYS; i >= 0; i--) {
+    // NEWEST-first (2026-10-03 incident): the recreated site returns all-zero
+    // trends for every pre-creation day, so oldest-first burned every
+    // rate-limited run's budget on known-zero holes and never reached the
+    // real recent days the consumption profile is built from.
+    for (let i = 0; i <= BACKFILL_DAYS; i++) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const start = localDate(d);
@@ -1621,10 +1632,12 @@ async function catchUpBatteryPvHistory() {
   // "next round" the break comment promised never existed until restart).
   if (!completed) {
     console.log("[cloud-sync] battery/PV backfill incomplete — retrying in 1 h");
+    refreshConsumptionProfile();
     setTimeout(() => catchUpBatteryPvHistory(), 3600 * 1000).unref();
     return;
   }
   console.log("[cloud-sync] battery/PV history is up to date");
+  refreshConsumptionProfile();
 }
 
 // Wait for the first meter snapshot (for the SN), then catch up once and

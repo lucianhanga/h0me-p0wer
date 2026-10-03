@@ -6185,3 +6185,35 @@ cross-cutting), every finding re-verified by hand before fixing:
   model renders it as the Home node's sub-line ("usual ≈ 422 W",
   flow.usualW in en/de/ro). Verified live: live 436 W next to usual
   422 W on a Saturday evening.
+
+## "usual ≈ N W" missing on the Home node — backfill order + zero-interval poisoning (2026-10-03, user report)
+
+- User: "you don't display in the home rectangle the expected consume like I
+  asked." Production (v1.5.172) had the feature but /api/flow returned
+  home.usualW: null. Three compounding causes, all fixed:
+  1. **Home-usage backfill fetched OLDEST-first** — the recreated site
+     (2026-09-27) returns all-zero trends for every pre-creation day, so
+     every rate-limited run (429 → break → hourly re-arm) burned its budget
+     on ~24 known-zero days; after hours only 09-03..09-05 had landed.
+     missingHome now iterates NEWEST-first — the real recent days (the only
+     ones the profile can use) land in the first run.
+  2. **The profile recomputed only at startup + hourly** — at startup zero
+     usable days existed, so daysUsed=0 latched until the next hourly tick
+     even after the 15-min sync stored real days. refreshConsumptionProfile()
+     now also runs after syncCloudHistory()'s home sync and at the end of
+     catchUpBatteryPvHistory() (both the completed and the re-armed path).
+  3. **Today's trend pads open/future 20-min intervals with 0** (verified:
+     574 W at 20:40, then 0 from 21:00 on while the house drew ~450 W) —
+     computeConsumptionProfile now skips exact-zero rows (a real home never
+     averages exactly 0 W over a closed interval), and the /api/flow lookup
+     falls back to an all-days-per-hour average (cellsAny) when the current
+     weekday+hour cell doesn't exist yet (young history, today's remaining
+     evening hours).
+- Verified end-to-end on the dev stack with a wiped cloud_home_history:
+  backfill filled 10-03 → 09-27 first, daysUsed=6 (the 09-27 partial day
+  correctly excluded by the < 20 covered-hours filter), usualW=743 next to
+  consumption=463, Home node renders "usual ≈ 743 W"; both CI smoke layouts
+  pass.
+- Note: production self-heals within hours even without this fix (the
+  hourly re-arm eventually reaches the real days) — the fix makes it fast
+  and robust instead.
