@@ -26,10 +26,60 @@ function pickVoice(lang) {
   );
 }
 
+// Read-aloud unit expansion (2026-10-03, user request: in Romanian "kWh"
+// must be read "kilowați oră"): speech engines mangle "kWh"/"kW"/"W"/"°C".
+// The text is expanded for the UTTERANCE only; toOriginal maps every
+// expanded-text char index back to the original string so SyncedSpeech's
+// word-by-word highlighting (onboundary charIndex) stays aligned with the
+// DISPLAYED text.
+const UNIT_SPEECH = {
+  en: [
+    [/\bkWh\b/g, "kilowatt-hours"],
+    [/\bkWp\b/g, "kilowatt-peak"],
+    [/\bkW\b/g, "kilowatts"],
+    [/\bW\b/g, "watts"],
+    [/°C\b/g, "degrees Celsius"],
+  ],
+  de: [
+    [/\bkWh\b/g, "Kilowattstunden"],
+    [/\bkWp\b/g, "Kilowatt-Peak"],
+    [/\bkW\b/g, "Kilowatt"],
+    [/\bW\b/g, "Watt"],
+    [/°C\b/g, "Grad Celsius"],
+  ],
+  ro: [
+    [/\bkWh\b/g, "kilowați oră"],
+    [/\bkWp\b/g, "kilowați vârf"],
+    [/\bkW\b/g, "kilowați"],
+    [/\bW\b/g, "wați"],
+    [/°C\b/g, "grade Celsius"],
+  ],
+};
+
+function expandUnits(text, lang) {
+  const rules = UNIT_SPEECH[(lang ?? "en").slice(0, 2)] ?? UNIT_SPEECH.en;
+  let out = text;
+  // map[i] = original-text index of out[i]
+  let map = Array.from({ length: text.length }, (_, i) => i);
+  for (const [re, rep] of rules) {
+    out = out.replace(re, (m, ...rest) => {
+      // replace() callback: (match, ...groups, offset, string) — our rules
+      // have no capture groups, so rest = [offset, string]. The offset is
+      // in the CURRENT (partially expanded) text; map[offset] is the
+      // ORIGINAL index of the match start — that's what new chars map to.
+      const offset = rest[rest.length - 2];
+      map.splice(offset, m.length, ...Array(rep.length).fill(map[offset] ?? offset));
+      return rep;
+    });
+  }
+  return { text: out, toOriginal: (i) => (i == null ? null : (map[i] ?? i)) };
+}
+
 export function speakText(id, text, { onWord = null, lang = "en-US" } = {}) {
   if (!synth) return;
   if (activeId) stopSpeech();
-  const u = new SpeechSynthesisUtterance(text);
+  const { text: spoken, toOriginal } = expandUnits(text, lang);
+  const u = new SpeechSynthesisUtterance(spoken);
   const voice = pickVoice(lang);
   if (voice) {
     u.voice = voice;
@@ -37,7 +87,7 @@ export function speakText(id, text, { onWord = null, lang = "en-US" } = {}) {
   } else {
     u.lang = lang;
   }
-  if (onWord) u.onboundary = (e) => onWord(e.charIndex ?? null);
+  if (onWord) u.onboundary = (e) => onWord(toOriginal(e.charIndex ?? null));
   u.onend = u.onerror = () => {
     if (activeId === id) activeId = null;
     setters.get(id)?.(false);
