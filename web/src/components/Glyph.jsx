@@ -2,7 +2,19 @@
 // more abstract" — emoji render platform-dependently and clash with the
 // app's flat style; same reasoning as StateIcon.jsx's MDI paths). All are
 // 24×24, stroke: currentColor, no fill — they inherit the surrounding
-// text color and weight.
+// text color and weight. Weather glyphs redrawn 2026-10-03 (user: the
+// bare-lines fog read as a hamburger menu, not weather) — every condition
+// now carries a recognizable cloud/sun silhouette.
+// Cloud silhouette path with a vertical offset (shared by several weather
+// glyphs).
+const cloudPath = (dy = 0) =>
+  `M7 ${18 + dy}` +
+  `C4.5 ${18 + dy} 3 ${16.3 + dy} 3 ${14.2 + dy}` +
+  `C3 ${12.3 + dy} 4.4 ${10.8 + dy} 6.2 ${10.5 + dy}` +
+  `C6.6 ${7.9 + dy} 8.7 ${6 + dy} 11.4 ${6 + dy}` +
+  `C14.3 ${6 + dy} 16.6 ${8.1 + dy} 17 ${10.9 + dy}` +
+  `C19.1 ${11.2 + dy} 20.7 ${12.9 + dy} 20.7 ${15 + dy}` +
+  `C20.7 ${17.3 + dy} 18.8 ${18 + dy} 17.5 ${18 + dy}H7Z`;
 const GLYPHS = {
   sun: (
     <>
@@ -10,36 +22,40 @@ const GLYPHS = {
       <path d="M12 2.5v2.5M12 19v2.5M2.5 12h2.5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
     </>
   ),
-  // cloud base shared by several weather glyphs
-  cloud: (
-    <path d="M6.5 18.5a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 16.6 9.6 3.6 3.6 0 0 1 17.8 16.7c-.4 1-.9 1.8-1.8 1.8H6.5z" />
-  ),
+  cloud: <path d={cloudPath()} />,
   partly: (
     <>
-      <circle cx="8.5" cy="8" r="3" />
-      <path d="M8.5 2.5V4M2.5 8h1.5M4.3 3.8l1 1" />
-      <path d="M9.5 19.5a3.6 3.6 0 0 1-.5-7.15 4.9 4.9 0 0 1 9.6-.8 3.2 3.2 0 0 1 1 6.35c-.3.9-.8 1.6-1.6 1.6H9.5z" />
+      <circle cx="8.5" cy="7.5" r="3" />
+      <path d="M8.5 2v1.5M2.5 7.5H4M4.3 3.3l1.1 1.1M12.7 3.3l-1.1 1.1" />
+      <g transform="translate(2.2 4) scale(0.85)">
+        <path d={cloudPath()} />
+      </g>
     </>
   ),
   rain: (
     <>
-      <path d="M6.5 15.5a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 16.6 6.6a3.6 3.6 0 0 1 1.2 7.1c-.4 1-.9 1.8-1.8 1.8H6.5z" />
-      <path d="M8 18l-1 3M12.5 18l-1 3M17 18l-1 3" />
+      <path d={cloudPath(-2.5)} />
+      <path d="M8 18.5l-1 3M12.5 18.5l-1 3M17 18.5l-1 3" />
     </>
   ),
   fog: (
-    <path d="M4 8h16M6 12h12M4 16h16M7 20h10" />
+    <>
+      <path d={cloudPath(-3.5)} />
+      <path d="M5.5 17.5h13M7.5 20.5h9" />
+    </>
   ),
   snow: (
     <>
-      <path d="M6.5 15.5a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 16.6 6.6a3.6 3.6 0 0 1 1.2 7.1c-.4 1-.9 1.8-1.8 1.8H6.5z" />
-      <path d="M8 18.5v.5M12.5 18.5v.5M17 18.5v.5" />
+      <path d={cloudPath(-2.5)} />
+      <circle cx="8" cy="19.5" r="0.4" fill="currentColor" />
+      <circle cx="12.5" cy="21" r="0.4" fill="currentColor" />
+      <circle cx="17" cy="19.5" r="0.4" fill="currentColor" />
     </>
   ),
   thunder: (
     <>
-      <path d="M6.5 15.5a4 4 0 0 1-.6-7.96A5.5 5.5 0 0 1 16.6 6.6a3.6 3.6 0 0 1 1.2 7.1c-.4 1-.9 1.8-1.8 1.8h-4" />
-      <path d="M12 14l-2.5 4h2l-1 3.5 4-5h-2.5l2-2.5" />
+      <path d={cloudPath(-2.5)} />
+      <path d="M12.5 15l-2.2 3.6h1.9l-1 3.2 3.8-4.5h-2.3l1.9-2.3" />
     </>
   ),
   home: (
