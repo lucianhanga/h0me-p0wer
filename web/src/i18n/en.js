@@ -129,6 +129,7 @@ export const en = {
     battery: "Battery",
     pvOfMax: "{pct} % of {kwp} kWp",
     usualW: "usual ≈ {w} W",
+    pctOfHome: "{pct} % of house",
     eta: "≈ {eta}",
     ariaLabel: "power flow",
   },

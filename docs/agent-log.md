@@ -5924,3 +5924,20 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Note: production self-heals within hours even without this fix (the
   hourly re-arm eventually reaches the real days) — the fix makes it fast
   and robust instead.
+
+## Flow diagram: per-source % contribution to the house on the nodes (2026-10-03, user request)
+
+- User: "in the Grid, PV, Battery system rectangles at the bottom show the
+  proportional contributions to the House consumption in percentage" — for
+  BOTH visualizations (full Live tab + simple view; both share FlowView →
+  the basic variant, so the model.js change covers both).
+- model.js computes contrib per source node from the SAME values the arcs
+  display (gridNet import / pvToHomeW / battNet discharge), so node and arc
+  can never disagree; they sum to ~100% by construction (battToHomeW is the
+  balancing remainder). Hidden while homeW ≤ 10 W (percentages of a ~0 W
+  house are noise). Rendered as a fourth, node-colored text line at the
+  bottom of the rectangle (basic.jsx Node layout gained a compact 4-row
+  mode: label/value/sub/contrib). i18n flow.pctOfHome (en/de/ro).
+- Verified by screenshot in the full Live tab, the simple view, and German
+  at 420px: night state reads Grid 0 % / PV 0 % / Battery 95 % (340 of
+  358 W), no overflow.
