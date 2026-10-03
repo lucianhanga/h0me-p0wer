@@ -5941,3 +5941,11 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified by screenshot in the full Live tab, the simple view, and German
   at 420px: night state reads Grid 0 % / PV 0 % / Battery 95 % (340 of
   358 W), no overflow.
+
+## Flow diagram: contribution line pinned to the same bottom y in every node (2026-10-03, user request)
+
+- The contrib line added in v1.5.175 sat at +27 in the 4-row nodes but at
+  +12 in the value-less Grid node (its fallback offset) — visibly misaligned
+  across rectangles. contribY is now ALWAYS p.y + 27 regardless of how many
+  rows the node has. Screenshot-verified: Grid's "0 % of house" and Battery
+  system's "98 % of house" share the same bottom line.
