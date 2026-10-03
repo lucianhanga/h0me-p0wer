@@ -631,6 +631,10 @@ async function computeFlowPayload() {
       : null,
     pv: {
       production: pvW,
+      // Installed peak (PV_PEAK_KWP) — the Live flow's PV node shows the
+      // current production as a percentage of it (2026-10-03, user
+      // request: "how much of maximum capacity is produced").
+      peakW: Math.round(Number(process.env.PV_PEAK_KWP ?? 1) * 1000),
       toBattery: pvToBattery,
       // Same app-channel value as the diagram's PV→Home arc (2026-09-29).
       toHome: diagram.pvToHomeW,

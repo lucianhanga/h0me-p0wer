@@ -8,11 +8,16 @@ import { useT } from "../../i18n/LanguageProvider.jsx";
 // semantics never do. An artistic variant would swap node/edge rendering
 // (icons, richer visuals) against the same model.
 const POS = {
-  pv: { x: 220, y: 30 },
+  pv: { x: 220, y: 40 },
   grid: { x: 55, y: 150 },
   home: { x: 220, y: 150 },
   batt: { x: 385, y: 150 },
 };
+
+// Nodes 110×72 (2026-10-03, user request: "make the rectangles a bit
+// bigger" — exactly fills the 440-wide viewBox edge to edge).
+const NODE_W = 110;
+const NODE_H = 72;
 
 function Node({ node }) {
   const p = POS[node.id];
@@ -21,30 +26,30 @@ function Node({ node }) {
   return (
     <g>
       <rect
-        x={p.x - 48}
-        y={p.y - 28}
-        width="96"
-        height="60"
-        rx="8"
+        x={p.x - NODE_W / 2}
+        y={p.y - NODE_H / 2}
+        width={NODE_W}
+        height={NODE_H}
+        rx="9"
         fill="#1a2128"
         stroke={node.color}
         strokeOpacity="0.5"
       />
-      <text x={p.x} y={hasValue ? p.y - 16 : p.y + 4} textAnchor="middle" fill="#8b98a5" fontSize="12">
+      <text x={p.x} y={hasValue ? p.y - 18 : p.y + 4} textAnchor="middle" fill="#8b98a5" fontSize="12">
         {node.label}
       </text>
       {node.valueW != null && (
-        <text x={p.x} y={p.y + 2} textAnchor="middle" fill="#e8ecef" fontSize="13" fontWeight="600">
+        <text x={p.x} y={p.y + 3} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
           {w} W
         </text>
       )}
       {node.text != null && (
-        <text x={p.x} y={p.y + 2} textAnchor="middle" fill="#e8ecef" fontSize="13" fontWeight="600">
+        <text x={p.x} y={p.y + 3} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
           {node.text}
         </text>
       )}
       {node.sub && (
-        <text x={p.x} y={p.y + 18} textAnchor="middle" fill="#8b98a5" fontSize="10">
+        <text x={p.x} y={p.y + 21} textAnchor="middle" fill="#8b98a5" fontSize="10">
           {node.sub}
         </text>
       )}

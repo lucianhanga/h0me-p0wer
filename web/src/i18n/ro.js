@@ -139,6 +139,7 @@ export const ro = {
     grid: "Rețea",
     home: "Casă",
     battery: "Baterie",
+    pvOfMax: "{pct} % din {kwp} kWp",
     eta: "≈ {eta}",
     ariaLabel: "flux de putere",
   },
