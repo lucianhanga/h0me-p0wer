@@ -6087,3 +6087,25 @@ cross-cutting), every finding re-verified by hand before fixing:
   through the night" → quoted the day brief (10.9 kWh PV, 10.2 house,
   3 grid + 7.2 battery, night 10%) AND the live state; "how full is each
   solarbank, is anything charging" → per-unit answer from batteryUnits.
+
+## Ask voice input: submit on session end, never hang (2026-10-03, user report)
+
+- User (ro): "it didn't recognize that I finished the question and now I
+  get 'Recunoașterea vocală a eșuat' errors — it stayed hanging." Root
+  causes in AskButton.jsx: (1) the question was submitted ONLY when an
+  isFinal result arrived — Chrome's SpeechRecognition routinely ends a
+  session on its pause timeout WITHOUT marking the last utterance final,
+  so onend discarded the finished question and reset to idle; (2) the
+  session wasn't stopped on submit/speechend/close, so it hung open and
+  the next start() hit the hung session → network/aborted errors.
+- Fix: transcript mirrored in transcriptRef; submittedRef guards double
+  submits; onspeechend stops the session promptly; onend SUBMITS the last
+  interim transcript instead of dropping it; onerror with a pending
+  transcript submits it too (aborted = our own stop, ignored; no-speech
+  gets the existing friendly ask.noSpeech message); start() aborts any
+  hung previous session; close() during listening aborts the mic (the
+  overlay closing no longer leaves the mic open). Side benefit: tapping
+  the mic button to stop now SUBMITS the pending question instead of
+  discarding it.
+- Note: headless verification isn't possible (no mic in headless Chrome) —
+  build green, logic reviewed; needs a real-mic pass by the user.
