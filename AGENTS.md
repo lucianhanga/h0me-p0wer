@@ -6148,3 +6148,13 @@ cross-cutting), every finding re-verified by hand before fixing:
   back to simple (VIEWS validation in ViewProvider). The iterations stay
   in git history if the idea ever comes back — the flow-model split
   (model.js WHAT vs variants HOW) remains the right seam for it.
+
+## Flow diagram: bigger nodes + PV production as % of installed peak (2026-10-03, user requests)
+
+- "Make the rectangles a bit bigger": the basic flow variant's nodes are
+  now 110×72 (was 96×60), PV center nudged down (y 30 → 40) so the
+  taller rect stays in the viewBox; value font 13 → 14.
+- "Write in the PV rectangle the percentage of maximum capacity":
+  /api/flow's pv object gains peakW (PV_PEAK_KWP × 1000 — 12 × 500 W =
+  6000 W) and the PV node's sub-line reads "13 % of 6 kWp"
+  (flow.pvOfMax in en/de/ro).

@@ -127,6 +127,7 @@ export const en = {
     grid: "Grid",
     home: "Home",
     battery: "Battery",
+    pvOfMax: "{pct} % of {kwp} kWp",
     eta: "≈ {eta}",
     ariaLabel: "power flow",
   },

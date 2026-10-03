@@ -39,7 +39,18 @@ export function buildFlowModel(flow, t) {
   const battNet = (d.battToHomeW ?? 0) - (d.homeToBattW ?? 0);
   return {
     nodes: [
-      { id: "pv", label: t("flow.pv"), valueW: d.pvW ?? null, sub: null, color: "#5fce80" },
+      {
+        id: "pv",
+        label: t("flow.pv"),
+        valueW: d.pvW ?? null,
+        // Production as a percentage of the installed peak (2026-10-03,
+        // user request: "12 × 500 W — how much of maximum capacity").
+        sub:
+          d.pvW != null && flow.pv?.peakW > 0
+            ? t("flow.pvOfMax", { pct: Math.round((d.pvW / flow.pv.peakW) * 100), kwp: Math.round(flow.pv.peakW / 100) / 10 })
+            : null,
+        color: "#5fce80",
+      },
       // No value on the Grid node (user instruction) — arcs carry the usage.
       { id: "grid", label: t("flow.grid"), valueW: null, sub: null, color: "#f7a44f" },
       { id: "home", label: t("flow.home"), valueW: d.homeW ?? null, sub: null, color: "#e8ecef" },

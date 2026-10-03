@@ -143,6 +143,7 @@ export const de = {
     grid: "Netz",
     home: "Haus",
     battery: "Akku",
+    pvOfMax: "{pct} % von {kwp} kWp",
     eta: "≈ {eta}",
     ariaLabel: "Energiefluss",
   },
