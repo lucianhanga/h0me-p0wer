@@ -5961,3 +5961,16 @@ cross-cutting), every finding re-verified by hand before fixing:
   and its thumbnail. totalInvestedEur 6860.01 → 6820.21. The separate
   €129 MC4 Y-parallel splitter (B0HFJTNQQM) is a different item and
   stays.
+
+## PV channel tiles: uniform sizing (2026-10-03, user screenshot)
+
+- The Live tab's expanded Solar PV per-channel tiles rendered with wild
+  width differences: connected channels (FlipTile-wrapped, content-sized)
+  vs "not connected" (bare .phase-card with flex: 1 1 180px, stretched to
+  the whole remaining row). CSS fix: .phase-cards .flip-tile gets the
+  same flex sizing; the inner card fills its width. A first attempt also
+  set height: 100% on the flip wrapper's inner/faces — that ballooned
+  every tile to ~370px tall on phone widths (percentage-height feedback
+  inside the flip grid); reverted, widths only. Verified at 1400px (4
+  identical tiles per unit row) and 390px (stacked full-width, matching
+  the L1/L2/L3 phase cards' established phone pattern).
