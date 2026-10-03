@@ -20,7 +20,6 @@ export const ro = {
   view: {
     simpleTip: "Vedere simplă — un singur ecran calm",
     fullTip: "Vedere completă — toate taburile și detaliile",
-    artisticTip: "Vedere artistică — casa cu fluxul live",
   },
   simple: {
     batteries: "Baterii",
@@ -140,7 +139,6 @@ export const ro = {
     grid: "Rețea",
     home: "Casă",
     battery: "Baterie",
-    powerDock: "Power Dock",
     eta: "≈ {eta}",
     ariaLabel: "flux de putere",
   },

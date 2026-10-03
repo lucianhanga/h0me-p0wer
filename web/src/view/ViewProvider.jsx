@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
-// View modes: "full" (the complete app), "simple" (one calm, glanceable
-// screen — 2026-09-27), "artistic" (the house picture with the live flow
-// drawn on it — 2026-10-03, user request). Persisted like the language.
+// View mode: "full" (the complete app) vs "simple" (one calm, glanceable
+// screen — 2026-09-27, user request). Persisted like the language choice.
+// (A third "artistic" house-picture mode was tried and REMOVED 2026-10-03
+// per user decision — iterations in git history, PRs #321-#324.)
 const ViewContext = createContext(null);
 const VIEW_STORAGE_KEY = "h0mep0wer.view";
-const VIEWS = ["full", "simple", "artistic"];
+const VIEWS = ["full", "simple"];
 
 function loadView() {
   try {
@@ -31,7 +32,7 @@ export function ViewProvider({ children }) {
     setViewState(next);
   }, []);
   const value = useMemo(
-    () => ({ view, setView, isSimple: view === "simple", isArtistic: view === "artistic", views: VIEWS }),
+    () => ({ view, setView, isSimple: view === "simple", views: VIEWS }),
     [view, setView],
   );
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;

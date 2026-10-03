@@ -20,11 +20,9 @@ export const en = {
   view: {
     simpleTip: "Simple view — one calm screen",
     fullTip: "Full view — all tabs and details",
-    artisticTip: "Artistic view — the house with the live flow",
   },
   simple: {
     batteries: "Batteries",
-    houseAlt: "House with solar panels, batteries, power dock and grid connection",
     charts: "Trends",
     periods: "Totals",
   },
@@ -129,7 +127,6 @@ export const en = {
     grid: "Grid",
     home: "Home",
     battery: "Battery",
-    powerDock: "Power Dock",
     eta: "≈ {eta}",
     ariaLabel: "power flow",
   },
