@@ -2000,7 +2000,7 @@ pre {
    adapted to our flat style). */
 .batt-seg {
   position: relative;
-  width: 84px;
+  width: 104px; /* wider cylinders (2026-10-03, user request) */
   height: 260px; /* taller cylinders (2026-09-28, user request) */
   flex-shrink: 0;
   border: 2px solid #3a4550;
@@ -2020,7 +2020,7 @@ pre {
   top: -10px;
   left: 50%;
   transform: translateX(-50%);
-  width: 30px;
+  width: 36px;
   height: 8px;
   background: linear-gradient(180deg, #9aa7b2, #55616c 55%, #39434c);
   border-radius: 3px 3px 0 0;
@@ -2212,7 +2212,7 @@ pre {
 
 @media (max-width: 600px) {
   .batt-seg {
-    width: 72px;
+    width: 88px; /* wider on phones too (2026-10-03) */
     height: 200px; /* taller on phones too (2026-09-28, user request) */
   }
 
