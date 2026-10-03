@@ -24,7 +24,7 @@ const PAGES = [
 function Shell() {
   const t = useT();
   const { language, setLanguage } = useLanguage();
-  const { isSimple, setView } = useView();
+  const { view, setView, views } = useView();
   const [page, setPage] = useState(() =>
     PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
   );
@@ -54,13 +54,14 @@ function Shell() {
         <h1>h0me-p0wer</h1>
         <AskButton />
         <ActivityBell />
+        {/* View cycle: full ◉ → simple ◑ → artistic 🏠 → full (2026-10-03). */}
         <button
-          className={`view-toggle${isSimple ? " nav-active" : ""}`}
-          onClick={() => setView(isSimple ? "full" : "simple")}
-          title={isSimple ? t("view.fullTip") : t("view.simpleTip")}
-          aria-label={isSimple ? t("view.fullTip") : t("view.simpleTip")}
+          className={`view-toggle${view !== "full" ? " nav-active" : ""}`}
+          onClick={() => setView(views[(views.indexOf(view) + 1) % views.length])}
+          title={t(`view.${view}Tip`)}
+          aria-label={t(`view.${view}Tip`)}
         >
-          {isSimple ? "◑" : "◉"}
+          {{ full: "◉", simple: "◑", artistic: "🏠" }[view]}
         </button>
         <button
           className="lang-btn"
@@ -70,7 +71,7 @@ function Shell() {
         >
           {{ en: "🇬🇧", de: "🇩🇪", ro: "🇷🇴" }[language]}
         </button>
-        {!isSimple && (
+        {view === "full" && (
           <nav>
             {PAGES.map((p) => (
               <button
@@ -86,8 +87,8 @@ function Shell() {
         <span className="app-version">v{__APP_VERSION__}</span>
       </header>
       <main>
-        {isSimple ? (
-          <SimpleHome />
+        {view !== "full" ? (
+          <SimpleHome artistic={view === "artistic"} />
         ) : page === "welcome" ? (
           <WelcomeTab />
         ) : page === "live" ? (

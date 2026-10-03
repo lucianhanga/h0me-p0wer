@@ -1,16 +1,16 @@
 import { createContext, useCallback, useContext, useMemo, useState } from "react";
 
-// View mode: "full" (the complete app) vs "simple" (one calm, glanceable
-// screen — 2026-09-27, user request: "a toggle near the languages... hides
-// complexity, keeps the important values, predominantly visual"). Persisted
-// like the language choice.
+// View modes: "full" (the complete app), "simple" (one calm, glanceable
+// screen — 2026-09-27), "artistic" (the house picture with the live flow
+// drawn on it — 2026-10-03, user request). Persisted like the language.
 const ViewContext = createContext(null);
 const VIEW_STORAGE_KEY = "h0mep0wer.view";
+const VIEWS = ["full", "simple", "artistic"];
 
 function loadView() {
   try {
     const v = localStorage.getItem(VIEW_STORAGE_KEY);
-    if (v === "simple" || v === "full") return v;
+    if (VIEWS.includes(v)) return v;
     // Default is the SIMPLE view (2026-09-28, user request: "when you start
     // the app start it in the simple view") — an explicit stored choice
     // always wins; only a never-set preference lands on simple.
@@ -30,7 +30,10 @@ export function ViewProvider({ children }) {
     }
     setViewState(next);
   }, []);
-  const value = useMemo(() => ({ view, setView, isSimple: view === "simple" }), [view, setView]);
+  const value = useMemo(
+    () => ({ view, setView, isSimple: view === "simple", isArtistic: view === "artistic", views: VIEWS }),
+    [view, setView],
+  );
   return <ViewContext.Provider value={value}>{children}</ViewContext.Provider>;
 }
 

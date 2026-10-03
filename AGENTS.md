@@ -6053,3 +6053,32 @@ cross-cutting), every finding re-verified by hand before fixing:
   (the row fits one line now); the break-even tile's sub-line uses the
   same roi.projection.profit key as the year tiles ("+€X profit" — the
   roi.projection.profitThatYear keys were removed from en/de/ro).
+
+## Artistic view (iteration 1): the house picture with the live flow ON it (2026-10-03, user request)
+
+- Third view mode next to full/simple: the header view toggle now cycles
+  full ◉ → simple ◑ → artistic 🏠 (ViewProvider VIEWS, persisted like the
+  language; nav hidden in both non-full modes). User-supplied reference
+  image ("Modern Solar-Powered Home System.png") at web/public/house.jpg
+  — FULL 1536×1024 resolution (JPEG q92, 532 KB) because the user wants
+  to zoom in.
+- SimpleHome gains an `artistic` prop: in artistic mode the HouseView
+  replaces BOTH the flow diagram and the battery stacks (the TRENDS
+  charts and the Today/Week/Month tiles stay, same as the simple view).
+- HouseView (web/src/simple/HouseView.jsx): percent-positioned overlays
+  on the image — PV production chip on the roof (once for all panels;
+  per-panel split is a future iteration), Home chip, Power Dock label,
+  grid symbol far right (label only, no value — the arcs carry the
+  usage); animated dashed edges (PV→dock, PV→house, dock→house,
+  house→dock for grid charging, grid↔house, and per-unit dock
+  connections showing each solarbank's own charge/discharge direction
+  and watts); edge values from the SAME buildFlowModel as the basic
+  diagram (the WHAT can never drift). Battery overlays: semi-transparent
+  SOC fills over the two stacks in the picture (Solarbank 4 left/bigger,
+  Solarbank 2 right — each rect covers the solarbank AND its BP5000),
+  level-colored, with a sheen animation (charging = swept top-down,
+  discharging = mirror) + SOC/name/status text. Edge labels are HTML,
+  never SVG text (non-uniform viewBox scaling distorts text); the SVG
+  uses viewBox 0 0 100 100 preserveAspectRatio="none" so all
+  coordinates are plain image percents.
+- i18n: view.artisticTip, flow.powerDock, simple.houseAlt (en/de/ro).
