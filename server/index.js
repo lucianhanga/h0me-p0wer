@@ -11,6 +11,7 @@ import { MeterPoller } from "./modbus.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
+import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
@@ -1212,6 +1213,19 @@ registerWelcomeRoute(app, {
   // Welcome tab can never drift from Dashboard's numbers, and avoids
   // duplicating /api/stats/overview's large, gap-handling-heavy
   // computation a second time.
+  statsOverviewUrl: `http://127.0.0.1:${PORT}/api/stats/overview`,
+});
+
+// AI day briefing for the simple view's first section (2026-10-03, user
+// request — see server/daybrief.js). Same deps as welcome + the system
+// capacity for the end-of-day SOC estimate.
+registerDayBriefRoute(app, {
+  getLiveBattery: () => latestBattery ?? getLatestBattery(),
+  getMeterSn: () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn(),
+  getMeterSns: () => meterSns(),
+  getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
+  getPowerPlanState: () => powerPlan.getState(),
+  getCapacityKwh: () => (latestBattery ? systemCapacityKwh(latestBattery) : null),
   statsOverviewUrl: `http://127.0.0.1:${PORT}/api/stats/overview`,
 });
 

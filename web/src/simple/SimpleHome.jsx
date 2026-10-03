@@ -9,6 +9,7 @@ import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
+import DayBrief from "./DayBrief.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
 
@@ -124,6 +125,8 @@ export default function SimpleHome() {
 
   return (
     <div className="simple-home">
+      {/* AI day briefing, first section (2026-10-03, user request). */}
+      <DayBrief />
       <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <div className="simple-flow">
         <FlowView flow={flow} />

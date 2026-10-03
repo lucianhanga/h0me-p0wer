@@ -23,9 +23,15 @@ export const ro = {
   },
   simple: {
     batteries: "Baterii",
-    houseAlt: "Casă cu panouri solare, baterii, power dock și conexiune la rețea",
     charts: "Tendințe",
     periods: "Totaluri",
+    brief: {
+      forecastPv: "așteptat azi · {kwp} kWp",
+      houseTotal: "consumul casei azi",
+      fromGrid: "din rețea",
+      fromBattery: "din baterie",
+      batteryEnd: "bateria la căderea nopții",
+    },
   },
   header: {
     voiceCommand: "Comandă vocală",
