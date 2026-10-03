@@ -2850,6 +2850,15 @@ pre {
   margin-top: 0.35rem;
   color: #e8ecef;
   font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.daybrief-weather-icon {
+  flex-shrink: 0;
+  color: #8b98a5;
 }
 
 .daybrief-metrics {
@@ -2869,7 +2878,7 @@ pre {
 }
 
 .daybrief-icon {
-  font-size: 1.1rem;
+  color: #8b98a5; /* spartan glyphs — muted; the VALUE keeps the row color */
 }
 
 .daybrief-value {

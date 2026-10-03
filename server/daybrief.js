@@ -54,7 +54,7 @@ You get a context JSON with: today's weather forecast (today: tempMin/tempMax/we
 
 Produce:
 - greeting: ONE short friendly sentence (hello + today's date/weekday flavor). Match the time of day from context.localTime (morning before noon, afternoon, evening) — the briefing is normally generated at day start, but a late first request must not say "good morning" at night. No numbers.
-- weatherText: ONE sentence about today's weather with fitting emojis/icons (e.g. ☀️ ⛅ 🌧️ ❄️ 🌡️). Use the WMO weathercode (0-1 clear, 2-3 cloudy, 45/48 fog, 51-67 rain, 71-77 snow, 80-82 showers, 95+ thunder). Include min/max temperatures.
+- weatherText: ONE plain-text sentence about today's weather. NO emojis, NO icons — the UI renders its own abstract glyph from the weathercode. Use the WMO weathercode (0-1 clear, 2-3 cloudy, 45/48 fog, 51-67 rain, 71-77 snow, 80-82 showers, 95+ thunder). Include min/max temperatures.
 - usage: your best estimate of TODAY's total house consumption split:
   - houseKwh: total the house will use today. If context.houseEstimateKwh is set, use it EXACTLY (it comes from the measured 56-day consumption profile). Otherwise estimate from the consumption averages and lastSameWeekday.
   - gridKwh / batteryKwh: how the house demand will be covered. PV covers the house directly while the sun shines (from pvProjectedTodayKwh), surplus charges the battery, the battery discharges in the evening/night down to its floor, the grid covers the rest. gridKwh + batteryKwh MUST sum to houseKwh (PV-direct is inside this split too — count PV-direct-to-house as part of batteryKwh ONLY if it round-trips the battery; PV used directly by the house belongs to NEITHER grid nor battery-from-storage: in that case put it in gridKwh's complement by reducing gridKwh — the sum rule is what matters).
@@ -71,14 +71,12 @@ function round1(n) {
 function buildDayBriefFallback(context, houseEstimateKwh) {
   const w = context.today ?? {};
   const code = w.weathercode ?? 0;
-  const emoji =
-    code >= 95 ? "⛈️" : code >= 71 ? "❄️" : code >= 51 ? "🌧️" : code >= 45 ? "🌫️" : code >= 2 ? "⛅" : "☀️";
   const house = houseEstimateKwh ?? context.consumption?.avgImportKwhPerDay ?? null;
   const pv = context.pvProjectedTodayKwh ?? 0;
   const grid = house != null ? Math.max(0, round1(house - pv)) : null;
   return {
     greeting: "Good morning!",
-    weatherText: `${emoji} ${w.tempMin ?? "—"}–${w.tempMax ?? "—"} °C today.`,
+    weatherText: `${w.tempMin ?? "—"}–${w.tempMax ?? "—"} °C today.`,
     usage: {
       houseKwh: house,
       gridKwh: grid,
@@ -195,7 +193,13 @@ export function registerDayBriefRoute(app, deps) {
     const batteryEndPct = Math.min(100, Math.max(0, Math.round(ai.usage?.batteryEndPct ?? context.battery?.socNow ?? 0)));
     return {
       greeting: ai.greeting,
-      weatherText: ai.weatherText,
+      // Defensive strip (2026-10-03): the prompt asks for plain text, but a
+      // pictograph that slips through would break the spartan glyph style.
+      weatherText: (ai.weatherText ?? "")
+        .replace(/\p{Extended_Pictographic}\uFE0F?/gu, "")
+        .replace(/\s{2,}/g, " ")
+        .trim(),
+      weatherCode: context.today?.weathercode ?? null,
       forecastPvKwh: context.pvProjectedTodayKwh ?? null,
       peakKwp: config.pv.peakKwp,
       usage: {
