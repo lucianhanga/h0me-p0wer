@@ -367,6 +367,23 @@ section {
   border-style: dashed;
 }
 
+/* PV channel tiles (Live tab's expanded Solar PV section) must ALL size
+   identically (2026-10-03, user report: the connected cards are wrapped
+   in FlipTile — a content-sized wrapper — while the bare "not connected"
+   cards carry .phase-card's flex: 1 1 180px directly and stretched to
+   swallow the whole remaining row). Give the FlipTile wrapper the same
+   flex sizing and make the inner card fill its width. No height: 100%
+   anywhere here — percentage heights inside the flip wrapper's grid
+   ballooned the tiles to full-screen on phone widths. */
+.phase-cards .flip-tile {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.phase-cards .flip-tile .phase-card {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 .pv-unit-label {
   margin: 0.5rem 0 -0.25rem;
   font-size: 0.8rem;
