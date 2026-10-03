@@ -334,7 +334,9 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     baselinePaybackDate: paybackDate,
     outlookPaybackDate: outlook.outlookPaybackDate,
   });
-  const projections = [1, 2, 3, 5, 10, 15].map((years) => {
+  // Year marks shown in the Projection row (2026-10-03, user request:
+  // "1, 3, 5, break even, 10, 15 would be enough").
+  const projections = [1, 3, 5, 10, 15].map((years) => {
     const cumulativeSavingsEur = r2(baseline.annualSavingsEur * years);
     return {
       years,

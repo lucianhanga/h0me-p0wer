@@ -241,7 +241,9 @@ export default function RoiTab() {
                 <div className="tile-main">{fmtEur(breakEvenCumulativeEur ?? data.totalInvestedEur)}</div>
                 {breakEvenYearProfitEur != null && (
                   <div className={`tile-sub ${breakEvenYearProfitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
-                    {t("roi.projection.profitThatYear", {
+                    {/* Same sub-line shape as the year tiles ("+€X profit")
+                        — 2026-10-03, user request. */}
+                    {t("roi.projection.profit", {
                       sign: breakEvenYearProfitEur >= 0 ? "+" : "−",
                       eur: fmtEur(Math.abs(breakEvenYearProfitEur)),
                     })}
