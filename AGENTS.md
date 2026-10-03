@@ -6103,3 +6103,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   - battery overlay rects re-measured against the actual boxes (SB4
     43.5/64.5/8.5/26.5, SB2 67.5/67.5/8/23.5); the dock label chip was
     dropped (the picture itself prints "Solar Power Dock")
+
+## Artistic view (iteration 3): curved cable paths + transparent backdrop (2026-10-03, user requests)
+
+- "Make it a bit smoother and follow the curves" (with a second
+  highlighted image — red = PV → Solarbank 2): both roof cable paths
+  are now quadratic curves following the actual bend from the roof edge
+  into the vertical wall run (traced at native resolution: SB4 bend at
+  (47.2, 38), SB2 at (71.4, 33.5)); cables use strokeLinecap round.
+- "Make the background of the house transparent": house.jpg replaced by
+  house.png with a REAL alpha channel — the black studio backdrop was
+  removed via a BFS flood fill from the image borders through
+  near-black pixels (luminance < 42), so the dark battery boxes, window
+  frames and cables INSIDE the silhouette survive untouched, plus a
+  1.2 px edge feather. Full 1536×1024 resolution kept (2.2 MB RGBA).
+  The .house-view container no longer paints a black background or
+  border — the app's own dark background shows through the cutout.
+  (Processing script: /tmp — redo if the source image ever changes.)

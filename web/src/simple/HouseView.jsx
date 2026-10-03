@@ -28,10 +28,12 @@ const BATT_RECTS = [
 ];
 
 // The painted roof cable bundles (verified against the user's highlighted
-// picture 2026-10-03): left → Solarbank 4 Pro, right → Solarbank 2.
+// pictures 2026-10-03): left → Solarbank 4 Pro, right → Solarbank 2 —
+// each with the bend where it curves from the roof edge into the
+// vertical wall run.
 const PV_CABLES = [
-  { pn: "AE103", d: "M 47 38 L 47 64.5", lx: 43.5, ly: 52 },
-  { pn: "A17C1", d: "M 71.5 34 L 71.5 67.5", lx: 74.5, ly: 52 },
+  { pn: "AE103", d: "M 46.5 36.8 L 47 37.5 Q 47.3 38 47.3 39.2 L 47.3 64.5", lx: 43.5, ly: 52 },
+  { pn: "A17C1", d: "M 69.5 32.7 L 70.6 33.2 Q 71.4 33.5 71.4 34.7 L 71.4 67.5", lx: 74.5, ly: 52 },
 ];
 
 // Each solarbank's own cable to the Power Dock.
@@ -80,6 +82,7 @@ function Cable({ d, watts, color }) {
       fill="none"
       stroke={active ? color : "#2a3238"}
       strokeWidth={active ? 0.7 : 0.5}
+      strokeLinecap="round"
       strokeDasharray={active ? "1.6 1.6" : undefined}
       className={active ? "flow-edge-anim" : undefined}
     />
@@ -138,7 +141,7 @@ export default function HouseView({ flow, params }) {
 
   return (
     <div className="house-view">
-      <img src="/house.jpg" alt={t("simple.houseAlt")} draggable="false" />
+      <img src="/house.png" alt={t("simple.houseAlt")} draggable="false" />
       <svg className="hv-svg" viewBox="0 0 100 100" preserveAspectRatio="none">
         {/* The painted roof cables: PV DC into each solarbank (the unit's
             own pvW — what the panels on its strings deliver right now). */}
