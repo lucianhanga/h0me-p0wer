@@ -6043,3 +6043,13 @@ cross-cutting), every finding re-verified by hand before fixing:
   € figure at the break-even point walked from forecastSeries, the
   profit-that-year sub-line), and is distinguished only by a subtle
   green highlight (.tile.roi-be — green-tinted background + border).
+
+## ROI Projection row: 1/3/5/BE/10/15, uniform profit sub-line (2026-10-03, user request)
+
+- User: "I just want to have one line with these tiles: 1, 3, 5, break
+  even, 10, 15 would be enough; also in the break even tile don't write
+  'that year' — have the text the same look and feel like the other
+  tiles." projections[] in roi.js trimmed [1,2,3,5,10,15] → [1,3,5,10,15]
+  (the row fits one line now); the break-even tile's sub-line uses the
+  same roi.projection.profit key as the year tiles ("+€X profit" — the
+  roi.projection.profitThatYear keys were removed from en/de/ro).
