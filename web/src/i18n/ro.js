@@ -141,6 +141,7 @@ export const ro = {
     battery: "Baterie",
     pvOfMax: "{pct} % din {kwp} kWp",
     usualW: "uzual ≈ {w} W",
+    pctOfHome: "{pct} % din casă",
     eta: "≈ {eta}",
     ariaLabel: "flux de putere",
   },

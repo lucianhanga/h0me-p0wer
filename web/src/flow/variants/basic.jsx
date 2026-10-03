@@ -23,6 +23,14 @@ function Node({ node }) {
   const p = POS[node.id];
   const w = useTweenedWatts(node.valueW ?? null);
   const hasValue = node.valueW != null || node.text != null;
+  // Four possible rows (label / value / sub / contrib) in a 72px-tall node:
+  // compact offsets when all four are present, looser otherwise (2026-10-03,
+  // per-source contribution line added at the bottom).
+  const compact = hasValue && node.sub && node.contrib;
+  const labelY = compact ? p.y - 25 : hasValue ? p.y - 18 : node.contrib ? p.y - 8 : p.y + 4;
+  const valueY = compact ? p.y - 7 : p.y + 3;
+  const subY = compact ? p.y + 10 : p.y + 21;
+  const contribY = compact ? p.y + 27 : hasValue || node.sub ? p.y + 27 : p.y + 12;
   return (
     <g>
       <rect
@@ -35,22 +43,27 @@ function Node({ node }) {
         stroke={node.color}
         strokeOpacity="0.5"
       />
-      <text x={p.x} y={hasValue ? p.y - 18 : p.y + 4} textAnchor="middle" fill="#8b98a5" fontSize="12">
+      <text x={p.x} y={labelY} textAnchor="middle" fill="#8b98a5" fontSize="12">
         {node.label}
       </text>
       {node.valueW != null && (
-        <text x={p.x} y={p.y + 3} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
+        <text x={p.x} y={valueY} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
           {w} W
         </text>
       )}
       {node.text != null && (
-        <text x={p.x} y={p.y + 3} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
+        <text x={p.x} y={valueY} textAnchor="middle" fill="#e8ecef" fontSize="14" fontWeight="600">
           {node.text}
         </text>
       )}
       {node.sub && (
-        <text x={p.x} y={p.y + 21} textAnchor="middle" fill="#8b98a5" fontSize="10">
+        <text x={p.x} y={subY} textAnchor="middle" fill="#8b98a5" fontSize="10">
           {node.sub}
+        </text>
+      )}
+      {node.contrib && (
+        <text x={p.x} y={contribY} textAnchor="middle" fill={node.color} fontSize="10" fontWeight="600">
+          {node.contrib}
         </text>
       )}
     </g>

@@ -37,6 +37,15 @@ export function buildFlowModel(flow, t) {
   // 40 grid — user report 2026-10-03); drawing it on the PV→Battery arc
   // made PV production and charge look inconsistent.
   const battNet = (d.battToHomeW ?? 0) - (d.homeToBattW ?? 0);
+  // Per-source contribution to the house consumption, shown at the bottom of
+  // the Grid/PV/Battery nodes (2026-10-03, user request). Computed from the
+  // SAME values the arcs display so node and arc can never disagree; the
+  // three sum to ~100% by construction (battToHomeW is the balancing
+  // remainder — arcs close exactly to Home). Hidden while homeW is tiny
+  // (percentages of a ~0 W house are noise).
+  const homeW = d.homeW ?? null;
+  const pctOf = (w) =>
+    homeW != null && homeW > 10 ? t("flow.pctOfHome", { pct: Math.round((Math.max(0, w) / homeW) * 100) }) : null;
   return {
     nodes: [
       {
@@ -49,14 +58,15 @@ export function buildFlowModel(flow, t) {
           d.pvW != null && flow.pv?.peakW > 0
             ? t("flow.pvOfMax", { pct: Math.round((d.pvW / flow.pv.peakW) * 100), kwp: Math.round(flow.pv.peakW / 100) / 10 })
             : null,
+        contrib: pctOf(d.pvToHomeW ?? 0),
         color: "#5fce80",
       },
       // No value on the Grid node (user instruction) — arcs carry the usage.
-      { id: "grid", label: t("flow.grid"), valueW: null, sub: null, color: "#f7a44f" },
+      { id: "grid", label: t("flow.grid"), valueW: null, sub: null, contrib: pctOf(Math.max(0, gridNet)), color: "#f7a44f" },
       {
         id: "home",
         label: t("flow.home"),
-        valueW: d.homeW ?? null,
+        valueW: homeW,
         // Usual consumption for this weekday+hour from the 56-day
         // home_usage profile (2026-10-03, user request).
         sub: flow.home?.usualW != null ? t("flow.usualW", { w: flow.home.usualW }) : null,
@@ -67,6 +77,7 @@ export function buildFlowModel(flow, t) {
         label: flow.battery?.name ?? t("flow.battery"),
         text: d.batterySoc != null ? `${d.batterySoc}%` : "—",
         sub: eta ? t("flow.eta", { eta }) : null,
+        contrib: pctOf(Math.max(0, battNet)),
         color: "#c084fc",
       },
     ],
