@@ -2829,3 +2829,64 @@ pre {
   white-space: nowrap;
 }
 
+
+/* AI day briefing — the simple view's first section (2026-10-03, user
+   request). Quiet text block, no card chrome (matches the simple view's
+   spartan hero style). */
+.daybrief {
+  text-align: center;
+  margin: 0.25rem auto 0;
+  max-width: 720px; /* all five metrics fit one row on desktop */
+  padding: 0 0.5rem;
+}
+
+.daybrief-greeting {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: #e8ecef;
+}
+
+.daybrief-weather {
+  margin-top: 0.35rem;
+  color: #e8ecef;
+  font-size: 0.95rem;
+}
+
+.daybrief-metrics {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.9rem 1.4rem;
+}
+
+.daybrief-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 72px;
+}
+
+.daybrief-icon {
+  font-size: 1.1rem;
+}
+
+.daybrief-value {
+  font-weight: 600;
+  color: #e8ecef;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.daybrief-label {
+  color: #8b98a5;
+  font-size: 0.72rem;
+  text-align: center;
+  max-width: 120px;
+}
+
+.daybrief-note {
+  margin-top: 0.8rem;
+  font-size: 0.85rem;
+}

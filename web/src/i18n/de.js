@@ -22,10 +22,16 @@ export const de = {
     fullTip: "Volle Ansicht — alle Tabs und Details",
   },
   simple: {
-    batteries: "Akkus",
-    houseAlt: "Haus mit Solarpanels, Akkus, Power Dock und Netzanschluss",
-    charts: "Verläufe",
+    batteries: "Batterien",
+    charts: "Trends",
     periods: "Summen",
+    brief: {
+      forecastPv: "heute erwartet · {kwp} kWp",
+      houseTotal: "Hausverbrauch heute",
+      fromGrid: "vom Netz",
+      fromBattery: "vom Akku",
+      batteryEnd: "Akku bei Einbruch der Nacht",
+    },
   },
   header: {
     voiceCommand: "Sprachbefehl",

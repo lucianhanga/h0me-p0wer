@@ -25,6 +25,13 @@ export const en = {
     batteries: "Batteries",
     charts: "Trends",
     periods: "Totals",
+    brief: {
+      forecastPv: "expected today · {kwp} kWp",
+      houseTotal: "house total today",
+      fromGrid: "from grid",
+      fromBattery: "from battery",
+      batteryEnd: "battery at nightfall",
+    },
   },
   header: {
     voiceCommand: "Voice command",
