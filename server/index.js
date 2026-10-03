@@ -1205,6 +1205,9 @@ registerWelcomeRoute(app, {
   getMeterSns: () => meterSns(),
   getLivePower: () => poller.snapshot?.primary?.totalPower ?? null,
   getPowerPlanState: () => powerPlan.getState(),
+  // The Ask context carries everything the simple view shows (2026-10-03,
+  // user request) — the flow payload's diagram + per-unit members.
+  getFlowPayload: () => computeFlowPayload(),
   // Single source of truth for week/month production-so-far (2026-09-18,
   // user request: the "Right now" card's week/month kWh didn't match what
   // Dashboard showed — they were independently AI/PVGIS-projected instead
