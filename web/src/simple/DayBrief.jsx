@@ -40,7 +40,7 @@ export default function DayBrief() {
     <section className="daybrief">
       <div className="daybrief-greeting">{data.greeting}</div>
       <div className="daybrief-weather">
-        <Glyph name={weatherGlyphName(data.weatherCode)} size={16} className="daybrief-weather-icon" />
+        <Glyph name={weatherGlyphName(data.weatherCode)} size={30} className="daybrief-weather-icon" />
         <span>{data.weatherText}</span>
       </div>
       <div className="daybrief-metrics">
