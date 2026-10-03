@@ -31,6 +31,12 @@ export function buildFlowModel(flow, t) {
   const GRID_DEADBAND_W = 20;
   let gridNet = Math.max(0, d.gridToHomeW ?? 0) - Math.max(0, d.pvToGridW ?? 0);
   if (Math.abs(gridNet) <= GRID_DEADBAND_W) gridNet = 0;
+  // Battery↔Home pair: ONE arc, dominant direction (2026-10-03 — same rule
+  // as the grid pair). homeToBattW is grid-sourced charging (the device
+  // tops up from the grid at the floor: PV 89 W charging 129 W = 89 PV +
+  // 40 grid — user report 2026-10-03); drawing it on the PV→Battery arc
+  // made PV production and charge look inconsistent.
+  const battNet = (d.battToHomeW ?? 0) - (d.homeToBattW ?? 0);
   return {
     nodes: [
       { id: "pv", label: t("flow.pv"), valueW: d.pvW ?? null, sub: null, color: "#5fce80" },
@@ -50,7 +56,10 @@ export function buildFlowModel(flow, t) {
       { id: "pv-home", from: "pv", to: "home", watts: d.pvToHomeW ?? 0, color: "#5fce80" },
       { id: "grid-home", from: "grid", to: "home", watts: Math.max(0, gridNet), color: "#f7a44f" },
       { id: "home-grid", from: "home", to: "grid", watts: Math.max(0, -gridNet), color: "#f7a44f" },
-      { id: "batt-home", from: "batt", to: "home", watts: d.battToHomeW ?? 0, color: "#c084fc" },
+      { id: "batt-home", from: "batt", to: "home", watts: Math.max(0, battNet), color: "#c084fc" },
+      // Grid-sourced charging — grid orange, the energy comes from the grid
+      // through the home's AC bus, not from the battery.
+      { id: "home-batt", from: "home", to: "batt", watts: Math.max(0, -battNet), color: "#f7a44f" },
     ],
   };
 }

@@ -525,7 +525,13 @@ async function computeFlowPayload() {
             ),
         )
       : cellsW,
-    pvToBattW: chargeW,
+    pvToBattW: pvToBattery,
+    // Grid-sourced charging (chargeW beyond what PV covers) — the
+    // Home→Battery arc (2026-10-03, user report: "PV 89 W but charging
+    // 129 W"). The device grid-charges to recover from the floor
+    // overnight; the meter sees it (import = home + this), Anker's
+    // grid_to_home channel does not — the battery side is the truth.
+    homeToBattW: gridChargeW,
     pvToHomeW: appCh
       ? Math.max(
           0,

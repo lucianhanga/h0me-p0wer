@@ -5974,3 +5974,27 @@ cross-cutting), every finding re-verified by hand before fixing:
   inside the flip grid); reverted, widths only. Verified at 1400px (4
   identical tiles per unit row) and 390px (stacked full-width, matching
   the L1/L2/L3 phase cards' established phone pattern).
+
+## Flow diagram: Home→Battery arc for grid-sourced charging (2026-10-03, user report)
+
+- User: "PV production 89 W doesn't match battery charging 129 W" —
+  then confirmed the Anker app shows the same, and guessed "the
+  solarbank 4 is loading from the grid". Correct, and proven from the
+  device's own telemetry: the SB4's MQTT bc channel
+  (grid_to_battery_power) read exactly 40 W while it reported pv 80 W
+  and charge 120 W (80 + 40 = 120 ✓). Physics: the battery sat at the
+  10% floor overnight (standby drain nibbles below it); in the morning
+  the system tops up the shortfall from the grid — Anker's low-SOC
+  recovery / backup-reserve behavior (Anker documents grid charging and
+  reserve-SOC features for the Power Dock / X1 family).
+- The diagram bug: pvToBattW carried the RAW chargeW, so the whole
+  129 W drew on the PV→Battery arc. Now pvToBattW = pvToBattery
+  (min(pvW, chargeW) — the validated split), and a new diagram field
+  homeToBattW = gridChargeW feeds a Home→Battery edge in model.js
+  (grid orange — it's grid energy through the home's AC bus). The
+  battery↔home pair follows the same dominant-direction netting as the
+  grid pair. With the meter as grid source the arcs then close exactly
+  (import 393 = home 353 + 40 grid-charge); with cloud-live grid they
+  can be off by the grid-charge amount — Anker's grid_to_home channel
+  doesn't carry that energy, the battery side is the only truthful
+  source for it.
