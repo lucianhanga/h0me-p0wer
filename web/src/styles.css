@@ -2823,8 +2823,9 @@ pre {
   width: 100%;
   border-radius: 12px;
   overflow: hidden;
-  border: 1px solid #2a3238;
-  background: #000;
+  /* The house image has a REAL alpha channel (backdrop cut out
+     2026-10-03) — the app's own background shows through. */
+  background: transparent;
 }
 .house-view img {
   display: block;
