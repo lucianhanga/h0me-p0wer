@@ -70,6 +70,23 @@ export default function RoiTab() {
   // main list stays "what's installed," matching category in roi-bom.json.
   const mainBom = data.bom.filter((r) => r.category !== "extended");
   const extendedBom = data.bom.filter((r) => r.category === "extended");
+  // Break-even tile for the Projection row (2026-10-03, user request — "add
+  // a tile with the break even year, the profit that year"). Baseline basis
+  // (this section IS the baseline estimate): the YEAR of paybackDate, and
+  // the profit earned inside that year AFTER the break-even point —
+  // cumulative baseline savings at Dec 31 minus the investment (the
+  // forecast curve crosses invested exactly at paybackDate).
+  const breakEvenYear = data.paybackDate ? new Date(`${data.paybackDate}T00:00:00`).getFullYear() : null;
+  const breakEvenYearProfitEur = (() => {
+    if (breakEvenYear == null) return null;
+    const eoy = `${breakEvenYear}-12-31`;
+    let cum = null;
+    for (const p of data.forecastSeries ?? []) {
+      if (p.date <= eoy) cum = p.cumulativeEur;
+      else break;
+    }
+    return cum != null ? Math.round((cum - data.totalInvestedEur) * 100) / 100 : null;
+  })();
 
   return (
     <div>
@@ -182,6 +199,20 @@ export default function RoiTab() {
 
       <h4>{t("roi.projection.title")}</h4>
       <div className="tiles roi-proj">
+        {breakEvenYear != null && (
+          <div className="tile">
+            <div className="tile-title">{t("roi.projection.breakEven")}</div>
+            <div className="tile-main">{breakEvenYear}</div>
+            {breakEvenYearProfitEur != null && (
+              <div className={`tile-sub ${breakEvenYearProfitEur >= 0 ? "roi-pos" : "roi-neg"}`}>
+                {t("roi.projection.profitThatYear", {
+                  sign: breakEvenYearProfitEur >= 0 ? "+" : "−",
+                  eur: fmtEur(Math.abs(breakEvenYearProfitEur)),
+                })}
+              </div>
+            )}
+          </div>
+        )}
         {data.projections.map((p) => (
           <div className="tile" key={p.years}>
             <div className="tile-title">
