@@ -483,6 +483,8 @@ export const ro = {
       year: "an",
       years: "ani",
       profit: "{sign}{eur} profit",
+      breakEven: "Prag de rentabilitate",
+      profitThatYear: "{sign}{eur} profit în acel an",
     },
     assumptions: "Ipoteze: linie de bază {source} setată {date} — {daily}/zi ({kwh} kWh/an la {pct}% autoconsum), modelată sezonier pe lună, tarif constant €{tariff}/kWh, fără degradarea panourilor. {reasoning} Comparație măsurată: {measured}/zi pe {days} zile (azi exclus, neterminată). Economiile = import din rețea evitat (PV direct spre casă + descărcarea celulelor bateriei). „Rezultatul posibil” (linie punctată, tile Recuperare) este o prognoză glisantă: forma sezonieră a liniei de bază scalată după cum s-a situat sistemul față de ea până acum — se mișcă pe măsură ce noi zile sunt măsurate, spre deosebire de planul fix al liniei de bază.",
     chart: {

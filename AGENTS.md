@@ -6021,3 +6021,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   recomputeAggregate() (runs on every REST sync + MQTT merge). i18n
   kinds activity.gridCharge.start/stop in en/de/ro; ActivityBell
   resolves the nested state key.
+
+## ROI Projection: break-even year tile (2026-10-03, user request)
+
+- User: "Projection (baseline estimate) — add a tile with the break even
+  year, the profit that year." New first tile in the Projection row:
+  the YEAR of the baseline paybackDate (2031) and the profit earned
+  INSIDE that year after the break-even point — cumulative baseline
+  savings at Dec 31 (walked from the payload's forecastSeries) minus
+  totalInvestedEur; the curve crosses invested exactly at paybackDate
+  by construction. Baseline basis (the section IS the baseline
+  estimate); i18n roi.projection.breakEven/profitThatYear in en/de/ro.
