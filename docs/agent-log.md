@@ -6036,3 +6036,21 @@ cross-cutting), every finding re-verified by hand before fixing:
   floor-aware) and DE ("Guten Abend…" — the greeting matches generation
   time via context.localTime); screenshots desktop (5-metric row) + 390px
   phone (3+2 wrap, scrollW == 390).
+
+## Day briefing: abstract stroke glyphs replace emoji (2026-10-03, user request)
+
+- User: "make the emoticons more spartan, more abstract." New
+  web/src/components/Glyph.jsx — hand-drawn 24×24 stroke glyphs
+  (sun/partly/cloud/rain/fog/snow/thunder + home/grid-tower/battery/moon),
+  stroke currentColor, no fill — they inherit the text color, same
+  reasoning as StateIcon.jsx's MDI paths (2026-09-28: emoji render
+  platform-dependently and clash with the flat style). The weather glyph
+  comes from the DETERMINISTIC WMO weathercode (weatherGlyphName), not the
+  AI's prose.
+- server/daybrief.js: the prompt's weatherText is now plain text (NO
+  emojis — UI renders its own glyph), the payload carries weatherCode, and
+  a defensive \\p{Extended_Pictographic} strip catches any pictograph that
+  slips past the prompt. The deterministic fallback lost its emoji too.
+- Verified: regenerated today's briefing with the new prompt ("Foggy today,
+  with temperatures…", code 45 → fog glyph), screenshots desktop + 390px
+  phone (scrollW == 390).
