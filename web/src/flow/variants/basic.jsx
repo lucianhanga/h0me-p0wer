@@ -25,12 +25,14 @@ function Node({ node }) {
   const hasValue = node.valueW != null || node.text != null;
   // Four possible rows (label / value / sub / contrib) in a 72px-tall node:
   // compact offsets when all four are present, looser otherwise (2026-10-03,
-  // per-source contribution line added at the bottom).
+  // per-source contribution line added at the bottom). The contrib line is
+  // ALWAYS at the same y (user request 2026-10-03 — same bottom position in
+  // every rectangle, including the value-less Grid node).
   const compact = hasValue && node.sub && node.contrib;
   const labelY = compact ? p.y - 25 : hasValue ? p.y - 18 : node.contrib ? p.y - 8 : p.y + 4;
   const valueY = compact ? p.y - 7 : p.y + 3;
   const subY = compact ? p.y + 10 : p.y + 21;
-  const contribY = compact ? p.y + 27 : hasValue || node.sub ? p.y + 27 : p.y + 12;
+  const contribY = p.y + 27;
   return (
     <g>
       <rect
