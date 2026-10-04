@@ -321,7 +321,7 @@ export default function LiveTab() {
               <span className="phase-name">L{i + 1}</span>
               <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
               <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} />}
+              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} bidirectional />}
             </div>
           </FlipTile>
         ))}
