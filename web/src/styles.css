@@ -656,23 +656,29 @@ h4 {
   }
 }
 
-/* Simple view's per-string PV section (2026-10-04, user request): one bar
-   per MPPT slot, filled to its share of its configured panel capacity —
-   same track/fill pattern as .hold-progress above, PV green instead of
-   the strategy tab's orange. */
+/* Simple view's per-string PV section (2026-10-04). After trying 4
+   flip-through visualizations, the user settled on one: a segmented LED
+   meter colored by the zone-gradient's green→amber→red blend. */
+/* width: 100% is required, not decorative — .pv-slot-groups is a direct
+   child of .simple-home (display: flex; align-items: center), which
+   shrink-wraps any child lacking its own explicit width down to its
+   content's natural size. Without this, the whole grid (and every card's
+   "80% of width" below) was 80% of an already content-shrunk box, not
+   80% of the page — caught via computed-width inspection while verifying
+   the mobile layout, not visible by eye alone. */
 .pv-slot-groups {
+  width: 100%;
   margin: 0.5rem 0;
 }
 
 /* Section-wide total, above the per-port breakdown (2026-10-04, user
    request: "add on top of [the ports] an indication of the total also
-   like a progress bar") — full width, a brighter border and tinted
-   background distinguish it from the individual port cards below. */
+   like a progress bar") — full width; the label alone (in PV green)
+   distinguishes it from the individual port cards, since neither carries
+   a background/border box any more (see .pv-slot below). */
 .pv-slot-total {
   width: 100%;
   margin: 0.5rem 0 1rem;
-  background: #1a2a20;
-  border-color: #3a5c45;
 }
 
 .pv-slot-total .pv-slot-label span:first-child {
@@ -693,27 +699,19 @@ h4 {
    flex-grow into a pure ratio: a 1000 W port grows twice as wide as a
    500 W one. The custom-property indirection (rather than an inline
    flex-grow) is what lets the mobile media query below cleanly override
-   it back to equal-width stacked cards. */
-/* The whole card is the flip trigger (2026-10-04, user request: "make it
-   like an invisible tile which when flipped get different
-   visualizations") — perspective lives here, on the static ancestor, so
-   .quadflip-inner's rotateY (reused as-is from QuadFlipTile) renders in
-   3D; only the viz box rotates, the label above it never does. */
+   it. No background or border (2026-10-04, user request: "don't show the
+   tile underneath, or make it with a transparent color") — the LED meter
+   floats directly on the page.
+*/
 .pv-slot {
-  background: #1a2128;
-  border: 1px solid #2a3238;
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
   border-radius: 8px;
   padding: 0.65rem 1rem;
   flex-grow: var(--pv-weight, 1);
   flex-basis: 0;
   min-width: 140px;
-  perspective: 1200px;
-  cursor: pointer;
-}
-
-.pv-slot:focus-visible {
-  outline: 2px solid #5fce80;
-  outline-offset: 2px;
 }
 
 .pv-slot-label {
@@ -733,113 +731,56 @@ h4 {
   font-weight: 600;
 }
 
-/* Fixed-height viz slot so flipping between faces never resizes the card
-   — tall enough for the ring face, bar/LED faces center inside it. */
-.pv-viz-box {
-  height: 36px;
-  display: flex;
-  align-items: center;
-}
-
-.pv-viz-box .quadflip-inner {
+/* Segmented LED meter, colored by position (2026-10-04, user decision:
+   "the Segmented LED meter with the color gradients from the Zone
+   gradient but with color gradients following one color into another").
+   The row's OWN background carries the unbroken green→amber→red blend;
+   each segment is either transparent (lit — reveals the gradient at its
+   own position) or opaque dark (unlit) — so a lit segment's color comes
+   from where it sits along the row, not a fixed on-color. */
+/* Segment "gaps" are an opaque border in the page's own background color,
+   not a flex `gap` — a real gap would let the row's gradient show through
+   in every slot regardless of lit/unlit state (stray colored ticks past
+   the fill point, caught visually before shipping this). A border is
+   part of each segment's own box, so it hides the gradient exactly as
+   consistently as the segment's fill does. */
+.pv-led-row {
   width: 100%;
   display: flex;
-  align-items: center;
-}
-
-/* ---- face 1: minimal + shimmer sweep ---- */
-.pv-viz-track {
-  width: 100%;
-  height: 4px;
-  border-radius: 999px;
-  background: #0d1114;
-  border: 1px solid #2a3238;
+  height: 10px;
+  border-radius: 3px;
   overflow: hidden;
-}
-
-.pv-viz-fill {
-  height: 100%;
-  border-radius: 999px;
-  transition: width 1s linear;
-}
-
-.pv-viz-fill-shimmer {
-  background: linear-gradient(90deg, #2f8f52, #5fce80);
-  position: relative;
-  overflow: hidden;
-}
-
-.pv-viz-fill-shimmer::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  width: 40%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  animation: pv-sweep 2.6s ease-in-out infinite;
-}
-
-@keyframes pv-sweep {
-  0% {
-    transform: translateX(-120%);
-  }
-  100% {
-    transform: translateX(250%);
-  }
-}
-
-/* ---- face 3: zone gradient (default) — smooth, no hard color stops ---- */
-.pv-viz-fill-zone {
   background: linear-gradient(90deg, #2f8f52 0%, #5fce80 35%, #f7a44f 70%, #e05c5c 100%);
 }
 
-/* ---- face 2: segmented LED meter ---- */
-.pv-viz-led-row {
-  width: 100%;
-  display: flex;
-  gap: 2px;
-  height: 10px;
-}
-
-.pv-viz-led {
+.pv-led {
   flex: 1;
-  border-radius: 2px;
   background: #0d1114;
-  border: 1px solid #2a3238;
+  border-right: 2px solid #101418;
+  transition: background-color 1s linear;
 }
 
-.pv-viz-led.on {
-  background: #5fce80;
-  border-color: #2f8f52;
-  box-shadow: 0 0 3px rgba(95, 206, 128, 0.55);
+.pv-led:last-child {
+  border-right: none;
 }
 
-/* ---- face 4: radial ring gauge ---- */
-.pv-viz-ring {
-  margin: 0 auto;
-  display: block;
-}
-
-.pv-viz-ring-text {
-  fill: #e8ecef;
-  font-size: 9px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .pv-viz-fill-shimmer::after {
-    animation: none;
-  }
+.pv-led.on {
+  background: transparent;
 }
 
 @media (max-width: 600px) {
   .pv-slot-grid {
     flex-direction: column;
+    align-items: center;
   }
 
+  /* Cards cover 80% of the width on mobile (2026-10-04, user request)
+     instead of the full column — proportional sizing is still off here
+     (flex-grow: 0), every card renders the same fixed width. */
   .pv-slot {
     flex-grow: 0;
     flex-basis: auto;
+    width: 80%;
     min-width: 0;
   }
 }
