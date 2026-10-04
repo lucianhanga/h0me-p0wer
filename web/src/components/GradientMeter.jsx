@@ -1,4 +1,8 @@
-const SEGMENTS = 28;
+// 48, not 28 (2026-10-04, user request: "make the bar segments even more
+// granular to get nicer animations when the values are changing") — finer
+// steps mean a changing value visibly lights/dims one thin segment at a
+// time instead of jumping across a chunky one.
+const SEGMENTS = 48;
 const HALF = SEGMENTS / 2;
 
 // `log` scaling (2026-10-04, grid phases — "most of the time the values
