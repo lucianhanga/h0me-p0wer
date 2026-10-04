@@ -28,27 +28,32 @@ function minutesToFull(battery) {
   return Math.round((kwhNeeded / (charge / 1000)) * 60);
 }
 
-// Last HISTORY_HOURS of solar/home/grid power as hourly averages —
-// display-only sparklines for the watch (any reasonable number of recent
-// points works, per WATCH.readme). Reuses /api/timeseries
-// (internal loopback call, same pattern as the stats-overview reuse below)
-// rather than re-querying the DB directly: it already merges local Modbus
-// samples with cloud day-trend fallback for BOTH grid and PV (the local
-// `solar` column has no such fallback — `pv` does, so that's the field
-// used here), which a from-scratch query would have to reimplement to
-// stay correct when Modbus is down. Home has no direct column anywhere, so
+// Today's solar/home/grid power as hourly averages, from local midnight up
+// to now — display-only, but the Garmin app's Solar page plots these on a
+// fixed 0h-24h x-axis (left edge = midnight, a pulsing dot at "now"), so
+// the array has to actually start at midnight rather than some trailing
+// window, or the graph stretches a partial-day slice across the whole
+// axis and looks wrong (empty for most of the day, bunched up wherever
+// the real samples landed). Reuses /api/timeseries (internal loopback
+// call, same pattern as the stats-overview reuse below) rather than
+// re-querying the DB directly: it already merges local Modbus samples
+// with cloud day-trend fallback for BOTH grid and PV (the local `solar`
+// column has no such fallback — `pv` does, so that's the field used
+// here), which a from-scratch query would have to reimplement to stay
+// correct when Modbus is down. Home has no direct column anywhere, so
 // it's reconstructed the same way computeFlowPayload's own meter-fallback
 // does elsewhere in this backend: max(grid, 0) + battery output.
-const HISTORY_HOURS = 8;
-const HISTORY_BUCKET_MS = 3600 * 1000; // 1 h buckets — ~HISTORY_HOURS+1 points
+const HISTORY_BUCKET_MS = 3600 * 1000; // 1 h buckets — up to ~24 points/day
 
 async function recentHistory(timeseriesUrl) {
   const now = Date.now();
-  const from = now - HISTORY_HOURS * HISTORY_BUCKET_MS;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const from = todayStart.getTime();
   // `bucket`, not `points` — /api/timeseries clamps `points` to a minimum
   // of 50 (sized for its pan/zoom chart use), which would silently ignore
-  // a request for just 8-9 sparkline points. `bucket` sets the bucket size
-  // directly instead.
+  // a request for a day's worth of hourly sparkline points. `bucket` sets
+  // the bucket size directly instead.
   const url = `${timeseriesUrl}?from=${from}&to=${now}&bucket=${HISTORY_BUCKET_MS}`;
   const res = await fetchJson(url);
   const points = res?.data ?? [];
