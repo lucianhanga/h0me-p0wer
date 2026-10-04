@@ -3,6 +3,7 @@ import FlowView from "../flow/FlowView.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import StateIcon from "../components/StateIcon.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
+import SectionTitle from "../components/SectionTitle.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
@@ -34,7 +35,6 @@ export default function LiveTab() {
   const [live, setLive] = useState(null); // meter state (WS meter / /api/live)
   const [flow, setFlow] = useState(null); // flow payload (WS flow / /api/flow)
   const [health, setHealth] = useState(null); // /api/health
-  const [detailsOpen, setDetailsOpen] = useState(false); // Details section: collapsed by default
   const [todayProfile, setTodayProfile] = useState(null); // /api/stats/overview's profile, for the flip-side mini charts
   const mounted = useRef(true);
 
@@ -201,7 +201,7 @@ export default function LiveTab() {
         <Badge ok={meterDirect}>{t("live.meterDirect")}</Badge>
       </p>
 
-      <h3>{t("live.powerFlow")}</h3>
+      <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <FlowView flow={flow} />
 
       <div className="cards">
@@ -305,104 +305,94 @@ export default function LiveTab() {
 
       <PowerPlanCard />
 
-      <button
-        className="details-toggle"
-        onClick={() => setDetailsOpen((o) => !o)}
-        aria-expanded={detailsOpen}
-      >
-        {t("live.details")} <span className="chevron">{detailsOpen ? "▾" : "▸"}</span>
-      </button>
-      {detailsOpen && (
-        <>
-          <h4>{t("live.tiles.grid")}</h4>
-          <div className="phase-cards">
-            {(phases ?? [null, null, null]).map((p, i) => (
-              <FlipTile key={i}>
-                <div className="phase-card">
-                  <span className="phase-name">L{i + 1}</span>
-                  <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
-                  <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-                </div>
-              </FlipTile>
-            ))}
-          </div>
-          <h4>{t("live.tiles.solarPv")}</h4>
-          <div className="phase-cards">
-            <FlipTile>
-              <div className="phase-card">
-                <span className="phase-name">{t("live.pvTotal")}</span>
-                <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
-              </div>
-            </FlipTile>
-          </div>
-          {/* Every MPPT channel of every unit (2026-09-28, user request):
-              connected strings (ever seen producing — server-side sticky
-              marker) show live watts; never-producing channels render
-              disabled. Replaces the old fixed PV1/PV2 cards, which only
-              covered the primary unit's first two strings. */}
-          {(battery?.pvUnits ?? []).map((u) => (
-            <div key={u.sn}>
-              {(battery.pvUnits?.length ?? 0) > 1 && <p className="pv-unit-label muted">{u.name}</p>}
-              <div className="phase-cards">
-                {u.channels.map((c) =>
-                  c.connected ? (
-                    <FlipTile key={c.n}>
-                      <div className="phase-card">
-                        <span className="phase-name">{c.name}</span>
-                        {/* watts is null while the unit's MQTT push channel
-                            is stalled — an honest "—", never the frozen
-                            scen_info pv_power number. */}
-                        <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
-                      </div>
-                    </FlipTile>
-                  ) : (
-                    // Not flippable — an empty back face behind a dead
-                    // channel would just be noise.
-                    <div key={c.n} className="phase-card off">
-                      <span className="phase-name">{c.name}</span>
-                      <span className="phase-power">—</span>
-                      <span className="phase-detail">{t("live.pvNotConnected")}</span>
-                    </div>
-                  ),
-                )}
-              </div>
+      <SectionTitle>{t("live.details")}</SectionTitle>
+      <h4>{t("live.tiles.grid")}</h4>
+      <div className="phase-cards">
+        {(phases ?? [null, null, null]).map((p, i) => (
+          <FlipTile key={i}>
+            <div className="phase-card">
+              <span className="phase-name">L{i + 1}</span>
+              <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
+              <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
             </div>
-          ))}
-          {/* Fallback for the DB-fallback battery / setups without per-unit
-              channel data: the old aggregate PV1/PV2 cards. */}
-          {!battery?.pvUnits?.length && battery?.pv1W != null && (
-            <div className="phase-cards">
-              <FlipTile>
-                <div className="phase-card">
-                  <span className="phase-name">PV1</span>
-                  <span className="phase-power">{`${battery.pv1W} W`}</span>
-                  <span className="phase-detail">
-                    {pv?.pv1KwhToday != null ? t("live.kwhToday", { kwh: pv.pv1KwhToday }) : ""}
-                  </span>
+          </FlipTile>
+        ))}
+      </div>
+      <h4>{t("live.tiles.solarPv")}</h4>
+      <div className="phase-cards">
+        <FlipTile>
+          <div className="phase-card">
+            <span className="phase-name">{t("live.pvTotal")}</span>
+            <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+          </div>
+        </FlipTile>
+      </div>
+      {/* Every MPPT channel of every unit (2026-09-28, user request):
+          connected strings (ever seen producing — server-side sticky
+          marker) show live watts; never-producing channels render
+          disabled. Replaces the old fixed PV1/PV2 cards, which only
+          covered the primary unit's first two strings. */}
+      {(battery?.pvUnits ?? []).map((u) => (
+        <div key={u.sn}>
+          {(battery.pvUnits?.length ?? 0) > 1 && <p className="pv-unit-label muted">{u.name}</p>}
+          <div className="phase-cards">
+            {u.channels.map((c) =>
+              c.connected ? (
+                <FlipTile key={c.n}>
+                  <div className="phase-card">
+                    <span className="phase-name">{c.name}</span>
+                    {/* watts is null while the unit's MQTT push channel
+                        is stalled — an honest "—", never the frozen
+                        scen_info pv_power number. */}
+                    <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
+                  </div>
+                </FlipTile>
+              ) : (
+                // Not flippable — an empty back face behind a dead
+                // channel would just be noise.
+                <div key={c.n} className="phase-card off">
+                  <span className="phase-name">{c.name}</span>
+                  <span className="phase-power">—</span>
+                  <span className="phase-detail">{t("live.pvNotConnected")}</span>
                 </div>
-              </FlipTile>
-              <FlipTile>
-                <div className="phase-card">
-                  <span className="phase-name">PV2</span>
-                  <span className="phase-power">{`${battery.pv2W} W`}</span>
-                  <span className="phase-detail">
-                    {pv?.pv2KwhToday != null ? t("live.kwhToday", { kwh: pv.pv2KwhToday }) : ""}
-                  </span>
-                </div>
-              </FlipTile>
+              ),
+            )}
+          </div>
+        </div>
+      ))}
+      {/* Fallback for the DB-fallback battery / setups without per-unit
+          channel data: the old aggregate PV1/PV2 cards. */}
+      {!battery?.pvUnits?.length && battery?.pv1W != null && (
+        <div className="phase-cards">
+          <FlipTile>
+            <div className="phase-card">
+              <span className="phase-name">PV1</span>
+              <span className="phase-power">{`${battery.pv1W} W`}</span>
+              <span className="phase-detail">
+                {pv?.pv1KwhToday != null ? t("live.kwhToday", { kwh: pv.pv1KwhToday }) : ""}
+              </span>
             </div>
-          )}
-          {snapshot && (
-            <p className="muted">
-              {t("live.meterInfo", {
-                model: snapshot.meter.model,
-                type: snapshot.meter.type,
-                sw: snapshot.meter.swVersion,
-                time: new Date(snapshot.timestamp).toLocaleTimeString(),
-              })}
-            </p>
-          )}
-        </>
+          </FlipTile>
+          <FlipTile>
+            <div className="phase-card">
+              <span className="phase-name">PV2</span>
+              <span className="phase-power">{`${battery.pv2W} W`}</span>
+              <span className="phase-detail">
+                {pv?.pv2KwhToday != null ? t("live.kwhToday", { kwh: pv.pv2KwhToday }) : ""}
+              </span>
+            </div>
+          </FlipTile>
+        </div>
+      )}
+      {snapshot && (
+        <p className="muted">
+          {t("live.meterInfo", {
+            model: snapshot.meter.model,
+            type: snapshot.meter.type,
+            sw: snapshot.meter.swVersion,
+            time: new Date(snapshot.timestamp).toLocaleTimeString(),
+          })}
+        </p>
       )}
     </div>
   );
