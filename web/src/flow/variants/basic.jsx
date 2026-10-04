@@ -85,13 +85,10 @@ function Node({ node }) {
   );
 }
 
-function Edge({ edge }) {
-  const a = POS[edge.from];
-  const b = POS[edge.to];
-  const w = useTweenedWatts(edge.watts ?? 0); // arcs glide with the values
-  if (w <= 0) {
-    return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
-  }
+// Label geometry shared by EdgeLine and EdgeLabel — the two are rendered
+// in different SVG layers (line beneath the nodes, label above them; see
+// BasicVariant) so they need the same math without duplicating it.
+function edgeLabelPos(a, b) {
   const mx = (a.x + b.x) / 2;
   const my = (a.y + b.y) / 2;
   const vertical = a.x === b.x;
@@ -101,53 +98,69 @@ function Edge({ edge }) {
   // visible") — offset it PERPENDICULAR to the arc (above the line) and
   // give every label a dark outline (paint-order stroke) so it stays
   // legible even when a line passes underneath.
-  let lx, ly, anchor;
   if (vertical) {
-    lx = mx + 8;
-    ly = my - 3;
-    anchor = "start";
-  } else if (horizontal) {
-    lx = mx;
-    ly = my - 8;
-    anchor = "middle";
-  } else {
-    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    let nx = -(b.y - a.y) / len;
-    let ny = (b.x - a.x) / len;
-    if (ny > 0) {
-      nx = -nx;
-      ny = -ny; // label above the line, never below
-    }
-    lx = mx + nx * 12;
-    ly = my + ny * 12 + 4;
-    anchor = "middle";
+    return { x: mx + 8, y: my - 3, anchor: "start" };
+  }
+  if (horizontal) {
+    return { x: mx, y: my - 8, anchor: "middle" };
+  }
+  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  let nx = -(b.y - a.y) / len;
+  let ny = (b.x - a.x) / len;
+  if (ny > 0) {
+    nx = -nx;
+    ny = -ny; // label above the line, never below
+  }
+  return { x: mx + nx * 12, y: my + ny * 12 + 4, anchor: "middle" };
+}
+
+function EdgeLine({ edge }) {
+  const a = POS[edge.from];
+  const b = POS[edge.to];
+  const w = useTweenedWatts(edge.watts ?? 0); // arcs glide with the values
+  if (w <= 0) {
+    return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
   }
   return (
-    <g>
-      <line
-        x1={a.x}
-        y1={a.y}
-        x2={b.x}
-        y2={b.y}
-        stroke={edge.color}
-        strokeWidth="2.5"
-        strokeDasharray="6 6"
-        className="flow-edge-anim"
-      />
-      <text
-        x={lx}
-        y={ly}
-        fill={edge.color}
-        fontSize="12"
-        fontWeight="600"
-        textAnchor={anchor}
-        paintOrder="stroke"
-        stroke="#10161b"
-        strokeWidth="3"
-      >
-        {w} W
-      </text>
-    </g>
+    <line
+      x1={a.x}
+      y1={a.y}
+      x2={b.x}
+      y2={b.y}
+      stroke={edge.color}
+      strokeWidth="2.5"
+      strokeDasharray="6 6"
+      className="flow-edge-anim"
+    />
+  );
+}
+
+// Labels sit on their own top layer, drawn after the node rectangles
+// (2026-10-04, user report: "the arcs values you cannot properly see") —
+// the gap between neighboring nodes is narrower than a "123 W" label, so
+// when it was painted before the nodes the opaque node background clipped
+// it. Painting labels last keeps them fully legible no matter how tight
+// the layout gets (including scaled-down mobile widths).
+function EdgeLabel({ edge }) {
+  const a = POS[edge.from];
+  const b = POS[edge.to];
+  const w = useTweenedWatts(edge.watts ?? 0);
+  if (w <= 0) return null;
+  const { x, y, anchor } = edgeLabelPos(a, b);
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={edge.color}
+      fontSize="12"
+      fontWeight="600"
+      textAnchor={anchor}
+      paintOrder="stroke"
+      stroke="#10161b"
+      strokeWidth="3"
+    >
+      {w} W
+    </text>
   );
 }
 
@@ -156,10 +169,13 @@ export default function BasicVariant({ model }) {
   return (
     <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label={t("flow.ariaLabel")}>
       {model.edges.map((e) => (
-        <Edge key={e.id} edge={e} />
+        <EdgeLine key={e.id} edge={e} />
       ))}
       {model.nodes.map((n) => (
         <Node key={n.id} node={n} />
+      ))}
+      {model.edges.map((e) => (
+        <EdgeLabel key={e.id} edge={e} />
       ))}
     </svg>
   );
