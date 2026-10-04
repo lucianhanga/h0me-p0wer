@@ -24,20 +24,50 @@ import SectionTitle from "../components/SectionTitle.jsx";
 // to configured neighbors.
 const DEFAULT_WEIGHT_W = 500;
 
-function PvSlotBar({ channel, weight }) {
-  const w = useTweenedWatts(channel.watts ?? 0);
-  const pct = channel.peakW > 0 ? Math.min(100, Math.round(((channel.watts ?? 0) / channel.peakW) * 100)) : null;
+// Shared label+track+fill markup for both an individual port's bar and the
+// section-wide total bar below — only the outer wrapper (proportional
+// width vs. full width) differs between the two call sites.
+function PvBarContent({ label, watts, peakW }) {
+  const w = useTweenedWatts(watts ?? 0);
+  const pct = peakW > 0 ? Math.min(100, Math.round(((watts ?? 0) / peakW) * 100)) : null;
   return (
-    <div className="pv-slot" style={{ "--pv-weight": weight }}>
+    <>
       <div className="pv-slot-label">
-        <span>{channel.name}</span>
+        <span>{label}</span>
         <span>
-          {w} {pct != null ? `/ ${channel.peakW} W · ${pct}%` : "W"}
+          {w} {pct != null ? `/ ${peakW} W · ${pct}%` : "W"}
         </span>
       </div>
       <div className="pv-slot-track">
         <div className="pv-slot-fill" style={{ width: `${pct ?? 0}%` }} />
       </div>
+    </>
+  );
+}
+
+function PvSlotBar({ channel, weight }) {
+  return (
+    <div className="pv-slot" style={{ "--pv-weight": weight }}>
+      <PvBarContent label={channel.name} watts={channel.watts} peakW={channel.peakW} />
+    </div>
+  );
+}
+
+// Total bar (2026-10-04, user request: "also add on top of [the ports] an
+// indication of the total also like a progress bar") — sums every
+// connected port's live watts and, for the percentage, every connected
+// port's configured peakW. A port with no configured capacity still adds
+// its watts to the headline number (it's real production) but is left out
+// of the percentage/bar math — same "don't guess a capacity" rule as the
+// individual cards, just applied to the sum instead of hiding the whole
+// bar over one unconfigured port.
+function PvTotalBar({ label, channels }) {
+  const totalWatts = channels.reduce((sum, c) => sum + (c.watts ?? 0), 0);
+  const configured = channels.filter((c) => c.peakW > 0);
+  const totalPeakW = configured.length ? configured.reduce((sum, c) => sum + c.peakW, 0) : null;
+  return (
+    <div className="pv-slot pv-slot-total">
+      <PvBarContent label={label} watts={totalWatts} peakW={totalPeakW} />
     </div>
   );
 }
@@ -49,9 +79,11 @@ export default function PvStrings({ flow }) {
     .map((u) => ({ ...u, channels: u.channels.filter((c) => c.connected) }))
     .filter((u) => u.channels.length > 0);
   if (!groups.length) return null;
+  const allChannels = groups.flatMap((u) => u.channels);
   return (
     <>
       <SectionTitle>{t("simple.pvStrings")}</SectionTitle>
+      <PvTotalBar label={t("simple.pvTotal")} channels={allChannels} />
       <div className="pv-slot-groups">
         {groups.map((u) => (
           <div key={u.sn}>
