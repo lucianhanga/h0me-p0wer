@@ -103,14 +103,15 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         {/* Energy animation while charging/discharging (2026-10-04,
             replaces the old falling-drops "rain" — user picked the
             "layered double-surge" pulse + bubbles design after a few
-            rounds of options). Two offset glow bands travel the full
-            cylinder — up for charging, down for discharging — plus small
-            bubbles riding the same direction. Bubbles run the WHOLE
-            tube height, not just the current liquid level ("shown also
-            outside of the charged area"), growing as they rise while
-            charging (more energy arriving) and shrinking while
-            discharging (energy dissipating as it leaves). Below the
-            segment labels (they keep z-index 1). */}
+            rounds of options, then corrected the direction: "when the
+            battery is charging the direction should be down for both
+            bubbles and waves" — charging pours in top → bottom, growing
+            as it goes; discharging is the mirror, rising bottom → top
+            and shrinking as it leaves). Two offset glow bands travel the
+            full cylinder plus small bubbles riding the same direction.
+            Bubbles run the WHOLE tube height, not just the current
+            liquid level ("shown also outside of the charged area").
+            Below the segment labels (they keep z-index 1). */}
         {mode !== "idle" && (
           <div
             className={`batt-energy ${mode === "charging" ? "charging" : "discharging"}`}

@@ -38,10 +38,15 @@ function PvCard({ label, watts, peakW, weight, total }) {
       <div className="pv-slot-label">
         <span>{label}</span>
         <span>
-          {w} {pct != null ? `/ ${peakW} W · ${pct}%` : "W"}
+          {w} W{pct != null && <span className="phase-power-pct"> {pct}%</span>}
         </span>
       </div>
-      <GradientMeter value={watts} max={peakW} />
+      {/* Same control as the Live tab's advanced-view PV cards
+          (2026-10-04, user request: "use the same control you use for
+          the live tab from the advanced view") — labels shows the max W
+          in small type above the bar instead of repeating it in the text
+          line above. */}
+      <GradientMeter value={watts} max={peakW} labels />
     </div>
   );
 }
