@@ -664,6 +664,21 @@ h4 {
   margin: 0.5rem 0;
 }
 
+/* Section-wide total, above the per-port breakdown (2026-10-04, user
+   request: "add on top of [the ports] an indication of the total also
+   like a progress bar") — full width, a brighter border and tinted
+   background distinguish it from the individual port cards below. */
+.pv-slot-total {
+  width: 100%;
+  margin: 0.5rem 0 1rem;
+  background: #1a2a20;
+  border-color: #3a5c45;
+}
+
+.pv-slot-total .pv-slot-label span:first-child {
+  color: #5fce80;
+}
+
 .pv-slot-grid {
   display: flex;
   flex-wrap: wrap;
