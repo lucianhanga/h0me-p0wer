@@ -1,6 +1,25 @@
 const SEGMENTS = 28;
 const HALF = SEGMENTS / 2;
 
+// `log` scaling (2026-10-04, grid phases — "most of the time the values
+// will be under 500w" against a -2500/+2500 W scale, so a linear fill
+// left most everyday readings pinned near the center). Standard VU-meter
+// technique: map the raw value through a log curve to 0..1 first, then
+// feed that into the otherwise-linear segment bar (confirmed against
+// current practice — meters consistently normalize level to a log/dB
+// scale before driving a linear widget, rather than trying to make the
+// widget itself non-linear). log1p keeps 0 W at 0% with no singularity.
+// KNEE_FRACTION sets the curve's reference point as a fraction of `max`
+// (~30 W at a 2500 W scale) — small values below it still move the bar
+// a lot per watt; values well above it compress together near the end.
+const LOG_KNEE_FRACTION = 0.012;
+function scalePct(magnitude, max, log) {
+  if (!log) return Math.min(100, Math.round((magnitude / max) * 100));
+  const ref = max * LOG_KNEE_FRACTION;
+  const pct = Math.log1p(magnitude / ref) / Math.log1p(max / ref);
+  return Math.min(100, Math.round(pct * 100));
+}
+
 // Segmented gradient meter (2026-10-04) — shared control behind the simple
 // view's Solar Strings AND the Live tab's Details section (grid phases +
 // PV channels, user request: "use the same controls for PVs, and similar
@@ -27,16 +46,21 @@ const HALF = SEGMENTS / 2;
 // comparable.
 //
 // `labels` (2026-10-04 follow-up, grid phases + PVs — "write them with
-// small letters at the ends of the bars" / "the max W for the PVs"):
-// renders the scale's limit(s) in small type at the bar's end(s) — both
+// small letters at the ends of the bars" / "the max W for the PVs", then
+// "put on top of the bar, aligned right with the bar... left with the
+// bar for the ones from the left... smaller font"): a small-type row
+// above the bar, each limit aligned over the end it describes — both
 // ends for `bidirectional` (-max / +max), just the right end otherwise
 // (0 at the left is implicit).
-export default function GradientMeter({ value, max, bidirectional = false, labels = false }) {
+//
+// `log` (2026-10-04 follow-up, grid phases only — see LOG_KNEE_FRACTION
+// above): scales magnitude through the log curve instead of linearly.
+export default function GradientMeter({ value, max, bidirectional = false, labels = false, log = false }) {
   if (value == null || !(max > 0)) return null;
 
   if (bidirectional) {
-    const posPct = value > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
-    const negPct = value < 0 ? Math.min(100, Math.round((Math.abs(value) / max) * 100)) : 0;
+    const posPct = value > 0 ? scalePct(value, max, log) : 0;
+    const negPct = value < 0 ? scalePct(Math.abs(value), max, log) : 0;
     const litPos = Math.round((posPct / 100) * HALF);
     const litNeg = Math.round((negPct / 100) * HALF);
     const bar = (
@@ -61,9 +85,11 @@ export default function GradientMeter({ value, max, bidirectional = false, label
     if (!labels) return bar;
     return (
       <div className="gradient-meter-row">
-        <span className="gradient-meter-limit">-{max} W</span>
+        <div className="gradient-meter-labels">
+          <span className="gradient-meter-limit">-{max} W</span>
+          <span className="gradient-meter-limit">+{max} W</span>
+        </div>
         {bar}
-        <span className="gradient-meter-limit">+{max} W</span>
       </div>
     );
   }
@@ -81,8 +107,10 @@ export default function GradientMeter({ value, max, bidirectional = false, label
   if (!labels) return bar;
   return (
     <div className="gradient-meter-row">
+      <div className="gradient-meter-labels right-only">
+        <span className="gradient-meter-limit">{max} W</span>
+      </div>
       {bar}
-      <span className="gradient-meter-limit">{max} W</span>
     </div>
   );
 }
