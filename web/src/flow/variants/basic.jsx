@@ -142,25 +142,27 @@ function edgeLabelPos(a, b) {
   const my = (a.y + b.y) / 2;
   const vertical = a.x === b.x;
   const horizontal = a.y === b.y;
-  // Diagonal edges (PV→Battery): the label used to sit ON the dashed line
-  // (2026-09-29, user report: "the text is over the arc line, not clearly
-  // visible") — offset it PERPENDICULAR to the arc (above the line) and
-  // give every label a dark outline (paint-order stroke) so it stays
-  // legible even when a line passes underneath.
+  // Diagonal edges: the label used to sit ON the dashed line (2026-09-29,
+  // user report: "the text is over the arc line, not clearly visible"),
+  // then a perpendicular offset mostly fixed that — but once the arcs
+  // shortened to side-midpoint attachments (2026-10-04) the segments got
+  // short/steep enough that a 12px perpendicular nudge no longer cleared
+  // the label's own width, so it started clipping the arc again
+  // (2026-10-04, user report: "the arches title are overlapping the
+  // arches"). Diagonal arcs on the right half of the diamond (PV→Battery,
+  // Battery→Home) now anchor "start" and sit purely to the RIGHT of the
+  // line; the one on the left half (Grid→Home) anchors "end" and sits
+  // purely to the LEFT — a horizontal offset, not perpendicular, so the
+  // label's full width (which reads horizontally) never swings back over
+  // a steep diagonal the way a perpendicular offset could.
   if (vertical) {
     return { x: mx + 8, y: my - 3, anchor: "start" };
   }
   if (horizontal) {
     return { x: mx, y: my - 8, anchor: "middle" };
   }
-  const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-  let nx = -(b.y - a.y) / len;
-  let ny = (b.x - a.x) / len;
-  if (ny > 0) {
-    nx = -nx;
-    ny = -ny; // label above the line, never below
-  }
-  return { x: mx + nx * 12, y: my + ny * 12 + 4, anchor: "middle" };
+  const onRight = mx >= POS.pv.x; // diamond's vertical axis (pv.x === home.x)
+  return onRight ? { x: mx + 14, y: my + 4, anchor: "start" } : { x: mx - 14, y: my + 4, anchor: "end" };
 }
 
 function EdgeLine({ edge }) {
