@@ -25,6 +25,7 @@ export const ro = {
     batteries: "Baterii",
     charts: "Tendințe",
     periods: "Totaluri",
+    pvStrings: "Șiruri solare",
     brief: {
       forecastPv: "așteptat azi · {kwp} kWp",
       houseTotal: "consumul casei azi",

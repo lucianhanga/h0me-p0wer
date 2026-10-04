@@ -2006,6 +2006,27 @@ function decoratePvChannels(m) {
   };
 }
 
+// Per-slot peak capacity (2026-10-04, user request: "visualize the PVs
+// production individually... like a progress bar filled with the capacity
+// they are already using"). The cloud has no per-channel wattage rating,
+// and a port's capacity isn't derivable from a single per-panel constant
+// either — a Solarbank 4 port takes 1, 2, or 3 panels, and panels get
+// swapped for different-wattage ones over time (2026-10-04 follow-up: "I
+// might change the panel with other panels with different power") — so
+// each port's peak watts is configured directly, per unit, in .env as
+// PV_PORT_W_<sanitized unit name>=<W on PV1>,<PV2>,<PV3>,<PV4>, e.g. a
+// unit named "h-solarbank-4" with 900 W on its first port (3×300 W
+// panels), 500 W on the second, 1000 W on the third, nothing on the
+// fourth: PV_PORT_W_H_SOLARBANK_4=900,500,1000,0. Unconfigured units read
+// null — the UI shows their raw watts without a capacity bar rather than
+// guessing a number nobody entered.
+function pvSlotPeakWatts(unitName) {
+  const key = `PV_PORT_W_${unitName.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`;
+  const raw = process.env[key];
+  if (!raw) return null;
+  return raw.split(",").map((s) => Number(s.trim()) || 0);
+}
+
 // Live per-string watts for /api/flow's pvUnits (2026-10-02, user report:
 // PV total 220 W vs per-string sum 21 W). scen_info's pv_power block is
 // FROZEN (verified: identical values for 20+ min while photovoltaic_power
@@ -2018,12 +2039,18 @@ function livePvUnits(b) {
     .map((m) => {
       const liveM = latestBatteries.get(m.sn);
       const fresh = batteryMqtts.get(m.sn)?.isFresh?.() ?? false;
+      const portW = pvSlotPeakWatts(m.name);
       return {
         sn: m.sn,
         name: m.name,
         channels: m.pvChannels.map((c) => {
           const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
-          return { ...c, watts: w, connected: pvSeenConnected(m.sn, c.n, w ?? c.watts) };
+          return {
+            ...c,
+            watts: w,
+            connected: pvSeenConnected(m.sn, c.n, w ?? c.watts),
+            peakW: portW?.[c.n - 1] ?? null,
+          };
         }),
       };
     });

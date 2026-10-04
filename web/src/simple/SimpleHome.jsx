@@ -10,6 +10,7 @@ import { useLiveStream } from "../useLiveStream.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
+import PvStrings from "./PvStrings.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
 
@@ -241,6 +242,7 @@ export default function SimpleHome() {
       )}
       <SectionTitle>{t("simple.charts")}</SectionTitle>
       <SimpleCharts />
+      <PvStrings flow={flow} />
       {overview?.byPeriod?.today && (
         <>
           <SectionTitle>{t("simple.periods")}</SectionTitle>
