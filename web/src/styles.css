@@ -796,20 +796,26 @@ h4 {
   font-weight: 600;
 }
 
-/* Segmented LED meter, colored by position (2026-10-04, user decision:
-   "the Segmented LED meter with the color gradients from the Zone
-   gradient but with color gradients following one color into another").
-   The row's OWN background carries the unbroken green→yellow→orange→red
-   blend ("start from green, go through yellow, orange and red which
-   indicates full usage", 2026-10-04 follow-up) — each segment's color
-   comes from where it sits along the row, not a fixed on-color. */
+/* Segmented gradient meter (2026-10-04, user decision: "the Segmented LED
+   meter with the color gradients from the Zone gradient but with color
+   gradients following one color into another"). Shared control — used by
+   the simple view's Solar Strings AND the Live tab's Details section
+   (grid phases + PV channels, 2026-10-04 follow-up: "use the same
+   controls for PVs, and similar also for the phases"), via
+   components/GradientMeter.jsx. The row's OWN background carries the
+   unbroken blend; each segment's color comes from where it sits along
+   the row, not a fixed on-color. Positive values: green→yellow→orange→
+   red ("start from green, go through yellow, orange and red which
+   indicates full usage"). Negative values (grid phases only — export,
+   "take care that they can be also negative"): green→blue→white instead
+   ("in case of negative values use the colors green->blue->white"). */
 /* Segment "gaps" are an opaque border in the page's own background color,
    not a flex `gap` — a real gap would let the row's gradient show through
    in every slot regardless of lit/unlit state (stray colored ticks past
    the fill point, caught visually before shipping an earlier version of
    this). A border is part of each segment's own box, so it hides the
    gradient exactly as consistently as the segment's own fill does. */
-.pv-led-row {
+.gradient-meter {
   width: 100%;
   display: flex;
   height: 10px;
@@ -818,25 +824,37 @@ h4 {
   background: linear-gradient(90deg, #5fce80 0%, #f2cb4e 33%, #f7a44f 66%, #e05c5c 100%);
 }
 
+.gradient-meter.negative {
+  background: linear-gradient(90deg, #5fce80 0%, #4fa8e0 55%, #e8ecef 100%);
+}
+
 /* Unlit = "like with the light off" (2026-10-04, user request) — a real
    LED's plastic diffuser still shows a dim tint of its own color when
    off, not neutral gray, so the overlay is translucent rather than
    opaque: ~80% dark wash lets a faint hint of that segment's gradient
    color bleed through underneath. Lit = fully transparent, the gradient
    shows at full brightness ("lightened"). */
-.pv-led {
+.gradient-meter-seg {
   flex: 1;
   background: rgba(13, 17, 20, 0.82);
-  border-right: 2px solid #101418;
+  border-right: 1px solid #101418;
   transition: background-color 1s linear;
 }
 
-.pv-led:last-child {
+.gradient-meter-seg:last-child {
   border-right: none;
 }
 
-.pv-led.on {
+.gradient-meter-seg.on {
   background: transparent;
+}
+
+/* Sits under a .phase-card's existing name/value/detail spans (2026-10-04)
+   — flex-basis: 100% drops it to its own full-width line within the
+   card's flex-wrap row instead of changing .phase-card's layout. */
+.phase-card .gradient-meter {
+  flex-basis: 100%;
+  margin-top: 0.3rem;
 }
 
 @media (max-width: 600px) {
