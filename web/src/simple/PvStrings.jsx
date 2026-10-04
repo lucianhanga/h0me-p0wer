@@ -12,15 +12,27 @@ import SectionTitle from "../components/SectionTitle.jsx";
 // port can take 1-3 panels and panels get swapped for different-wattage
 // ones over time). A port nobody configured shows its raw watts with no
 // bar, rather than a bar against a guessed capacity.
-function PvSlotBar({ channel }) {
+// Card WIDTH is proportional to the port's own share of capacity too
+// (2026-10-04 follow-up — "show them proportionally based on the
+// configured size"): a 1000 W port renders twice as wide as a 500 W one,
+// via the --pv-weight custom property (styles.css turns it into
+// flex-grow, with flex-basis: 0 making flex-grow act as a pure ratio —
+// a custom property rather than inline flex-grow directly so the mobile
+// media query can still cleanly override it back to stacked/equal-width).
+// A port with no configured peakW falls back to a 500 W weight (a
+// plausible single-panel default) so it doesn't collapse to a sliver next
+// to configured neighbors.
+const DEFAULT_WEIGHT_W = 500;
+
+function PvSlotBar({ channel, weight }) {
   const w = useTweenedWatts(channel.watts ?? 0);
   const pct = channel.peakW > 0 ? Math.min(100, Math.round(((channel.watts ?? 0) / channel.peakW) * 100)) : null;
   return (
-    <div className="pv-slot">
+    <div className="pv-slot" style={{ "--pv-weight": weight }}>
       <div className="pv-slot-label">
         <span>{channel.name}</span>
         <span>
-          {w} W{pct != null ? ` · ${pct}%` : ""}
+          {w} {pct != null ? `/ ${channel.peakW} W · ${pct}%` : "W"}
         </span>
       </div>
       <div className="pv-slot-track">
@@ -46,7 +58,7 @@ export default function PvStrings({ flow }) {
             {groups.length > 1 && <p className="pv-unit-label muted">{u.name}</p>}
             <div className="pv-slot-grid">
               {u.channels.map((c) => (
-                <PvSlotBar key={c.n} channel={c} />
+                <PvSlotBar key={c.n} channel={c} weight={c.peakW > 0 ? c.peakW : DEFAULT_WEIGHT_W} />
               ))}
             </div>
           </div>

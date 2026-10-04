@@ -671,12 +671,22 @@ h4 {
   margin: 0.5rem 0 1rem;
 }
 
+/* Card width is proportional to the port's configured capacity
+   (2026-10-04, user request: "show them proportionally based on the
+   configured size") — flex-grow set via the --pv-weight custom property
+   (set inline per card in PvStrings.jsx) with flex-basis: 0 turns
+   flex-grow into a pure ratio: a 1000 W port grows twice as wide as a
+   500 W one. The custom-property indirection (rather than an inline
+   flex-grow) is what lets the mobile media query below cleanly override
+   it back to equal-width stacked cards. */
 .pv-slot {
   background: #1a2128;
   border: 1px solid #2a3238;
   border-radius: 8px;
   padding: 0.65rem 1rem;
-  flex: 1 1 180px;
+  flex-grow: var(--pv-weight, 1);
+  flex-basis: 0;
+  min-width: 140px;
 }
 
 .pv-slot-label {
@@ -704,16 +714,34 @@ h4 {
   overflow: hidden;
 }
 
+/* Pulsating fill (2026-10-04, user request: "make it look like its
+   pulsating") — a slow opacity + glow breathe reads as "live" without
+   being distracting; the width transition (live wattage changes) and the
+   pulse animation run independently on the same element. */
 .pv-slot-fill {
   height: 100%;
   border-radius: 999px;
   background: linear-gradient(90deg, #2f8f52, #5fce80);
   transition: width 1s linear;
+  animation: pv-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes pv-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+    box-shadow: 0 0 0 rgba(95, 206, 128, 0);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(95, 206, 128, 0.65);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pv-slot-fill {
     transition: none;
+    animation: none;
   }
 }
 
@@ -723,7 +751,9 @@ h4 {
   }
 
   .pv-slot {
-    flex: none;
+    flex-grow: 0;
+    flex-basis: auto;
+    min-width: 0;
   }
 }
 
