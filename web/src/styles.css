@@ -742,17 +742,18 @@ h4 {
   padding: 1rem;
 }
 
-/* Lines up "h-solarbank-4" etc. with "PV1" inside the cards below it
-   (2026-10-04, user request) — the cards' own 1rem left padding (see
-   .pv-slot) offsets their name text from the grid's left edge; the unit
-   label sits flush with that edge by default (.pv-unit-label is shared
-   with the Live tab's Details section, so the offset is scoped here
-   rather than added to the shared rule). Still correct now that the
-   group is wrapped in .pv-unit-tile: both the label and the cards get
-   the SAME tile padding first, then this extra 1rem matches the cards'
-   own internal 1rem exactly. */
+/* Lines up "h-solarbank-4" etc. with "PV1" — and with the bar itself —
+   inside the cards below it (2026-10-04, user request) — the cards' own
+   left padding (see .pv-slot) offsets their name text and bar from the
+   grid's left edge; the unit label sits flush with that edge by default
+   (.pv-unit-label is shared with the Live tab's Details section, so the
+   offset is scoped here rather than added to the shared rule). Still
+   correct now that the group is wrapped in .pv-unit-tile: both the label
+   and the cards get the SAME tile padding first, then this extra amount
+   matches .pv-slot's own internal left padding exactly — keep the two
+   in sync if either changes. */
 .pv-slot-groups .pv-unit-label {
-  padding-left: 1rem;
+  padding-left: 1.5rem;
 }
 
 /* Section-wide total, above the per-port breakdown (2026-10-04, user
@@ -792,7 +793,12 @@ h4 {
   background: transparent;
   border: none;
   border-radius: 8px;
-  padding: 0.65rem 1rem;
+  /* 1.5rem, not 1rem, horizontally (2026-10-04, user request: "leave
+     just a bit of margin left and right so they look good") — at the
+     wider min-width the bar fills almost the full card edge-to-edge on
+     most rows; the extra margin keeps it from looking flush against the
+     tile. .pv-unit-label's own left padding above matches this. */
+  padding: 0.65rem 1.5rem;
   flex-grow: var(--pv-weight, 1);
   flex-basis: 0;
   /* 190px, not 140px (2026-10-04, user report with screenshot: "PV1 looks
@@ -803,11 +809,11 @@ h4 {
      190px is wide enough for that label at this font-size; see
      .pv-slot-label's white-space: nowrap below for the other half of the
      fix (forces one line rather than wrapping once the floor is hit).
-     Bumped to 230px (2026-10-04, user request: "make the pv bars a bit
-     wider") — the bar now also carries a limit-label row above it (the
-     same control as the Live tab's advanced view), which wants more
-     room than the bare bar did. */
-  min-width: 230px;
+     Bumped to 230px, then 300px (2026-10-04, user request: "make the pv
+     bars a bit wider" then "make the bars wider") — the bar now also
+     carries a limit-label row above it (the same control as the Live
+     tab's advanced view), which wants more room than the bare bar did. */
+  min-width: 300px;
 }
 
 /* Value sits next to the name, not pushed to the far edge (2026-10-04,
