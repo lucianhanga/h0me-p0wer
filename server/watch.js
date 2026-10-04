@@ -164,22 +164,36 @@ export function registerWatchRoute(app, deps) {
       // gap-handling-heavy today computation rather than re-deriving it.
       const overview = await fetchJson(deps.statsOverviewUrl).catch(() => null);
       const flows = overview?.data?.flows;
+      const today = overview?.data?.byPeriod?.today;
       const costs = overview?.data?.costs;
-      // pvProducedKwh (byPeriod.today), not flows.pvKwh — flows.pvKwh is
-      // PV-direct-to-home only; the watch's `solar`/`solarToday` pair both
-      // want TOTAL production (see WATCH.readme). solarDirectToday is
-      // that same flows.pvKwh figure, sent separately for the watch's
-      // List page "today" breakdown (Grid/PV direct/From battery/To
-      // battery/To grid, matching the web app's Dashboard tile).
-      const pvProducedKwh = overview?.data?.byPeriod?.today?.pvProducedKwh;
+      // homeToday/exportedToday/importedToday read from `flows` — verified
+      // against `today` (gridKwh/exportKwh/homeKwh) to be the exact same
+      // values, just differently named, so either source works for those.
+      //
+      // solarDirectToday/batteryDischargedToday/batteryChargedToday MUST
+      // come from `today`, not `flows` — they are NOT interchangeable
+      // there, despite the similar names (a bug previously, fixed here to
+      // match the web app's own Dashboard.jsx, which reads this same
+      // `byPeriod.today` object):
+      //   - flows.pvKwh is TOTAL production (identical to
+      //     today.pvProducedKwh) — NOT PV-direct-to-home. today.pvKwh is
+      //     the real direct-to-home figure, derived from pvToHomeKwh.
+      //   - flows.battDischargedKwh is the inverter's RAW discharge,
+      //     which still includes PV pass-through — double-counting that
+      //     pass-through against the separate PV figure above.
+      //     today.battKwh is cells-only (dischargedKwh − pvToHomeKwh),
+      //     the figure that actually sums with grid/PV to ~homeKwh.
+      //   - flows.battChargedKwh vs today.battInKwh differ by small gap-
+      //     backfill rounding; today.battInKwh is what Dashboard.jsx
+      //     actually reads for "to battery," so use that for parity.
       Object.assign(out, {
-        solarToday: pvProducedKwh ?? null,
-        solarDirectToday: flows?.pvKwh ?? null,
+        solarToday: today?.pvProducedKwh ?? null,
+        solarDirectToday: today?.pvKwh ?? null,
         homeToday: flows?.homeKwh ?? null,
         exportedToday: flows?.gridExportKwh ?? null,
         importedToday: flows?.gridImportKwh ?? null,
-        batteryDischargedToday: flows?.battDischargedKwh ?? null,
-        batteryChargedToday: flows?.battChargedKwh ?? null,
+        batteryDischargedToday: today?.battKwh ?? null,
+        batteryChargedToday: today?.battInKwh ?? null,
         spentToday: costs?.today ?? null,
         savedToday: costs?.batterySavingsToday ?? null,
       });
