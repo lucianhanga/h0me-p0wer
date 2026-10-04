@@ -15,6 +15,7 @@ import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
+import { registerWatchRoute } from "./watch.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -1263,6 +1264,13 @@ registerBatteryParamsRoute(app, {
   getMembers: () => [...latestBatteries.values()],
   getAvgHomeKwh7d: avgDailyHomeKwh7d,
   getFloorPct: () => latestFloorEffPct,
+});
+
+// Garmin watch app status — see WATCH.readme and watch.js.
+registerWatchRoute(app, {
+  getFlowPayload: () => computeFlowPayload(),
+  statsOverviewUrl: `http://127.0.0.1:${PORT}/api/stats/overview`,
+  timeseriesUrl: `http://127.0.0.1:${PORT}/api/timeseries`,
 });
 app.get(
   "/api/cloud/energy",

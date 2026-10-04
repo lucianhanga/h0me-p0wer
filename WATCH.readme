@@ -1,0 +1,100 @@
+# Watch API — implementation request
+
+A companion Garmin Connect IQ watch app ("Home Power", repo
+`h0me-p0wer-garmin`) polls this backend every 15s for a flat status
+JSON. That endpoint does not exist yet in this backend — this file is
+the spec for implementing it.
+
+## What's needed
+
+`GET /api/watch/status` — no auth (matches every other endpoint in this
+backend), returns the flat shape below directly (NOT wrapped in the
+`{ ok, data }` envelope the other endpoints use — the watch app expects
+a bare object).
+
+```json
+{
+  "solar": 4.21,
+  "home": 1.87,
+  "grid": -2.34,
+  "battery": 78,
+  "batteryPower": 1.20,
+  "solarToday": 18.4,
+  "homeToday": 22.6,
+  "exportedToday": 18.1,
+  "importedToday": 6.4,
+  "batteryCapacity": 14.2,
+  "batteryMinutesToFull": 195,
+  "solarHistory": [0.4, 0.7, 1.1, 1.8, 2.6, 3.4, 4.0, 4.4],
+  "homeHistory": [1.2, 1.6, 1.3, 1.1, 1.0, 1.2, 1.4, 1.7],
+  "gridHistory": [-0.8, -1.1, -1.6, -2.1, -2.4, -2.8, -3.1, -3.0]
+}
+```
+
+Every field is optional on the watch side (it merges onto cached
+defaults), so partial data beats no endpoint. `grid`: negative =
+exporting, positive = importing (same sign convention `/api/flow`
+already uses — do not flip it). `batteryPower`: positive = charging.
+History arrays are display-only sparklines — any reasonable number of
+recent points works; the watch just bar-charts whatever length you
+send.
+
+## Where the data already lives
+
+Nothing needs recomputing from scratch — every field has a close
+match already flowing through this backend:
+
+- **solar / home / grid / battery / batteryPower** — `computeFlowPayload()`
+  in `server/index.js` (backs `GET /api/flow`): `pv.production` (W),
+  `home.consumption` (W), `grid.import`/`grid.export` (W, pick sign
+  per the convention above), `battery.soc` (%), `battery.discharge` /
+  `battery.charge` (W). Convert W→kW (÷1000) for solar/home/grid/
+  batteryPower; battery/soc is already a percentage.
+
+- **solarToday / homeToday / exportedToday / importedToday** —
+  `GET /api/stats/overview` (`server/stats.js`,
+  `registerStatsRoute`) → `data.flows.pvKwh`, `data.flows.homeKwh`,
+  `data.flows.gridExportKwh`, `data.flows.gridImportKwh`. (Note:
+  `pvKwh` there is PV-direct-to-home, not total production — see the
+  comment above `byPeriod.today.pvProducedKwh` in stats.js if total
+  production is wanted instead.)
+
+- **batteryCapacity** — `systemCapacityKwh(b)` in `server/index.js`,
+  same helper `/api/flow`'s `battery.capacityKwh` already uses.
+
+- **batteryMinutesToFull** — not currently exposed by any endpoint;
+  it's computed client-side in the React frontend from soc, capacity,
+  charge rate, and the account's charge-ceiling % (see
+  `battery.maxPct` / `battery.floorPct` in `/api/flow`, and
+  `getBatteryLimits()` in `server/index.js`). This new endpoint should
+  do that same arithmetic server-side: minutes = (((maxPct - soc) / 100)
+  * capacityKwh) / chargeW * 60, clamped to null/0 when not charging or
+  already at ceiling.
+
+- **solarHistory / homeHistory / gridHistory** — `GET /api/timeseries`
+  or `GET /api/history` (`server/index.js`) already return time-series
+  samples with power values; bucket/sample down to ~8-16 points and
+  convert W→kW for each array.
+
+## Suggested approach
+
+A thin new route (in `server/index.js`, alongside the other
+`app.get("/api/...")` routes, or a new `server/watch.js` following the
+self-registering-module pattern `stats.js`/`roi.js`/`battery-params.js`
+use) that calls the existing internal functions above (`computeFlowPayload()`,
+the stats-overview logic, `systemCapacityKwh()`) and reshapes their
+output into the flat contract. No new data collection, storage, or
+polling needed — this is purely a response-shaping layer over data the
+backend already has in memory.
+
+## Testing
+
+```sh
+curl http://localhost:3001/api/watch/status
+```
+
+Response should validate against the JSON shape above. The watch
+app's own repo (`h0me-p0wer-garmin/README.md`) documents the same
+contract from the client side, and `source/Config.mc` there points
+`API_URL` at `https://h0me-p0wer.lucianhanga.stream/api/watch/status`
+when `USE_DEMO_DATA` is flipped to `false`.
