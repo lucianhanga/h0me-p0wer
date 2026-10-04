@@ -30,12 +30,9 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // watchdog keep the raw signed value; sustained real export (> 20 W)
 // still shows.
 const GRID_DISPLAY_DEADBAND_W = 20;
-// Grid phase meters have no configured capacity to scale against (unlike
-// PV ports' PV_PORT_W_*), so this is a display-only reference, not a
-// claimed circuit rating: a standard single-phase 16 A / 230 V EU breaker
-// (2026-10-04, same GradientMeter control as Solar Strings — "take care
-// that they can be also negative").
-const PHASE_MAX_W = 3680;
+// Grid phase meter scale (2026-10-04, user-chosen display limits:
+// "consider -2500w and +2500w as the limits").
+const PHASE_MAX_W = 2500;
 
 export default function LiveTab() {
   const t = useT();
@@ -321,7 +318,7 @@ export default function LiveTab() {
               <span className="phase-name">L{i + 1}</span>
               <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
               <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} bidirectional />}
+              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} bidirectional labels />}
             </div>
           </FlipTile>
         ))}
@@ -332,7 +329,7 @@ export default function LiveTab() {
           <div className="phase-card">
             <span className="phase-name">{t("live.pvTotal")}</span>
             <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
-            {pv && <GradientMeter value={pv.production} max={pv.peakW} />}
+            {pv && <GradientMeter value={pv.production} max={pv.peakW} labels />}
           </div>
         </FlipTile>
       </div>
@@ -354,7 +351,7 @@ export default function LiveTab() {
                         is stalled — an honest "—", never the frozen
                         scen_info pv_power number. */}
                     <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
-                    <GradientMeter value={c.watts} max={c.peakW} />
+                    <GradientMeter value={c.watts} max={c.peakW} labels />
                   </div>
                 </FlipTile>
               ) : (
