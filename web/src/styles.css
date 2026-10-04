@@ -2544,12 +2544,17 @@ pre {
 
 /* Section dividers for the simple view (2026-09-29, user request — "add
    some titles to each section... make it look finished"): minimal centered
-   label with hairlines flanking it. Decoration only. */
+   label with hairlines flanking it. Decoration only. Margin-top gives
+   breathing room from the previous section's content (2026-10-04, user
+   request: "put a bit of space after a section and the title of the next
+   section") — applies everywhere this component is used (simple view,
+   Live tab, Power Plan). */
 .section-title {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   width: 100%;
+  margin-top: 2rem;
   color: #8b98a5;
   font-size: 0.78rem;
   font-weight: 600;
