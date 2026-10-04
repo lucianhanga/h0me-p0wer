@@ -870,6 +870,56 @@ h4 {
   background: transparent;
 }
 
+/* Diverging meter (2026-10-04, grid phases only — "consider a center
+   which is 0 in the middle... negative values fill in... from the middle
+   to the left... positive values fill in... from the middle to the
+   right"). Two independent gradient halves meeting at a thin center
+   marker, instead of one bar starting at the left edge regardless of
+   sign. Each half carries its OWN background gradient (same colors as
+   the single-direction .gradient-meter/.negative, just oriented to read
+   outward from the center) so a lit segment's color still comes from its
+   position, same rule as the single-direction meter. */
+.gradient-meter.bidirectional {
+  background: none;
+  gap: 0;
+}
+
+.gradient-meter-half {
+  flex: 1;
+  display: flex;
+  height: 100%;
+  overflow: hidden;
+}
+
+.gradient-meter-half.negative-half {
+  background: linear-gradient(90deg, #e8ecef 0%, #4fa8e0 55%, #5fce80 100%);
+  border-radius: 3px 0 0 3px;
+}
+
+.gradient-meter-half.positive-half {
+  background: linear-gradient(90deg, #5fce80 0%, #f2cb4e 33%, #f7a44f 66%, #e05c5c 100%);
+  border-radius: 0 3px 3px 0;
+}
+
+/* The negative half's segments read right-to-left (lit grows outward
+   FROM the center), so its divider belongs on the LEFT of each segment,
+   mirroring the positive half's right-side divider — otherwise the
+   boundary nearest the center would be missing its seam. */
+.gradient-meter-half.negative-half .gradient-meter-seg {
+  border-right: none;
+  border-left: 1px solid #101418;
+}
+
+.gradient-meter-half.negative-half .gradient-meter-seg:first-child {
+  border-left: none;
+}
+
+.gradient-meter-center {
+  width: 2px;
+  flex-shrink: 0;
+  background: #101418;
+}
+
 /* Sits under a .phase-card's existing name/value/detail spans (2026-10-04)
    — flex-basis: 100% drops it to its own full-width line within the
    card's flex-wrap row instead of changing .phase-card's layout. */
