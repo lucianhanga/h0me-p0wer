@@ -786,7 +786,15 @@ h4 {
   padding: 0.65rem 1rem;
   flex-grow: var(--pv-weight, 1);
   flex-basis: 0;
-  min-width: 140px;
+  /* 190px, not 140px (2026-10-04, user report with screenshot: "PV1 looks
+     strange") — a port proportioned to a smaller share of capacity (half
+     its neighbors', e.g. a 500 W port next to 1000 W ones) could shrink
+     narrower than its own "300 / 500 W . 60%" label needs, wrapping the
+     value onto a second line while every wider sibling stayed on one.
+     190px is wide enough for that label at this font-size; see
+     .pv-slot-label's white-space: nowrap below for the other half of the
+     fix (forces one line rather than wrapping once the floor is hit). */
+  min-width: 190px;
 }
 
 /* Value sits next to the name, not pushed to the far edge (2026-10-04,
@@ -797,6 +805,7 @@ h4 {
   gap: 0.4rem;
   font-size: 0.85rem;
   margin-bottom: 0.45rem;
+  white-space: nowrap;
 }
 
 .pv-slot-label span:first-child {
