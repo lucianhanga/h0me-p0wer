@@ -802,8 +802,12 @@ h4 {
      value onto a second line while every wider sibling stayed on one.
      190px is wide enough for that label at this font-size; see
      .pv-slot-label's white-space: nowrap below for the other half of the
-     fix (forces one line rather than wrapping once the floor is hit). */
-  min-width: 190px;
+     fix (forces one line rather than wrapping once the floor is hit).
+     Bumped to 230px (2026-10-04, user request: "make the pv bars a bit
+     wider") — the bar now also carries a limit-label row above it (the
+     same control as the Live tab's advanced view), which wants more
+     room than the bare bar did. */
+  min-width: 230px;
 }
 
 /* Value sits next to the name, not pushed to the far edge (2026-10-04,
