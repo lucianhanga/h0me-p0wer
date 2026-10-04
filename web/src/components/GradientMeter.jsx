@@ -25,7 +25,13 @@ const HALF = SEGMENTS / 2;
 // leftward (green→blue→white). Each half gets its own HALF-sized segment
 // budget scaled against the same `max`, so the two halves stay visually
 // comparable.
-export default function GradientMeter({ value, max, bidirectional = false }) {
+//
+// `labels` (2026-10-04 follow-up, grid phases + PVs — "write them with
+// small letters at the ends of the bars" / "the max W for the PVs"):
+// renders the scale's limit(s) in small type at the bar's end(s) — both
+// ends for `bidirectional` (-max / +max), just the right end otherwise
+// (0 at the left is implicit).
+export default function GradientMeter({ value, max, bidirectional = false, labels = false }) {
   if (value == null || !(max > 0)) return null;
 
   if (bidirectional) {
@@ -33,7 +39,7 @@ export default function GradientMeter({ value, max, bidirectional = false }) {
     const negPct = value < 0 ? Math.min(100, Math.round((Math.abs(value) / max) * 100)) : 0;
     const litPos = Math.round((posPct / 100) * HALF);
     const litNeg = Math.round((negPct / 100) * HALF);
-    return (
+    const bar = (
       <div className="gradient-meter bidirectional">
         <div className="gradient-meter-half negative-half">
           {Array.from({ length: HALF }, (_, i) => {
@@ -52,16 +58,31 @@ export default function GradientMeter({ value, max, bidirectional = false }) {
         </div>
       </div>
     );
+    if (!labels) return bar;
+    return (
+      <div className="gradient-meter-row">
+        <span className="gradient-meter-limit">-{max} W</span>
+        {bar}
+        <span className="gradient-meter-limit">+{max} W</span>
+      </div>
+    );
   }
 
   const negative = value < 0;
   const pct = Math.min(100, Math.round((Math.abs(value) / max) * 100));
   const lit = Math.round((pct / 100) * SEGMENTS);
-  return (
+  const bar = (
     <div className={`gradient-meter${negative ? " negative" : ""}`}>
       {Array.from({ length: SEGMENTS }, (_, i) => (
         <div key={i} className={`gradient-meter-seg${i < lit ? " on" : ""}`} />
       ))}
+    </div>
+  );
+  if (!labels) return bar;
+  return (
+    <div className="gradient-meter-row">
+      {bar}
+      <span className="gradient-meter-limit">{max} W</span>
     </div>
   );
 }

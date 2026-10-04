@@ -928,6 +928,36 @@ h4 {
   margin-top: 0.3rem;
 }
 
+/* Small-type scale limits at the bar's end(s) (2026-10-04, user request:
+   "write them with small letters at the ends of the bars" / "the max W
+   for the PVs"). The row takes over .phase-card's full-width placement
+   from the bar itself — the bar just flexes to fill what's left. */
+.gradient-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+}
+
+.gradient-meter-row .gradient-meter {
+  flex: 1 1 auto;
+  width: auto;
+  margin-top: 0;
+}
+
+.gradient-meter-limit {
+  font-size: 0.65rem;
+  color: #8b98a5;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.phase-card .gradient-meter-row {
+  flex-basis: 100%;
+  margin-top: 0.3rem;
+}
+
 @media (max-width: 600px) {
   .pv-slot-grid {
     flex-direction: column;
