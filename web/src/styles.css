@@ -2443,13 +2443,15 @@ pre {
 }
 
 /* Two offset glow bands per direction — the "double-surge" look: a faster
-   bright one and a slower, dimmer one drifting apart from it. */
+   bright one and a slower, dimmer one drifting apart from it. Opacity
+   toned down (2026-10-04, user request: "make the color less intense")
+   from an original 0.55/0.32 peak. */
 .batt-pulse {
   position: absolute;
   left: 0;
   right: 0;
   height: 46%;
-  opacity: 0.55;
+  opacity: 0.32;
 }
 
 /* Charging flows DOWN (2026-10-04, user correction: "when the battery is
@@ -2469,22 +2471,22 @@ pre {
 .batt-pulse.slow {
   animation-duration: 3.4s;
   animation-delay: -1.1s;
-  opacity: 0.32;
+  opacity: 0.18;
 }
 
 /* discharging: band rises bottom → top (energy flowing out) */
 @keyframes batt-pulse-rise {
   0% { bottom: -46%; opacity: 0; }
-  15% { opacity: 0.55; }
-  80% { opacity: 0.35; }
+  15% { opacity: 0.32; }
+  80% { opacity: 0.2; }
   100% { bottom: 100%; opacity: 0; }
 }
 
 /* charging: band falls top → bottom (energy flowing in) */
 @keyframes batt-pulse-fall {
   0% { top: -46%; opacity: 0; }
-  15% { opacity: 0.55; }
-  80% { opacity: 0.35; }
+  15% { opacity: 0.32; }
+  80% { opacity: 0.2; }
   100% { top: 100%; opacity: 0; }
 }
 
@@ -2492,13 +2494,15 @@ pre {
    tube height rather than just the current liquid level, growing while
    charging (more energy arriving) and shrinking while discharging
    (energy dissipating as it leaves) over that same full journey. */
+/* Highlight/glow toned down (2026-10-04, user request: "make the color
+   less intense") — softer center highlight and a lighter box-shadow. */
 .batt-bubble {
   position: absolute;
   bottom: -6%;
   border-radius: 50%;
   opacity: 0;
-  background: radial-gradient(circle at 35% 30%, #ffffffcc, var(--energy-color, #5fce80) 45%, transparent 78%);
-  box-shadow: 0 0 4px var(--energy-color, #5fce80);
+  background: radial-gradient(circle at 35% 30%, #ffffff99, var(--energy-color, #5fce80) 45%, transparent 78%);
+  box-shadow: 0 0 3px color-mix(in hsl, var(--energy-color, #5fce80) 65%, transparent);
 }
 
 .batt-energy.charging .batt-bubble { animation-name: batt-bubble-grow-down; animation-timing-function: linear; animation-iteration-count: infinite; }
@@ -2507,16 +2511,16 @@ pre {
 /* charging: falls top → bottom, growing (more energy arriving) */
 @keyframes batt-bubble-grow-down {
   0% { top: -6%; bottom: auto; opacity: 0; transform: scale(0.5); }
-  8% { opacity: 0.9; }
-  92% { opacity: 0.55; }
+  8% { opacity: 0.6; }
+  92% { opacity: 0.35; }
   100% { top: 104%; bottom: auto; opacity: 0; transform: scale(1.9); }
 }
 
 /* discharging: rises bottom → top, shrinking (energy dissipating as it leaves) */
 @keyframes batt-bubble-shrink-up {
   0% { bottom: -6%; opacity: 0; transform: scale(1.6); }
-  8% { opacity: 1; }
-  92% { opacity: 0.5; }
+  8% { opacity: 0.65; }
+  92% { opacity: 0.32; }
   100% { bottom: 104%; opacity: 0; transform: scale(0.35); }
 }
 
