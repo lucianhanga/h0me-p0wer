@@ -51,7 +51,9 @@ function Shell() {
   return (
     <div className="app">
       <header>
-        <h1>h0me-p0wer</h1>
+        <h1 className="brand">
+          h<span className="brand-zero">0</span>mep<span className="brand-zero">0</span>wer
+        </h1>
         <AskButton />
         <ActivityBell />
         <button
