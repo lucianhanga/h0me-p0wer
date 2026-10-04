@@ -4,6 +4,7 @@ import FlipTile from "../components/FlipTile.jsx";
 import StateIcon from "../components/StateIcon.jsx";
 import PowerPlanCard from "./PowerPlanCard.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
+import GradientMeter from "../components/GradientMeter.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
@@ -29,6 +30,12 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // watchdog keep the raw signed value; sustained real export (> 20 W)
 // still shows.
 const GRID_DISPLAY_DEADBAND_W = 20;
+// Grid phase meters have no configured capacity to scale against (unlike
+// PV ports' PV_PORT_W_*), so this is a display-only reference, not a
+// claimed circuit rating: a standard single-phase 16 A / 230 V EU breaker
+// (2026-10-04, same GradientMeter control as Solar Strings — "take care
+// that they can be also negative").
+const PHASE_MAX_W = 3680;
 
 export default function LiveTab() {
   const t = useT();
@@ -314,6 +321,7 @@ export default function LiveTab() {
               <span className="phase-name">L{i + 1}</span>
               <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
               <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
+              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} />}
             </div>
           </FlipTile>
         ))}
@@ -324,6 +332,7 @@ export default function LiveTab() {
           <div className="phase-card">
             <span className="phase-name">{t("live.pvTotal")}</span>
             <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+            {pv && <GradientMeter value={pv.production} max={pv.peakW} />}
           </div>
         </FlipTile>
       </div>
@@ -345,6 +354,7 @@ export default function LiveTab() {
                         is stalled — an honest "—", never the frozen
                         scen_info pv_power number. */}
                     <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
+                    <GradientMeter value={c.watts} max={c.peakW} />
                   </div>
                 </FlipTile>
               ) : (

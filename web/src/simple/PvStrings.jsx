@@ -1,6 +1,7 @@
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { useTweenedWatts } from "../useTweenedValue.js";
 import SectionTitle from "../components/SectionTitle.jsx";
+import GradientMeter from "../components/GradientMeter.jsx";
 
 // Simple view's per-string PV section (2026-10-04, user request: "visualize
 // the PVs production individually... like a progress bar filled with the
@@ -22,28 +23,13 @@ import SectionTitle from "../components/SectionTitle.jsx";
 // peakW falls back to a 500 W weight (a plausible single-panel default)
 // so it doesn't collapse to a sliver next to configured neighbors.
 const DEFAULT_WEIGHT_W = 500;
-const LED_COUNT = 16;
 
-// Segmented LED meter (2026-10-04 — tried as one of four flip faces, then
-// the user picked this one alone: "only one, the Segmented LED meter with
-// the color gradients from the Zone gradient but with color gradients
-// following one color into another"). The row itself carries the
-// green→amber→red gradient as its OWN background, unbroken; each segment
-// is either transparent (lit — reveals the gradient at its own position)
-// or opaque dark (unlit). A segment's color therefore comes from WHERE it
-// sits along the row, not a fixed on-color — the same smooth, no-hard-stop
-// blend the zone-gradient style had, just read off in blocks.
-function PvLedRow({ pct }) {
-  const lit = Math.round(((pct ?? 0) / 100) * LED_COUNT);
-  return (
-    <div className="pv-led-row">
-      {Array.from({ length: LED_COUNT }, (_, i) => (
-        <div key={i} className={`pv-led${i < lit ? " on" : ""}`} />
-      ))}
-    </div>
-  );
-}
-
+// GradientMeter is the shared segmented-gradient control (2026-10-04 —
+// tried as one of four flip faces, then the user picked this one alone,
+// since generalized into components/GradientMeter.jsx so the Live tab's
+// Details section can reuse the same control for grid phases and PV
+// channels: "use the same controls for PVs, and similar also for the
+// phases").
 function PvCard({ label, watts, peakW, weight, total }) {
   const w = useTweenedWatts(watts ?? 0);
   const pct = peakW > 0 ? Math.min(100, Math.round(((watts ?? 0) / peakW) * 100)) : null;
@@ -55,7 +41,7 @@ function PvCard({ label, watts, peakW, weight, total }) {
           {w} {pct != null ? `/ ${peakW} W · ${pct}%` : "W"}
         </span>
       </div>
-      <PvLedRow pct={pct} />
+      <GradientMeter value={watts} max={peakW} />
     </div>
   );
 }
