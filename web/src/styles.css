@@ -459,6 +459,18 @@ section {
     flex: none;
   }
 
+  /* .phase-cards .flip-tile's flex: 1 1 180px (set for the DESKTOP row
+     layout) is a WIDTH basis there, but .phase-cards just switched its
+     main axis to vertical — the same 180px then became a forced HEIGHT
+     for every "connected" phase/PV tile (the ones wrapped in FlipTile;
+     "not connected" ones render .phase-card directly, already covered by
+     the flex: none above), stretching each card to 180px tall regardless
+     of its real ~45-70px content and leaving huge gaps between tiles on
+     phones (2026-10-04, user report with screenshot). */
+  .phase-cards .flip-tile {
+    flex: none;
+  }
+
   table {
     font-size: 0.8rem;
   }
