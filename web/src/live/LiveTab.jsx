@@ -106,13 +106,29 @@ export default function LiveTab() {
   // flow/model.js (2026-09-29 review: the old flowDisplay wrapper zeroed
   // flow.grid, which the model no longer reads — dead code, removed).
   const gridDisplay = grid != null && Math.abs(grid) <= GRID_DISPLAY_DEADBAND_W ? 0 : grid;
+  // Battery tile mode (2026-09-18, extended 2026-10-04 — user report: while
+  // charging, the unit sometimes also feeds a few watts to the house, and
+  // the raw signal flips "cells" briefly positive; showing the tile as
+  // "−N W discharging" for a couple of seconds mid-charge read as broken,
+  // not real). Whichever flow is bigger wins, same comparative rule
+  // SimpleHome's per-unit tiles already use — a small discharge blip
+  // during real charging stays "charging" (charge dwarfs it), while a
+  // small discharge with no competing charge signal (idle battery
+  // covering standby load) still reports as discharging normally.
+  const cellsW = battery?.cells ?? 0;
+  const chargeW = battery?.charge ?? 0;
+  const battMode = battery
+    ? chargeW > cellsW
+      ? "charging"
+      : cellsW > chargeW
+        ? "discharging"
+        : "idle"
+    : null;
   // Tweened display values for the tiles (2026-09-23, user request — the
   // Anker app animates number transitions; same cadence, now same glide).
   const homeW = useTweenedWatts(flow?.home?.consumption ?? null);
   const gridW = useTweenedWatts(gridDisplay);
-  const battW = useTweenedWatts(
-    battery ? ((battery.cells ?? 0) > 0 ? (battery.cells ?? 0) : (battery.charge ?? 0)) : null,
-  );
+  const battW = useTweenedWatts(battery ? (battMode === "discharging" ? cellsW : chargeW) : null);
   const pvW = useTweenedWatts(pv?.production ?? null);
   const pvHomeW = useTweenedWatts(pv?.toHome ?? null);
   const pvBattW = useTweenedWatts(pv?.toBattery ?? null);
@@ -124,13 +140,6 @@ export default function LiveTab() {
   // uses the stable 7-day-average figure (the diagram node's
   // timeToEmptyH, average-rate to the effective floor); charging keeps the
   // current-rate estimate (PV-driven and steady).
-  const battMode = battery
-    ? (battery.cells ?? 0) > 0
-      ? "discharging"
-      : battery.charge > 0
-        ? "charging"
-        : "idle"
-    : null;
   const battEta = battery
     ? battMode === "discharging"
       ? formatEta(flow?.diagram?.timeToEmptyH ?? null)
@@ -138,8 +147,8 @@ export default function LiveTab() {
           batteryEtaHours({
             mode: battMode,
             soc: battery.soc,
-            chargeW: battery.charge,
-            cellsW: battery.cells,
+            chargeW,
+            cellsW,
             maxPct: battery.maxPct,
             floorPct: battery.floorPct,
             capacityKwh: battery.capacityKwh,
@@ -248,11 +257,11 @@ export default function LiveTab() {
             <div className="card-label">{t("live.tiles.battery")}</div>
             <div className="card-value batt-card-value" style={{ color: "#c084fc" }}>
               {battery ? (
-                (battery.cells ?? 0) > 0 ? (
+                battMode === "discharging" ? (
                   <>
                     <StateIcon mode="discharging" size={18} /> −{battW ?? 0} W
                   </>
-                ) : battery.charge > 0 ? (
+                ) : battMode === "charging" ? (
                   <>
                     <StateIcon mode="charging" size={18} /> +{battW ?? 0} W
                   </>
@@ -267,9 +276,9 @@ export default function LiveTab() {
             </div>
             <div className="card-label">
               {battery
-                ? (battery.cells ?? 0) > 0
+                ? battMode === "discharging"
                   ? t("live.battery.dischargingSoc", { soc: battery.soc })
-                  : battery.charge > 0
+                  : battMode === "charging"
                     ? (battery.gridCharge ?? 0) > 0
                       ? t("live.battery.chargingGridSoc", {
                           soc: battery.soc,
