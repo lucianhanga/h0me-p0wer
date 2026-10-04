@@ -668,7 +668,34 @@ h4 {
    the mobile layout, not visible by eye alone. */
 .pv-slot-groups {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
   margin: 0.5rem 0;
+}
+
+/* Each solarbank is its own tile (2026-10-04, user request: "make each
+   solarbank a tile") — the individual port rows inside stay chrome-free
+   (see .pv-slot), so this is the only visible box, grouping a unit's
+   ports together at a glance when there's more than one unit. */
+.pv-unit-tile {
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+/* Lines up "h-solarbank-4" etc. with "PV1" inside the cards below it
+   (2026-10-04, user request) — the cards' own 1rem left padding (see
+   .pv-slot) offsets their name text from the grid's left edge; the unit
+   label sits flush with that edge by default (.pv-unit-label is shared
+   with the Live tab's Details section, so the offset is scoped here
+   rather than added to the shared rule). Still correct now that the
+   group is wrapped in .pv-unit-tile: both the label and the cards get
+   the SAME tile padding first, then this extra 1rem matches the cards'
+   own internal 1rem exactly. */
+.pv-slot-groups .pv-unit-label {
+  padding-left: 1rem;
 }
 
 /* Section-wide total, above the per-port breakdown (2026-10-04, user
@@ -714,10 +741,12 @@ h4 {
   min-width: 140px;
 }
 
+/* Value sits next to the name, not pushed to the far edge (2026-10-04,
+   user request: "align the values of the PVs to the left, near the name
+   of the PVs") — plain left-to-right flow instead of space-between. */
 .pv-slot-label {
   display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+  gap: 0.4rem;
   font-size: 0.85rem;
   margin-bottom: 0.45rem;
 }
@@ -734,28 +763,34 @@ h4 {
 /* Segmented LED meter, colored by position (2026-10-04, user decision:
    "the Segmented LED meter with the color gradients from the Zone
    gradient but with color gradients following one color into another").
-   The row's OWN background carries the unbroken green→amber→red blend;
-   each segment is either transparent (lit — reveals the gradient at its
-   own position) or opaque dark (unlit) — so a lit segment's color comes
-   from where it sits along the row, not a fixed on-color. */
+   The row's OWN background carries the unbroken green→yellow→orange→red
+   blend ("start from green, go through yellow, orange and red which
+   indicates full usage", 2026-10-04 follow-up) — each segment's color
+   comes from where it sits along the row, not a fixed on-color. */
 /* Segment "gaps" are an opaque border in the page's own background color,
    not a flex `gap` — a real gap would let the row's gradient show through
    in every slot regardless of lit/unlit state (stray colored ticks past
-   the fill point, caught visually before shipping this). A border is
-   part of each segment's own box, so it hides the gradient exactly as
-   consistently as the segment's fill does. */
+   the fill point, caught visually before shipping an earlier version of
+   this). A border is part of each segment's own box, so it hides the
+   gradient exactly as consistently as the segment's own fill does. */
 .pv-led-row {
   width: 100%;
   display: flex;
   height: 10px;
   border-radius: 3px;
   overflow: hidden;
-  background: linear-gradient(90deg, #2f8f52 0%, #5fce80 35%, #f7a44f 70%, #e05c5c 100%);
+  background: linear-gradient(90deg, #5fce80 0%, #f2cb4e 33%, #f7a44f 66%, #e05c5c 100%);
 }
 
+/* Unlit = "like with the light off" (2026-10-04, user request) — a real
+   LED's plastic diffuser still shows a dim tint of its own color when
+   off, not neutral gray, so the overlay is translucent rather than
+   opaque: ~80% dark wash lets a faint hint of that segment's gradient
+   color bleed through underneath. Lit = fully transparent, the gradient
+   shows at full brightness ("lightened"). */
 .pv-led {
   flex: 1;
-  background: #0d1114;
+  background: rgba(13, 17, 20, 0.82);
   border-right: 2px solid #101418;
   transition: background-color 1s linear;
 }

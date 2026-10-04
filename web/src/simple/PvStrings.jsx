@@ -82,7 +82,7 @@ export default function PvStrings({ flow }) {
       <PvCard label={t("simple.pvTotal")} watts={totalWatts} peakW={totalPeakW} total />
       <div className="pv-slot-groups">
         {groups.map((u) => (
-          <div key={u.sn}>
+          <div key={u.sn} className="pv-unit-tile">
             {groups.length > 1 && <p className="pv-unit-label muted">{u.name}</p>}
             <div className="pv-slot-grid">
               {u.channels.map((c) => (
