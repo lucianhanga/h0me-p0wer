@@ -10,6 +10,7 @@
 // failure anywhere still falls through to whatever fields were resolved.
 
 import { fetchJson } from "./welcome-sources.js";
+import { deriveBatteryFlow } from "./battery-params.js";
 
 const w2kw = (w) => (w == null ? null : Math.round((w / 1000) * 100) / 100);
 
@@ -28,6 +29,23 @@ function minutesToFull(battery) {
   return Math.round((kwhNeeded / (charge / 1000)) * 60);
 }
 
+// Minutes until the account's (effective) discharge floor at the current
+// discharge rate — the mirror image of minutesToFull, for the Garmin
+// watch's Battery page ("time until empty" while discharging). Uses
+// `floorPct` (the EFFECTIVE floor including the controller's safety
+// margin — see its own comment in index.js) and `cells` (pure discharge
+// to the house, excluding PV pass-through — the same field the Live
+// tab's charge/discharge tile uses), not `outputW`/`discharge`. null
+// while idle/charging or already at the floor.
+function minutesToEmpty(battery) {
+  if (!battery) return null;
+  const { soc, floorPct, capacityKwh, cells } = battery;
+  if (soc == null || floorPct == null || !(capacityKwh > 0) || !(cells > 0)) return null;
+  if (soc <= floorPct) return 0;
+  const kwhAvailable = ((soc - floorPct) / 100) * capacityKwh;
+  return Math.round((kwhAvailable / (cells / 1000)) * 60);
+}
+
 // Today's solar/home/grid power as hourly averages, from local midnight up
 // to now — display-only, but the Garmin app's Solar page plots these on a
 // fixed 0h-24h x-axis (left edge = midnight, a pulsing dot at "now"), so
@@ -40,9 +58,17 @@ function minutesToFull(battery) {
 // with cloud day-trend fallback for BOTH grid and PV (the local `solar`
 // column has no such fallback — `pv` does, so that's the field used
 // here), which a from-scratch query would have to reimplement to stay
-// correct when Modbus is down. Home has no direct column anywhere, so
-// it's reconstructed the same way computeFlowPayload's own meter-fallback
-// does elsewhere in this backend: max(grid, 0) + battery output.
+// correct when Modbus is down.
+//
+// homeFromGridHistory/homeFromBatteryHistory split `home` into its two
+// non-solar sources for the watch's stacked-bar Home page (grid at the
+// base, battery cells in the middle, PV→home as the remainder on top —
+// the watch derives that remainder itself as
+// home[i] - homeFromGrid[i] - homeFromBattery[i], no need to send it).
+// Uses the SAME pvToHome/cells split deriveBatteryFlow does everywhere
+// else in this backend (battery-params.js) — NOT a fresh approximation —
+// so a bucket's `battOut` (which includes PV pass-through) doesn't double
+// book that pass-through as "battery" on top of the separate PV figure.
 const HISTORY_BUCKET_MS = 3600 * 1000; // 1 h buckets — up to ~24 points/day
 
 async function recentHistory(timeseriesUrl) {
@@ -58,14 +84,34 @@ async function recentHistory(timeseriesUrl) {
   const res = await fetchJson(url);
   const points = res?.data ?? [];
   const solarHistory = [];
+  const solarBatteryHistory = [];
   const homeHistory = [];
+  const homeFromGridHistory = [];
+  const homeFromBatteryHistory = [];
   const gridHistory = [];
   for (const p of points) {
-    solarHistory.push(w2kw(p.pv) ?? 0);
-    gridHistory.push(w2kw(p.grid) ?? 0);
-    homeHistory.push(w2kw(Math.max(p.grid ?? 0, 0) + (p.battOut ?? 0)) ?? 0);
+    const pvW = p.pv ?? 0;
+    const chargeW = p.battChg ?? 0;
+    const outputW = p.battOut ?? 0;
+    const gridW = p.grid ?? 0;
+    const { pvToHome, cellsW } = deriveBatteryFlow({ pvW, chargeW, outputW });
+    const gridToHomeW = Math.max(gridW, 0);
+
+    solarHistory.push(w2kw(pvW) ?? 0);
+    solarBatteryHistory.push(w2kw(chargeW) ?? 0);
+    gridHistory.push(w2kw(gridW) ?? 0);
+    homeFromGridHistory.push(w2kw(gridToHomeW) ?? 0);
+    homeFromBatteryHistory.push(w2kw(cellsW) ?? 0);
+    homeHistory.push(w2kw(gridToHomeW + cellsW + pvToHome) ?? 0);
   }
-  return { solarHistory, homeHistory, gridHistory };
+  return {
+    solarHistory,
+    solarBatteryHistory,
+    homeHistory,
+    homeFromGridHistory,
+    homeFromBatteryHistory,
+    gridHistory,
+  };
 }
 
 export function registerWatchRoute(app, deps) {
@@ -92,10 +138,21 @@ export function registerWatchRoute(app, deps) {
         solar: w2kw(flow?.pv?.production),
         home: w2kw(flow?.home?.consumption),
         grid: w2kw(gridW),
+        // Already the SYSTEM-wide aggregate, not one unit's reading —
+        // battery.soc comes from Anker's site-level total_battery_power
+        // (see recomputeAggregate()'s comment in index.js), and
+        // capacityKwh is systemCapacityKwh()'s sum over every unit/pack.
         battery: battery?.soc ?? null,
         batteryPower: w2kw(batteryPowerW),
         batteryCapacity: battery?.capacityKwh ?? null,
         batteryMinutesToFull: minutesToFull(battery),
+        batteryMinutesToEmpty: minutesToEmpty(battery),
+        // Low/high SOC thresholds for the watch's fill-bar markers (the
+        // SAME effective floor/ceiling the account and the power-plan
+        // controller use elsewhere in this backend — see the comment on
+        // `floorPct` in index.js).
+        batteryFloorPct: battery?.floorPct ?? null,
+        batteryMaxPct: battery?.maxPct ?? null,
       });
     } catch (err) {
       console.warn(`[watch] live flow failed (${err.message})`);
