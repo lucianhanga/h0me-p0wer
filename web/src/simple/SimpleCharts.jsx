@@ -44,6 +44,11 @@ const SPANS = [
   { key: "graph.span.6h", ms: 6 * 3600 * 1000 },
 ];
 
+// Default face (2026-10-04, user request: "make the default graphs in the
+// simple view 6h resolution") — looked up by key rather than a hardcoded
+// array index so it keeps pointing at 6h even if SPANS is reordered.
+const DEFAULT_SPAN_IDX = SPANS.findIndex((s) => s.key === "graph.span.6h");
+
 const REFRESH_MS = 60000;
 
 function ChartCanvas({ def, rows }) {
@@ -136,7 +141,7 @@ function ChartCanvas({ def, rows }) {
 
 function SimpleChartTile({ def }) {
   const t = useT();
-  const [spanIdx, setSpanIdx] = useState(0); // first face: 12h
+  const [spanIdx, setSpanIdx] = useState(DEFAULT_SPAN_IDX); // first face: 6h
   const [rows, setRows] = useState(null);
   const spanMs = SPANS[spanIdx].ms;
   // Memoized — a fresh {…def} object per render re-inited ECharts on every
