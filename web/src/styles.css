@@ -989,16 +989,22 @@ h4 {
 @media (max-width: 600px) {
   .pv-slot-grid {
     flex-direction: column;
-    align-items: center;
   }
 
-  /* Cards cover 80% of the width on mobile (2026-10-04, user request)
-     instead of the full column — proportional sizing is still off here
-     (flex-grow: 0), every card renders the same fixed width. */
+  /* Full width, left-aligned, not 80% centered (2026-10-04, superseding
+     an earlier 80%-centered request — user report with a phone
+     screenshot: "they are not made wide and the tile is not aligned
+     like I asked"). A centered, narrower-than-container card put the
+     bar at a different x-position than the unit label's fixed left
+     padding, AND kept it from benefiting from the wider min-width set
+     for desktop. Full width, with .pv-slot's own left padding (shared
+     with desktop) now the only thing setting the card's left inset,
+     keeps every row's left edge — label, name, bar — in the same
+     column regardless of screen size. */
   .pv-slot {
     flex-grow: 0;
     flex-basis: auto;
-    width: 80%;
+    width: 100%;
     min-width: 0;
   }
 }
