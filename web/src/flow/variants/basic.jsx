@@ -2,38 +2,58 @@ import { useTweenedWatts } from "../../useTweenedValue.js";
 import { useT } from "../../i18n/LanguageProvider.jsx";
 
 // BASIC variant of the flow view (the current look): rounded-rect SVG
-// nodes (PV top, Grid left, Home center, Battery right), animated dashed
-// arcs in flow direction, tweened watt labels. Renders ONLY what
-// model.js gives it — positions/shapes/animation live here, data
+// nodes (PV top, Grid left, Battery right, Home bottom — a diamond),
+// animated dashed arcs in flow direction, tweened watt labels. Renders
+// ONLY what model.js gives it — positions/shapes/animation live here, data
 // semantics never do. An artistic variant would swap node/edge rendering
 // (icons, richer visuals) against the same model.
+// Diamond layout (2026-10-04, user request: "make the diagram a diamond —
+// PV top, Home bottom, Grid left, Battery right") — spreads the four nodes
+// to the corners of a rhombus instead of the old T-shape, which lengthens
+// every arc so the floating "123 W" labels clear the node rectangles
+// instead of crowding the narrow gaps between them.
+// Grid/Battery sit closer to center than their old ±150 offset (2026-10-04,
+// user request: "make the rectangles a bit wider") — widening NODE_W while
+// keeping their outer edges flush with the 440-wide viewBox (same 6px
+// margin as before) means pulling the centers in so the wider boxes still
+// fit. Everything here is viewBox units, not pixels, so it scales down
+// cleanly on a phone exactly as it did before — only the proportions of
+// the diamond changed, not the responsiveness.
 const POS = {
-  pv: { x: 220, y: 46 },
-  grid: { x: 64, y: 152 },
-  home: { x: 220, y: 152 },
-  batt: { x: 376, y: 152 },
+  pv: { x: 220, y: 56 },
+  grid: { x: 76, y: 182 },
+  home: { x: 220, y: 308 },
+  batt: { x: 364, y: 182 },
 };
 
-// Nodes 128×84 — bigger rectangles (2026-10-03, user request: "make the
-// rectangles bigger... cover a bit more from the space"), still exactly
-// edge to edge in the 440-wide viewBox.
-const NODE_W = 128;
-const NODE_H = 84;
+// Nodes 140×96 — bigger rectangles (2026-10-03, user request: "make the
+// rectangles bigger... cover a bit more from the space"; grown again
+// 2026-10-04, both taller for title/content breathing room and wider for
+// more text room), still exactly edge to edge in the 440-wide viewBox.
+const NODE_W = 140;
+const NODE_H = 96;
 
 function Node({ node }) {
   const p = POS[node.id];
   const w = useTweenedWatts(node.valueW ?? null);
   const hasValue = node.valueW != null || node.text != null;
-  // Four possible rows (label / value / sub / contrib) in a 72px-tall node:
-  // compact offsets when all four are present, looser otherwise (2026-10-03,
-  // per-source contribution line added at the bottom). The contrib line is
-  // ALWAYS at the same y (user request 2026-10-03 — same bottom position in
-  // every rectangle, including the value-less Grid node).
+  // Four possible rows (label / value / sub / contrib): compact offsets
+  // when all four are present, looser otherwise (2026-10-03, per-source
+  // contribution line added at the bottom). The contrib line is ALWAYS at
+  // the same y (user request 2026-10-03 — same bottom position in every
+  // rectangle, including the value-less Grid node).
+  // Padding above the title and between the title and the rest of the
+  // content (2026-10-04, user request: "put some space between the top
+  // and the title and the title and the rest") — labelY sits further from
+  // the top edge than the title text's own line-height, and valueY/subY
+  // are spaced a bit looser below it than a tight stack would need.
   const compact = hasValue && node.sub && node.contrib;
   const labelY = compact ? p.y - 29 : hasValue ? p.y - 18 : node.contrib ? p.y - 8 : p.y + 4;
-  const valueY = compact ? p.y - 10 : p.y + 3;
-  const subY = compact ? p.y + 9 : p.y + 21;
-  const contribY = p.y + 31;
+  const valueY = compact ? p.y - 7 : p.y + 5;
+  const subY = compact ? p.y + 11 : p.y + 23;
+  // A bit more air between the separator rule (y+22) and the percentage
+  // text below it (2026-10-04, user request).
+  const contribY = p.y + 37;
   return (
     <g>
       <rect
@@ -70,9 +90,9 @@ function Node({ node }) {
               user request) */}
           <line
             x1={p.x - NODE_W / 2 + 10}
-            y1={p.y + 20}
+            y1={p.y + 22}
             x2={p.x + NODE_W / 2 - 10}
-            y2={p.y + 20}
+            y2={p.y + 22}
             stroke="#2a3238"
             strokeWidth="1"
           />
@@ -167,7 +187,7 @@ function EdgeLabel({ edge }) {
 export default function BasicVariant({ model }) {
   const t = useT();
   return (
-    <svg viewBox="0 0 440 260" className="flow-diagram" role="img" aria-label={t("flow.ariaLabel")}>
+    <svg viewBox="0 0 440 364" className="flow-diagram" role="img" aria-label={t("flow.ariaLabel")}>
       {model.edges.map((e) => (
         <EdgeLine key={e.id} edge={e} />
       ))}
