@@ -21,7 +21,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // Progressive fill color (2026-09-29, user request): a CONTINUOUS hue
 // sweep with SOC — hsl hue 4 (red, empty) → 140 (green, full) — replacing
 // the 5-step class ramp (SEG_LEVELS). Applies to the module fills AND the
-// energy-rain drops (via --rain-color).
+// charge/discharge pulse+bubble animation (via --energy-color).
 const socHue = (soc) => 4 + Math.min(100, Math.max(0, soc ?? 0)) * 1.36;
 const fillColor = (soc, lightness) => `hsl(${socHue(soc)} 75% ${lightness}%)`;
 
@@ -100,21 +100,29 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
             </span>
           </div>
         ))}
-        {/* Energy-rain animation while charging/discharging (2026-09-29,
-            user request — "something falling inside, in the same color as
-            the battery load"; research convention: charging = particles
-            flowing IN top-down, discharging = the mirror, drifting up and
-            out). Fill-colored drops; replaces the old subtle streak.
-            Below the segment labels (they keep z-index 1). */}
+        {/* Energy animation while charging/discharging (2026-10-04,
+            replaces the old falling-drops "rain" — user picked the
+            "layered double-surge" pulse + bubbles design after a few
+            rounds of options). Two offset glow bands travel the full
+            cylinder — up for charging, down for discharging — plus small
+            bubbles riding the same direction. Bubbles run the WHOLE
+            tube height, not just the current liquid level ("shown also
+            outside of the charged area"), growing as they rise while
+            charging (more energy arriving) and shrinking while
+            discharging (energy dissipating as it leaves). Below the
+            segment labels (they keep z-index 1). */}
         {mode !== "idle" && (
           <div
-            className={`batt-rain ${mode === "charging" ? "rain-in" : "rain-out"}`}
-            style={{ "--rain-color": fillColor(live.soc ?? 50, 55) }}
+            className={`batt-energy ${mode === "charging" ? "charging" : "discharging"}`}
+            style={{ "--energy-color": fillColor(live.soc ?? 50, 55) }}
           >
-            <i />
-            <i />
-            <i />
-            <i />
+            <span className="batt-pulse" />
+            <span className="batt-pulse slow" />
+            <i className="batt-bubble" />
+            <i className="batt-bubble" />
+            <i className="batt-bubble" />
+            <i className="batt-bubble" />
+            <i className="batt-bubble" />
           </div>
         )}
         </div>

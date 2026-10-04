@@ -318,7 +318,7 @@ export default function LiveTab() {
               <span className="phase-name">L{i + 1}</span>
               <span className="phase-power">{p ? `${p.power} W` : "—"}</span>
               <span className="phase-detail">{p ? `${p.current} A · ${p.voltage} V` : ""}</span>
-              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} bidirectional labels />}
+              {p && <GradientMeter value={p.power} max={PHASE_MAX_W} bidirectional labels log />}
             </div>
           </FlipTile>
         ))}
@@ -328,7 +328,12 @@ export default function LiveTab() {
         <FlipTile>
           <div className="phase-card">
             <span className="phase-name">{t("live.pvTotal")}</span>
-            <span className="phase-power">{pv ? `${pv.production} W` : "—"}</span>
+            <span className="phase-power">
+              {pv ? `${pv.production} W` : "—"}
+              {pv && pv.peakW > 0 && (
+                <span className="phase-power-pct"> {Math.round((pv.production / pv.peakW) * 100)}%</span>
+              )}
+            </span>
             {pv && <GradientMeter value={pv.production} max={pv.peakW} labels />}
           </div>
         </FlipTile>
@@ -350,7 +355,12 @@ export default function LiveTab() {
                     {/* watts is null while the unit's MQTT push channel
                         is stalled — an honest "—", never the frozen
                         scen_info pv_power number. */}
-                    <span className="phase-power">{c.watts != null ? `${c.watts} W` : "—"}</span>
+                    <span className="phase-power">
+                      {c.watts != null ? `${c.watts} W` : "—"}
+                      {c.watts != null && c.peakW > 0 && (
+                        <span className="phase-power-pct"> {Math.round((c.watts / c.peakW) * 100)}%</span>
+                      )}
+                    </span>
                     <GradientMeter value={c.watts} max={c.peakW} labels />
                   </div>
                 </FlipTile>
