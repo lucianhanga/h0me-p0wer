@@ -164,15 +164,24 @@ export function registerWatchRoute(app, deps) {
       // gap-handling-heavy today computation rather than re-deriving it.
       const overview = await fetchJson(deps.statsOverviewUrl).catch(() => null);
       const flows = overview?.data?.flows;
+      const costs = overview?.data?.costs;
       // pvProducedKwh (byPeriod.today), not flows.pvKwh — flows.pvKwh is
       // PV-direct-to-home only; the watch's `solar`/`solarToday` pair both
-      // want TOTAL production (see WATCH.readme).
+      // want TOTAL production (see WATCH.readme). solarDirectToday is
+      // that same flows.pvKwh figure, sent separately for the watch's
+      // List page "today" breakdown (Grid/PV direct/From battery/To
+      // battery/To grid, matching the web app's Dashboard tile).
       const pvProducedKwh = overview?.data?.byPeriod?.today?.pvProducedKwh;
       Object.assign(out, {
         solarToday: pvProducedKwh ?? null,
+        solarDirectToday: flows?.pvKwh ?? null,
         homeToday: flows?.homeKwh ?? null,
         exportedToday: flows?.gridExportKwh ?? null,
         importedToday: flows?.gridImportKwh ?? null,
+        batteryDischargedToday: flows?.battDischargedKwh ?? null,
+        batteryChargedToday: flows?.battChargedKwh ?? null,
+        spentToday: costs?.today ?? null,
+        savedToday: costs?.batterySavingsToday ?? null,
       });
     } catch (err) {
       console.warn(`[watch] stats-overview fetch failed (${err.message})`);
