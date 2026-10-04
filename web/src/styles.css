@@ -2448,14 +2448,18 @@ pre {
   opacity: 0.55;
 }
 
+/* Charging flows DOWN (2026-10-04, user correction: "when the battery is
+   charging the direction should be down for both bubbles and waves") —
+   energy poured in from the top, sinking in; discharging is the mirror,
+   rising up and out. */
 .batt-energy.charging .batt-pulse {
-  background: linear-gradient(180deg, transparent, var(--energy-color, #5fce80), transparent);
-  animation: batt-pulse-rise 2.2s ease-in infinite;
+  background: linear-gradient(0deg, transparent, var(--energy-color, #5fce80), transparent);
+  animation: batt-pulse-fall 2.2s ease-in infinite;
 }
 
 .batt-energy.discharging .batt-pulse {
-  background: linear-gradient(0deg, transparent, var(--energy-color, #5fce80), transparent);
-  animation: batt-pulse-fall 2.2s ease-in infinite;
+  background: linear-gradient(180deg, transparent, var(--energy-color, #5fce80), transparent);
+  animation: batt-pulse-rise 2.2s ease-in infinite;
 }
 
 .batt-pulse.slow {
@@ -2464,7 +2468,7 @@ pre {
   opacity: 0.32;
 }
 
-/* charging: band rises bottom → top (energy flowing in) */
+/* discharging: band rises bottom → top (energy flowing out) */
 @keyframes batt-pulse-rise {
   0% { bottom: -46%; opacity: 0; }
   15% { opacity: 0.55; }
@@ -2472,7 +2476,7 @@ pre {
   100% { bottom: 100%; opacity: 0; }
 }
 
-/* discharging: the mirror — band falls top → bottom (energy leaving) */
+/* charging: band falls top → bottom (energy flowing in) */
 @keyframes batt-pulse-fall {
   0% { top: -46%; opacity: 0; }
   15% { opacity: 0.55; }
@@ -2493,17 +2497,19 @@ pre {
   box-shadow: 0 0 4px var(--energy-color, #5fce80);
 }
 
-.batt-energy.charging .batt-bubble { animation-name: batt-bubble-grow; animation-timing-function: linear; animation-iteration-count: infinite; }
-.batt-energy.discharging .batt-bubble { animation-name: batt-bubble-shrink; animation-timing-function: linear; animation-iteration-count: infinite; }
+.batt-energy.charging .batt-bubble { animation-name: batt-bubble-grow-down; animation-timing-function: linear; animation-iteration-count: infinite; }
+.batt-energy.discharging .batt-bubble { animation-name: batt-bubble-shrink-up; animation-timing-function: linear; animation-iteration-count: infinite; }
 
-@keyframes batt-bubble-grow {
-  0% { bottom: -6%; opacity: 0; transform: scale(0.5); }
+/* charging: falls top → bottom, growing (more energy arriving) */
+@keyframes batt-bubble-grow-down {
+  0% { top: -6%; bottom: auto; opacity: 0; transform: scale(0.5); }
   8% { opacity: 0.9; }
   92% { opacity: 0.55; }
-  100% { bottom: 104%; opacity: 0; transform: scale(1.9); }
+  100% { top: 104%; bottom: auto; opacity: 0; transform: scale(1.9); }
 }
 
-@keyframes batt-bubble-shrink {
+/* discharging: rises bottom → top, shrinking (energy dissipating as it leaves) */
+@keyframes batt-bubble-shrink-up {
   0% { bottom: -6%; opacity: 0; transform: scale(1.6); }
   8% { opacity: 1; }
   92% { opacity: 0.5; }

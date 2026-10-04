@@ -25,7 +25,7 @@ export const en = {
     batteries: "Batteries",
     charts: "Trends",
     periods: "Totals",
-    pvStrings: "Solar Strings",
+    pvStrings: "PVs",
     pvTotal: "Total",
     brief: {
       forecastPv: "expected today · {kwp} kWp",
