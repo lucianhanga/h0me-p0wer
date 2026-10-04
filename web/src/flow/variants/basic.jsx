@@ -21,16 +21,18 @@ import { useT } from "../../i18n/LanguageProvider.jsx";
 // the diamond changed, not the responsiveness.
 const POS = {
   pv: { x: 220, y: 56 },
-  grid: { x: 76, y: 182 },
+  grid: { x: 84, y: 182 },
   home: { x: 220, y: 308 },
-  batt: { x: 364, y: 182 },
+  batt: { x: 356, y: 182 },
 };
 
-// Nodes 140×96 — bigger rectangles (2026-10-03, user request: "make the
+// Nodes 156×96 — bigger rectangles (2026-10-03, user request: "make the
 // rectangles bigger... cover a bit more from the space"; grown again
-// 2026-10-04, both taller for title/content breathing room and wider for
-// more text room), still exactly edge to edge in the 440-wide viewBox.
-const NODE_W = 140;
+// 2026-10-04 for title/content breathing room, and wider twice more the
+// same day for visual weight), still exactly edge to edge in the 440-wide
+// viewBox — all in viewBox units, so it scales down cleanly on a phone
+// exactly as before; only the diamond's proportions changed.
+const NODE_W = 156;
 const NODE_H = 96;
 
 function Node({ node }) {
@@ -105,6 +107,33 @@ function Node({ node }) {
   );
 }
 
+// Where a diagonal arc touches each rectangle (2026-10-04, user request:
+// "make the arc from PV to Battery start from the middle of the left side
+// to the middle of the top side of the battery rectangle... follow the
+// same pattern for all of them" — confirmed as the side FACING the other
+// node, not literally "left", since that broke down for the other arcs).
+// The "pole" nodes (PV/Home, top/bottom of the diamond) attach via their
+// LEFT/RIGHT side; the "side" nodes (Grid/Battery, left/right of the
+// diamond) attach via their TOP/BOTTOM side — e.g. PV's right side meets
+// Battery's top side. This shortens every diagonal arc down to just the
+// gap between the two rectangles (centers are hidden behind the nodes
+// anyway), which also pulls each arc's floating label into that same gap
+// instead of the wider center-to-center span — exactly the "numbers
+// centered between the rectangles, not overlapping the arc" ask, as a
+// side effect of edgeLabelPos's existing perpendicular-offset math.
+// PV↔Home is intentionally excluded (user: "keep it as it is") — it stays
+// a straight center-to-center line, handled by the "vertical" case below.
+function edgeAnchor(id, partnerId) {
+  const p = POS[id];
+  if (id === "pv" && partnerId === "batt") return { x: p.x + NODE_W / 2, y: p.y };
+  if (id === "batt" && partnerId === "pv") return { x: p.x, y: p.y - NODE_H / 2 };
+  if (id === "grid" && partnerId === "home") return { x: p.x, y: p.y + NODE_H / 2 };
+  if (id === "home" && partnerId === "grid") return { x: p.x - NODE_W / 2, y: p.y };
+  if (id === "batt" && partnerId === "home") return { x: p.x, y: p.y + NODE_H / 2 };
+  if (id === "home" && partnerId === "batt") return { x: p.x + NODE_W / 2, y: p.y };
+  return p; // pv↔home: unchanged center-to-center
+}
+
 // Label geometry shared by EdgeLine and EdgeLabel — the two are rendered
 // in different SVG layers (line beneath the nodes, label above them; see
 // BasicVariant) so they need the same math without duplicating it.
@@ -135,8 +164,8 @@ function edgeLabelPos(a, b) {
 }
 
 function EdgeLine({ edge }) {
-  const a = POS[edge.from];
-  const b = POS[edge.to];
+  const a = edgeAnchor(edge.from, edge.to);
+  const b = edgeAnchor(edge.to, edge.from);
   const w = useTweenedWatts(edge.watts ?? 0); // arcs glide with the values
   if (w <= 0) {
     return <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#2a3238" strokeWidth="2" />;
@@ -162,8 +191,8 @@ function EdgeLine({ edge }) {
 // it. Painting labels last keeps them fully legible no matter how tight
 // the layout gets (including scaled-down mobile widths).
 function EdgeLabel({ edge }) {
-  const a = POS[edge.from];
-  const b = POS[edge.to];
+  const a = edgeAnchor(edge.from, edge.to);
+  const b = edgeAnchor(edge.to, edge.from);
   const w = useTweenedWatts(edge.watts ?? 0);
   if (w <= 0) return null;
   const { x, y, anchor } = edgeLabelPos(a, b);
