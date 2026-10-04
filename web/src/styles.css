@@ -658,63 +658,77 @@ h4 {
 
 /* Simple view's per-string PV section (2026-10-04). After trying 4
    flip-through visualizations, the user settled on one: a segmented LED
-   meter colored by the zone-gradient's green→amber→red blend, one port
-   per line (2026-10-04 follow-up: "show them each in one line").
-   width: 100% is required, not decorative — .pv-rows is a direct child of
-   .simple-home (display: flex; align-items: center), which shrink-wraps
-   any child lacking its own explicit width down to its content's natural
-   size (caught via computed-width inspection on an earlier card-grid
-   version of this section, same fix still applies here). */
-.pv-rows {
+   meter colored by the zone-gradient's green→amber→red blend. */
+/* width: 100% is required, not decorative — .pv-slot-groups is a direct
+   child of .simple-home (display: flex; align-items: center), which
+   shrink-wraps any child lacking its own explicit width down to its
+   content's natural size. Without this, the whole grid (and every card's
+   "80% of width" below) was 80% of an already content-shrunk box, not
+   80% of the page — caught via computed-width inspection while verifying
+   the mobile layout, not visible by eye alone. */
+.pv-slot-groups {
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin: 0.5rem 0 1rem;
-}
-
-.pv-row {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  width: 100%;
+  margin: 0.5rem 0;
 }
 
 /* Section-wide total, above the per-port breakdown (2026-10-04, user
    request: "add on top of [the ports] an indication of the total also
-   like a progress bar") — the label alone (in PV green) distinguishes it
-   from the individual port rows. */
-.pv-row-total {
-  margin-bottom: 1rem;
+   like a progress bar") — full width; the label alone (in PV green)
+   distinguishes it from the individual port cards, since neither carries
+   a background/border box any more (see .pv-slot below). */
+.pv-slot-total {
+  width: 100%;
+  margin: 0.5rem 0 1rem;
 }
 
-.pv-row-total .pv-row-name {
+.pv-slot-total .pv-slot-label span:first-child {
   color: #5fce80;
 }
 
-/* Label and value sit together, left-aligned (2026-10-04, user request:
-   "put the titles... after PVx put its value and don't align the value
-   to the right") — one inline text run, not a justified label/value
-   pair; the meter fills the rest of the line instead. */
-.pv-row-text {
-  flex-shrink: 0;
-  font-size: 0.85rem;
-  white-space: nowrap;
+.pv-slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
 }
 
-.pv-row-name {
+/* Card width is proportional to the port's configured capacity
+   (2026-10-04, user request: "show them proportionally based on the
+   configured size") — flex-grow set via the --pv-weight custom property
+   (set inline per card in PvStrings.jsx) with flex-basis: 0 turns
+   flex-grow into a pure ratio: a 1000 W port grows twice as wide as a
+   500 W one. The custom-property indirection (rather than an inline
+   flex-grow) is what lets the mobile media query below cleanly override
+   it. No background or border (2026-10-04, user request: "don't show the
+   tile underneath, or make it with a transparent color") — the LED meter
+   floats directly on the page.
+*/
+.pv-slot {
+  box-sizing: border-box;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 0.65rem 1rem;
+  flex-grow: var(--pv-weight, 1);
+  flex-basis: 0;
+  min-width: 140px;
+}
+
+.pv-slot-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  margin-bottom: 0.45rem;
+}
+
+.pv-slot-label span:first-child {
   color: #8b98a5;
   font-weight: 600;
 }
 
-.pv-row-value {
+.pv-slot-label span:last-child {
   font-weight: 600;
-}
-
-.pv-row-bar-wrap {
-  flex: 1;
-  display: flex;
-  min-width: 0;
 }
 
 /* Segmented LED meter, colored by position (2026-10-04, user decision:
@@ -722,32 +736,26 @@ h4 {
    gradient but with color gradients following one color into another").
    The row's OWN background carries the unbroken green→amber→red blend;
    each segment is either transparent (lit — reveals the gradient at its
-   own position) or a faded gray (unlit — "show faded out the segments
-   which are not filled in yet", 2026-10-04 follow-up; the previous
-   near-black was nearly invisible against the page). A lit segment's
-   color comes from where it sits along the row, not a fixed on-color.
-   width is set inline per row, proportional to the port's configured
-   capacity against the largest port in the section (2026-10-04, user
-   request: "make the length of the PVs indicators proportional with
-   their capacity") — a 500 W port's meter runs half as long as a
-   1000 W one's. */
+   own position) or opaque dark (unlit) — so a lit segment's color comes
+   from where it sits along the row, not a fixed on-color. */
+/* Segment "gaps" are an opaque border in the page's own background color,
+   not a flex `gap` — a real gap would let the row's gradient show through
+   in every slot regardless of lit/unlit state (stray colored ticks past
+   the fill point, caught visually before shipping this). A border is
+   part of each segment's own box, so it hides the gradient exactly as
+   consistently as the segment's fill does. */
 .pv-led-row {
+  width: 100%;
+  display: flex;
   height: 10px;
   border-radius: 3px;
   overflow: hidden;
   background: linear-gradient(90deg, #2f8f52 0%, #5fce80 35%, #f7a44f 70%, #e05c5c 100%);
-  display: flex;
 }
 
-/* Segment "gaps" are an opaque border in the page's own background color,
-   not a flex `gap` — a real gap would let the row's gradient show through
-   in every slot regardless of lit/unlit state (stray colored ticks past
-   the fill point, caught visually before shipping an earlier version of
-   this). A border is part of each segment's own box, so it hides the
-   gradient exactly as consistently as the segment's own fill does. */
 .pv-led {
   flex: 1;
-  background: #2a3238;
+  background: #0d1114;
   border-right: 2px solid #101418;
   transition: background-color 1s linear;
 }
@@ -761,12 +769,19 @@ h4 {
 }
 
 @media (max-width: 600px) {
-  .pv-row {
-    gap: 0.5rem;
+  .pv-slot-grid {
+    flex-direction: column;
+    align-items: center;
   }
 
-  .pv-row-text {
-    font-size: 0.78rem;
+  /* Cards cover 80% of the width on mobile (2026-10-04, user request)
+     instead of the full column — proportional sizing is still off here
+     (flex-grow: 0), every card renders the same fixed width. */
+  .pv-slot {
+    flex-grow: 0;
+    flex-basis: auto;
+    width: 80%;
+    min-width: 0;
   }
 }
 
