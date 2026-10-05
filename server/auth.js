@@ -47,3 +47,17 @@ export function wsTokenValid(req) {
   const url = new URL(req.url, "http://localhost");
   return isValidToken(url.searchParams.get("token"));
 }
+
+// For the server's own loopback calls back into its own now-protected
+// /api routes (watch.js/welcome.js/daybrief.js calling
+// http://127.0.0.1:PORT/api/stats/overview etc. to reuse that route's
+// computation instead of re-deriving it) — these are real HTTP requests
+// requireAuth sees just like any external caller's, so they 401 just the
+// same without this (2026 regression: broke the Garmin watch's Today/
+// History fields and the welcome page's weekly recap the same way,
+// caught via the watch — see h0me-p0wer-garmin's commit fixing this).
+// {} when no token is configured (auth isn't active, nothing to attach).
+export function internalAuthHeaders() {
+  const token = process.env.API_TOKEN;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

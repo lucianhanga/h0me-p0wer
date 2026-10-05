@@ -7,6 +7,7 @@ import { kvGet, kvSet, getModuleHistory } from "./db.js";
 import {
   parseWelcomeConfig, geocode, fetchWeather, fetchPvgis, fetchJson, isWelcomeLang, localDate,
 } from "./welcome-sources.js";
+import { internalAuthHeaders } from "./auth.js";
 import {
   buildContext,
   callWelcomeAI,
@@ -72,7 +73,7 @@ export function registerWelcomeRoute(app, deps) {
       // Best-effort: an internal loopback call, same process — should
       // basically never fail independently of the whole server being
       // down, but a transient hiccup shouldn't block the whole briefing.
-      fetchJson(deps.statsOverviewUrl)
+      fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() })
         .catch((err) => {
           console.warn(`[welcome] stats-overview fetch failed (${err.message})`);
           return null;
@@ -352,9 +353,9 @@ export function registerWelcomeRoute(app, deps) {
         // Ask AI should know production/consumption split by source for
         // today/yesterday/week/month). Same internal loopback the welcome
         // refresh already uses — best-effort, the ask still works without.
-        deps.statsOverviewUrl ? fetchJson(deps.statsOverviewUrl).catch(() => null) : null,
+        deps.statsOverviewUrl ? fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() }).catch(() => null) : null,
         deps.statsOverviewUrl
-          ? fetchJson(deps.statsOverviewUrl.replace("/api/stats/overview", "/api/stats/period?type=day&offset=1")).catch(() => null)
+          ? fetchJson(deps.statsOverviewUrl.replace("/api/stats/overview", "/api/stats/period?type=day&offset=1"), { headers: internalAuthHeaders() }).catch(() => null)
           : null,
       ]);
       const context = buildContext({ config, geo, weather, pvgis, statsOverview: overview?.data ?? null, deps });

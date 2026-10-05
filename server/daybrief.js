@@ -10,6 +10,7 @@ import {
   isWelcomeLang,
 } from "./welcome-sources.js";
 import { kvGet, kvSet, computeConsumptionProfile } from "./db.js";
+import { internalAuthHeaders } from "./auth.js";
 
 // AI day briefing for the simple view's first section (2026-10-03, user
 // request): ONE AI message generated at the beginning of the day and kept
@@ -147,7 +148,7 @@ export function registerDayBriefRoute(app, deps) {
     const [weather, pvgis, statsOverview] = await Promise.all([
       fetchWeather(geo.lat, geo.lon),
       fetchPvgis(geo.lat, geo.lon, config.pv),
-      fetchJson(deps.statsOverviewUrl).catch(() => null),
+      fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() }).catch(() => null),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
     const houseEstimateKwh = houseEstimateFromProfile();
