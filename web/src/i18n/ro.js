@@ -27,6 +27,11 @@ export const ro = {
     placeholder: "Lipește tokenul",
     submit: "Continuă",
   },
+  hints: {
+    totals: "Atinge un card pentru a-l întoarce. Glisează stânga/dreapta (sau folosește ‹ ›) pentru a vedea perioadele anterioare.",
+    flipCards: "Atinge orice card pentru a-l întoarce și a vedea un mic grafic de tendință.",
+    headerControls: "Atinge ◑/◉ pentru a comuta între Vedere simplă și Vedere completă. Atinge steagul pentru a schimba limba.",
+  },
   simple: {
     batteries: "Baterii",
     charts: "Tendințe",

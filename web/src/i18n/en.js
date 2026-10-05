@@ -27,6 +27,11 @@ export const en = {
     placeholder: "Paste your token",
     submit: "Continue",
   },
+  hints: {
+    totals: "Tap a card to flip it. Swipe left/right (or use ‹ ›) to browse earlier periods.",
+    flipCards: "Tap any card to flip it and see a mini trend chart.",
+    headerControls: "Tap ◑/◉ to switch between Simple and Full view. Tap the flag to cycle languages.",
+  },
   simple: {
     batteries: "Batteries",
     charts: "Trends",

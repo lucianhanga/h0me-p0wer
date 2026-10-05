@@ -8,6 +8,7 @@ import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
 import ActivityBell from "./components/ActivityBell.jsx";
 import ActiveVisitors from "./components/ActiveVisitors.jsx";
+import Hint from "./components/Hint.jsx";
 import AuthGate from "./components/AuthGate.jsx";
 import SimpleHome from "./simple/SimpleHome.jsx";
 import { LanguageProvider, useLanguage, useT } from "./i18n/LanguageProvider.jsx";
@@ -92,6 +93,7 @@ function Shell() {
           <ActiveVisitors />
         </span>
       </header>
+      <Hint id="header-controls">{t("hints.headerControls")}</Hint>
       <main>
         {view !== "full" ? (
           <SimpleHome />

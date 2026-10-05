@@ -12,6 +12,7 @@ import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
 import PvStrings from "./PvStrings.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
+import Hint from "../components/Hint.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
 
 // The simple view (2026-09-27, user request — "minimalistic, think Tesla
@@ -246,6 +247,7 @@ export default function SimpleHome() {
       {overview?.byPeriod?.today && (
         <>
           <SectionTitle>{t("simple.periods")}</SectionTitle>
+          <Hint id="totals">{t("hints.totals")}</Hint>
           <div className="simple-periods">
           {/* Today + Week + Month (2026-09-29, user request — "under the
               today tile add also the week and month tiles") — the real

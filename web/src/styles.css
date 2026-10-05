@@ -195,6 +195,49 @@ nav button.nav-active {
   color: #f7a44f;
 }
 
+/* Dismissible onboarding hints (2026-10-05, see Hint.jsx) — a small,
+   calm explanation strip, not a modal/popover: sits inline above the
+   section it explains, pushed out of the flow for good once dismissed. */
+.hint-bubble {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  background: #1a2128;
+  border: 1px solid #2a3238;
+  border-left: 3px solid #4fa8e0;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin: 0.4rem 0 0.85rem;
+  font-size: 0.82rem;
+  color: #c9d3db;
+}
+
+.hint-icon {
+  color: #4fa8e0;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.hint-text {
+  flex: 1;
+  line-height: 1.4;
+}
+
+.hint-dismiss {
+  background: transparent;
+  border: none;
+  color: #8b98a5;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  min-height: 0;
+  flex-shrink: 0;
+}
+
+.hint-dismiss:hover {
+  color: #e8ecef;
+}
+
 /* --- Responsive (phones <=600px, tablets <=1024px) ----------------------- */
 
 /* Comfortable touch targets everywhere (Apple HIG: 44 pt). */
