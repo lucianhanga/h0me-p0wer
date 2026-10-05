@@ -6,6 +6,7 @@ import PowerPlanCard from "./PowerPlanCard.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import GradientMeter from "../components/GradientMeter.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import Hint from "../components/Hint.jsx";
 import TodayMiniChart from "./TodayMiniChart.jsx";
 import { batteryEtaHours, formatEta } from "../batteryEta.js";
 import { useLiveStream } from "../useLiveStream.js";
@@ -217,6 +218,7 @@ export default function LiveTab() {
       <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <FlowView flow={flow} />
 
+      <Hint id="flip-cards">{t("hints.flipCards")}</Hint>
       <div className="cards">
         <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
           <div className="card">

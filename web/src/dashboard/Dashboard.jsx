@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
+import Hint from "../components/Hint.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 
@@ -74,6 +75,7 @@ export default function Dashboard() {
   return (
     <div>
       <UpdatedStamp at={updatedAt} />
+      <Hint id="totals">{t("hints.totals")}</Hint>
       <div className="src-grid">
         <SourceCard
           type="day"
