@@ -42,6 +42,7 @@ export default function LiveTab() {
   const [health, setHealth] = useState(null); // /api/health
   const [todayProfile, setTodayProfile] = useState(null); // /api/stats/overview's profile, for the flip-side mini charts
   const mounted = useRef(true);
+  const houseCardRef = useRef(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -218,9 +219,9 @@ export default function LiveTab() {
       <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <FlowView flow={flow} />
 
-      <Hint id="flip-cards">{t("hints.flipCards")}</Hint>
+      <Hint id="flip-cards" tip={t("hints.flipCards")} anchorRef={houseCardRef} />
       <div className="cards">
-        <FlipTile back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
+        <FlipTile ref={houseCardRef} back={<TodayMiniChart lines={[{ data: houseSeries, color: "#e8ecef" }]} />}>
           <div className="card">
             <div className="card-label">{t("live.tiles.house")}</div>
             <div className="card-value">

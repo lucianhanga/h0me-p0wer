@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
 import StrategyTab from "./strategy/StrategyTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
@@ -31,6 +31,7 @@ function Shell() {
   const [page, setPage] = useState(() =>
     PAGES.some((p) => p.key === location.hash.slice(1)) ? location.hash.slice(1) : "welcome",
   );
+  const viewToggleRef = useRef(null);
 
   function switchPage(key) {
     setPage(key);
@@ -60,6 +61,7 @@ function Shell() {
         <AskButton />
         <ActivityBell />
         <button
+          ref={viewToggleRef}
           className={`view-toggle${view !== "full" ? " nav-active" : ""}`}
           onClick={() => setView(views[(views.indexOf(view) + 1) % views.length])}
           title={t(`view.${view}Tip`)}
@@ -93,7 +95,7 @@ function Shell() {
           <ActiveVisitors />
         </span>
       </header>
-      <Hint id="header-controls">{t("hints.headerControls")}</Hint>
+      <Hint id="header-controls" tip={t("hints.headerControls")} anchorRef={viewToggleRef} align="end" />
       <main>
         {view !== "full" ? (
           <SimpleHome />

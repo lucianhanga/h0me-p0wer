@@ -195,47 +195,79 @@ nav button.nav-active {
   color: #f7a44f;
 }
 
-/* Dismissible onboarding hints (2026-10-05, see Hint.jsx) — a small,
-   calm explanation strip, not a modal/popover: sits inline above the
-   section it explains, pushed out of the flow for good once dismissed. */
+/* Anchored onboarding-hint bubble (2026-10-05, see Hint.jsx/hints.js) —
+   positioned via inline style (position:fixed, computed from the
+   anchor's own getBoundingClientRect()), portaled to <body> so it floats
+   above everything regardless of where its anchor sits in the tree. The
+   small triangle points up at whatever it's anchored to. */
 .hint-bubble {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
+  z-index: 50;
+  width: 230px;
+  max-width: calc(100vw - 1.5rem);
   background: #1a2128;
-  border: 1px solid #2a3238;
-  border-left: 3px solid #4fa8e0;
+  border: 1px solid #3a4a5e;
   border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-  margin: 0.4rem 0 0.85rem;
-  font-size: 0.82rem;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8rem;
   color: #c9d3db;
+  box-shadow: 0 8px 24px #000a;
 }
 
-.hint-icon {
-  color: #4fa8e0;
-  font-weight: 700;
-  flex-shrink: 0;
+.hint-bubble::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  width: 10px;
+  height: 10px;
+  background: #1a2128;
+  border-left: 1px solid #3a4a5e;
+  border-top: 1px solid #3a4a5e;
+  transform: rotate(45deg);
+}
+
+.hint-align-end::before {
+  right: 14px;
+}
+
+.hint-align-start::before {
+  left: 14px;
 }
 
 .hint-text {
-  flex: 1;
-  line-height: 1.4;
+  line-height: 1.45;
+  margin-bottom: 0.55rem;
 }
 
-.hint-dismiss {
-  background: transparent;
-  border: none;
-  color: #8b98a5;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0;
+.hint-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.hint-skip,
+.hint-gotit {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.55rem;
   min-height: 0;
-  flex-shrink: 0;
 }
 
-.hint-dismiss:hover {
+.hint-skip {
+  background: transparent;
+  border-color: transparent;
+  color: #8b98a5;
+}
+
+.hint-skip:hover {
   color: #e8ecef;
+}
+
+.hint-gotit {
+  border-color: #4fa8e0;
+  color: #4fa8e0;
+}
+
+.hint-gotit:hover {
+  background: #4fa8e022;
 }
 
 /* --- Responsive (phones <=600px, tablets <=1024px) ----------------------- */

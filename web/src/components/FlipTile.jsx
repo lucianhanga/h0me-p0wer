@@ -1,16 +1,22 @@
-import { useRef, useState } from "react";
+import { forwardRef, useRef, useState } from "react";
 
 // Generic flippable tile: click/tap (or Enter/Space) flips it 180°.
 // `children` render on the front; `back` on the back face (empty for now —
 // per-tile back content is a future iteration). Style the front by giving
 // the child your existing card/tile classes; the back renders as an empty
 // card of the same size.
-export default function FlipTile({ children, back = null, className = "" }) {
+//
+// forwardRef (2026-10-05): lets a specific FlipTile instance be used as
+// an anchor for Hint.jsx's onboarding bubbles, without adding any extra
+// wrapping div around it (several call sites are flex/grid items where
+// an extra layer would change sizing).
+const FlipTile = forwardRef(function FlipTile({ children, back = null, className = "" }, ref) {
   const [flipped, setFlipped] = useState(false);
   const downPos = useRef(null); // drag guard: a swipe is not a tap
   const toggle = () => setFlipped((f) => !f);
   return (
     <div
+      ref={ref}
       className={`flip-tile${flipped ? " flipped" : ""}${className ? ` ${className}` : ""}`}
       onPointerDown={(e) => (downPos.current = [e.clientX, e.clientY])}
       onClick={(e) => {
@@ -36,4 +42,6 @@ export default function FlipTile({ children, back = null, className = "" }) {
       </div>
     </div>
   );
-}
+});
+
+export default FlipTile;

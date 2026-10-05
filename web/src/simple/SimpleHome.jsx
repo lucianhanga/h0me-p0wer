@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
 import BatteryModules from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
@@ -49,6 +49,7 @@ export default function SimpleHome() {
   // user request — "but just for today", flipping included).
   const { data: overview } = usePolledResource("/api/stats/overview", { intervalMs: 60000 });
   const [flow, setFlow] = useState(null);
+  const todayCardRef = useRef(null);
 
   // WS push is the fast channel; the REST poll is the safety net/first paint.
   const streamMsg = useLiveStream();
@@ -247,12 +248,13 @@ export default function SimpleHome() {
       {overview?.byPeriod?.today && (
         <>
           <SectionTitle>{t("simple.periods")}</SectionTitle>
-          <Hint id="totals">{t("hints.totals")}</Hint>
+          <Hint id="totals" tip={t("hints.totals")} anchorRef={todayCardRef} />
           <div className="simple-periods">
           {/* Today + Week + Month (2026-09-29, user request — "under the
               today tile add also the week and month tiles") — the real
               Dashboard cards, flip + ‹ › period nav included. */}
           <SourceCard
+            ref={todayCardRef}
             type="day"
             title={t("dashboard.today")}
             data={overview.byPeriod.today}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
@@ -42,6 +42,7 @@ export default function Dashboard() {
   const [topDays, setTopDays] = useState(null);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
+  const todayCardRef = useRef(null);
 
   useEffect(() => {
     const load = () => {
@@ -75,9 +76,10 @@ export default function Dashboard() {
   return (
     <div>
       <UpdatedStamp at={updatedAt} />
-      <Hint id="totals">{t("hints.totals")}</Hint>
+      <Hint id="totals" tip={t("hints.totals")} anchorRef={todayCardRef} />
       <div className="src-grid">
         <SourceCard
+          ref={todayCardRef}
           type="day"
           title={t("dashboard.today")}
           data={stats.byPeriod.today}
@@ -202,7 +204,7 @@ const BATT_IN_ROW = { key: "battInKwh", labelKey: "dashboard.rows.toBattery", co
 // slipped past zero-export.
 const EXPORT_ROW = { key: "exportKwh", labelKey: "dashboard.rows.toGrid", color: "#e5544b" };
 
-export function SourceCard({ type, title, data, formatLabel }) {
+export const SourceCard = forwardRef(function SourceCard({ type, title, data, formatLabel }, ref) {
   const t = useT();
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
   const [past, setPast] = useState(null); // /api/stats/period response (offset ≥ 1)
@@ -275,7 +277,7 @@ export function SourceCard({ type, title, data, formatLabel }) {
     ...(active.exportKwh != null ? [EXPORT_ROW] : []),
   ];
   return (
-    <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+    <div className="src-card" ref={ref} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* Outside the FlipTile so ‹ › period nav stays usable on the flipped
           (bar-chart) side too — it used to live inside the front face and
           vanish once the card was flipped (2026-09-19, user request). */}
@@ -338,4 +340,4 @@ export function SourceCard({ type, title, data, formatLabel }) {
       </FlipTile>
     </div>
   );
-}
+});
