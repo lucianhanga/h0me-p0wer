@@ -7,6 +7,8 @@ import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
 import AskButton from "./components/AskButton.jsx";
 import ActivityBell from "./components/ActivityBell.jsx";
+import ActiveVisitors from "./components/ActiveVisitors.jsx";
+import AuthGate from "./components/AuthGate.jsx";
 import SimpleHome from "./simple/SimpleHome.jsx";
 import { LanguageProvider, useLanguage, useT } from "./i18n/LanguageProvider.jsx";
 import { ViewProvider, useView } from "./view/ViewProvider.jsx";
@@ -85,7 +87,10 @@ function Shell() {
             ))}
           </nav>
         )}
-        <span className="app-version">v{__APP_VERSION__}</span>
+        <span className="app-version">
+          v{__APP_VERSION__}
+          <ActiveVisitors />
+        </span>
       </header>
       <main>
         {view !== "full" ? (
@@ -111,9 +116,11 @@ function Shell() {
 export default function App() {
   return (
     <LanguageProvider>
-      <ViewProvider>
-        <Shell />
-      </ViewProvider>
+      <AuthGate>
+        <ViewProvider>
+          <Shell />
+        </ViewProvider>
+      </AuthGate>
     </LanguageProvider>
   );
 }

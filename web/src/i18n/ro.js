@@ -21,6 +21,12 @@ export const ro = {
     simpleTip: "Vedere simplă — un singur ecran calm",
     fullTip: "Vedere completă — toate taburile și detaliile",
   },
+  auth: {
+    title: "Este necesar un token de acces",
+    body: "Acest tablou de bord are nevoie de un token de acces pentru a încărca datele.",
+    placeholder: "Lipește tokenul",
+    submit: "Continuă",
+  },
   simple: {
     batteries: "Baterii",
     charts: "Tendințe",

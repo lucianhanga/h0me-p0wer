@@ -164,6 +164,21 @@ nav::-webkit-scrollbar {
   align-self: center;
 }
 
+/* Active-visitor count next to the version (2026-10-05) — a small dot +
+   figure, same muted tone as the version itself so it reads as metadata,
+   not an alert. */
+.active-visitors {
+  margin-left: 0.5em;
+}
+
+.active-visitors::before {
+  content: "●";
+  color: #5fce80;
+  font-size: 0.6em;
+  margin-right: 0.35em;
+  vertical-align: 1px;
+}
+
 /* Language switcher — ONE cycling flag button (2026-09-27, user: "the
    languages make it only one button"): taps cycle EN → DE → RO. */
 .lang-btn.nav-active {
@@ -2686,6 +2701,16 @@ pre {
 .pin-input:focus {
   outline: none;
   border-color: #f7a44f;
+}
+
+/* Auth token prompt (2026-10-05, reuses .pin-input's box but a long
+   pasted token wants left-aligned monospace, not centered/spaced like a
+   4-digit PIN). */
+.token-input {
+  text-align: left;
+  letter-spacing: normal;
+  font-size: 0.95rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .pin-error {
