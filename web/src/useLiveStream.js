@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getToken, getVisitorId } from "./auth.js";
 
 // Shared subscription to the server's live push channel (/ws, messages
 // {type:"live", meter, flow} — see broadcastLive in server/index.js).
@@ -15,9 +16,16 @@ let reconnectTimer = null;
 
 function connect() {
   if (ws || !subscribers.size) return;
-  const url = import.meta.env.DEV
+  const base = import.meta.env.DEV
     ? "ws://localhost:3001/ws"
     : `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`;
+  // Native WebSocket can't set custom headers — token (see auth.js/
+  // server/auth.js) and visitor fingerprint (server/visitors.js) both
+  // have to travel as query params here.
+  const token = getToken();
+  const params = [`visitor=${encodeURIComponent(getVisitorId())}`];
+  if (token) params.push(`token=${encodeURIComponent(token)}`);
+  const url = `${base}?${params.join("&")}`;
   ws = new WebSocket(url);
   ws.onmessage = (ev) => {
     let msg;

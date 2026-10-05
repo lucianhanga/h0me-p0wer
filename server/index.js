@@ -16,6 +16,8 @@ import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
+import { requireAuth, wsTokenValid } from "./auth.js";
+import { trackVisitor, activeVisitorCount, touchVisitor, visitorKeyFromUpgradeRequest } from "./visitors.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -137,6 +139,16 @@ function meterSns() {
 
 const app = express();
 app.use(express.json());
+// Token auth (2026-10-05, user request — "its public and everybody can
+// access it"), see auth.js. Scoped to /api only: the static SPA shell
+// still loads for everyone (so there's something to show the token
+// prompt IN), but every API call behind it needs a valid token. No-op
+// until API_TOKEN is actually set in .env (see generate-token.js).
+app.use("/api", requireAuth, trackVisitor);
+
+app.get("/api/visitors/active", (req, res) => {
+  res.json({ ok: true, data: { count: activeVisitorCount() } });
+});
 
 // Display smoothing for the grid reading (2026-09-22, user report: "the
 // grid doesn't reflect the Anker app at all"). The raw 1 s meter samples
@@ -1728,7 +1740,10 @@ async function buildLiveMessage() {
 }
 function broadcastLiveSync(msg) {
   for (const ws of wss.clients) {
-    if (ws.readyState === ws.OPEN) ws.send(msg);
+    if (ws.readyState === ws.OPEN) {
+      ws.send(msg);
+      touchVisitor(ws.visitorKey); // keeps a connected-but-quiet client "active"
+    }
   }
 }
 
@@ -1765,8 +1780,22 @@ async function broadcastLive({ batteryTriggered = false } = {}) {
   }
 }
 
-const wss = new WebSocketServer({ server, path: "/ws" });
-wss.on("connection", (ws) => {
+// verifyClient, not a post-connect check (2026-10-05): the browser's
+// native WebSocket API can't set custom headers, so the token can only
+// travel as a query param (wss://.../ws?token=...) — same auth.js helper
+// the /api middleware uses, just reading the raw upgrade request instead
+// of an Express req.
+const wss = new WebSocketServer({
+  server,
+  path: "/ws",
+  verifyClient: (info, cb) => {
+    const ok = wsTokenValid(info.req);
+    cb(ok, ok ? undefined : 401, ok ? undefined : "unauthorized");
+  },
+});
+wss.on("connection", (ws, req) => {
+  ws.visitorKey = visitorKeyFromUpgradeRequest(req);
+  touchVisitor(ws.visitorKey);
   buildLiveMessage()
     .then((msg) => ws.send(msg))
     .catch(() => {});

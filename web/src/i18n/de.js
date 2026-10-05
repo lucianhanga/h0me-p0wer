@@ -21,6 +21,12 @@ export const de = {
     simpleTip: "Einfache Ansicht — ein ruhiger Bildschirm",
     fullTip: "Volle Ansicht — alle Tabs und Details",
   },
+  auth: {
+    title: "Zugriffstoken erforderlich",
+    body: "Dieses Dashboard benötigt ein Zugriffstoken, um Daten zu laden.",
+    placeholder: "Token einfügen",
+    submit: "Weiter",
+  },
   simple: {
     batteries: "Batterien",
     charts: "Trends",

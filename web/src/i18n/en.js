@@ -21,6 +21,12 @@ export const en = {
     simpleTip: "Simple view — one calm screen",
     fullTip: "Full view — all tabs and details",
   },
+  auth: {
+    title: "Access token required",
+    body: "This dashboard needs an access token to load data.",
+    placeholder: "Paste your token",
+    submit: "Continue",
+  },
   simple: {
     batteries: "Batteries",
     charts: "Trends",
