@@ -2006,12 +2006,27 @@ setInterval(refreshConsumptionProfile, 3600 * 1000).unref();
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null; // the AGGREGATE of all solarbanks on the site
 let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
-// Last successful REST scen_info sync specifically (2026-09-29 review):
-// latestBattery.ts ALSO refreshes on every MQTT merge, so it can't gate
-// the REST-sourced channels (grid/home) — a dead REST feed with live MQTT
-// would otherwise freeze the grid arcs/tile on stale cloud values forever
-// instead of falling back to the meter.
+// Last GENUINELY FRESH REST scen_info sync (2026-09-29 review, tightened
+// 2026-10-05 — user report: "values remain stuck... until the Anker app
+// [opens]... then values snap to the right values"). latestBattery.ts
+// ALSO refreshes on every MQTT merge, so it can't gate the REST-sourced
+// channels (grid/home) — a dead REST feed with live MQTT would otherwise
+// freeze the grid arcs/tile on stale cloud values forever instead of
+// falling back to the meter. That was the ORIGINAL reason this exists;
+// it turned out insufficient on its own — Anker's cloud can keep
+// returning 200 OK with the SAME cached scen_info payload for minutes
+// when no official-app session is actively keeping that site's live
+// polling warm on their end, so "our HTTP call succeeded recently" and
+// "the data is actually current" are different things. This only
+// advances when the REST-sourced fields' VALUES actually change (see
+// lastRestSignature below, set in syncBatteryInner) — a genuinely dead
+// feed OR a live-but-stale one both correctly age out and fall back to
+// the meter; a feed that's merely quiet because nothing changed in
+// reality self-corrects within a poll cycle or two of the next real
+// change (meter fallback is an equally legitimate source, not a broken
+// state, so the rare false-positive here is harmless).
 let lastRestSyncAt = null;
+let lastRestSignature = null; // homeLoadW|gridToHomeW|pvToGridW from the last sync whose values differed from the one before it
 // DOCK ERA (2026-09-27): the site carries multiple solarbanks (SB4 on dock
 // socket A + SB2 Pro on socket B). latestBatteries holds each unit's own
 // live state (REST sync + its own MQTT channel); latestBattery is the
@@ -2338,8 +2353,16 @@ async function syncBatteryInner() {
       // MQTT-sum of the same physical quantity. soc is untouched by
       // recomputeAggregate (single writer: total_battery_power, 2026-09-29).
       recomputeAggregate();
-      lastCloudOkAt = Date.now();
-      lastRestSyncAt = Date.now();
+      lastCloudOkAt = Date.now(); // connection health — every successful call, regardless of payload
+      // Data freshness — only when the payload actually changed (see
+      // lastRestSignature's comment above). info.ts is excluded: it's a
+      // server-timestamp Anker could in principle bump on every response
+      // even against a cached payload, which would defeat the whole point.
+      const restSignature = `${info.homeLoadW}|${info.gridToHomeW}|${info.pvToGridW}`;
+      if (restSignature !== lastRestSignature) {
+        lastRestSignature = restSignature;
+        lastRestSyncAt = Date.now();
+      }
       saveBatterySnapshot(latestBattery);
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside
       // Grid channel from the same call — the best available source when
