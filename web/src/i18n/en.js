@@ -31,6 +31,8 @@ export const en = {
     totals: "Tap a card to flip it. Swipe left/right (or use ‹ ›) to browse earlier periods.",
     flipCards: "Tap any card to flip it and see a mini trend chart.",
     headerControls: "Tap ◑/◉ to switch between Simple and Full view. Tap the flag to cycle languages.",
+    gotIt: "Got it",
+    dontShow: "Don't show tips",
   },
   simple: {
     batteries: "Batteries",

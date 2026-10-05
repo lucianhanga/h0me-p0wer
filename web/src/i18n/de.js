@@ -31,6 +31,8 @@ export const de = {
     totals: "Tippe auf eine Karte, um sie umzudrehen. Wische links/rechts (oder nutze ‹ ›), um frühere Zeiträume anzusehen.",
     flipCards: "Tippe auf eine Karte, um sie umzudrehen und ein kleines Trenddiagramm zu sehen.",
     headerControls: "Tippe auf ◑/◉, um zwischen Einfacher und Voller Ansicht zu wechseln. Tippe auf die Flagge, um die Sprache zu wechseln.",
+    gotIt: "Verstanden",
+    dontShow: "Tipps nicht mehr anzeigen",
   },
   simple: {
     batteries: "Batterien",
