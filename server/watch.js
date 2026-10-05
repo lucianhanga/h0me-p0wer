@@ -11,6 +11,7 @@
 
 import { fetchJson } from "./welcome-sources.js";
 import { deriveBatteryFlow } from "./battery-params.js";
+import { internalAuthHeaders } from "./auth.js";
 
 const w2kw = (w) => (w == null ? null : Math.round((w / 1000) * 100) / 100);
 
@@ -81,7 +82,7 @@ async function recentHistory(timeseriesUrl) {
   // a request for a day's worth of hourly sparkline points. `bucket` sets
   // the bucket size directly instead.
   const url = `${timeseriesUrl}?from=${from}&to=${now}&bucket=${HISTORY_BUCKET_MS}`;
-  const res = await fetchJson(url);
+  const res = await fetchJson(url, { headers: internalAuthHeaders() });
   const points = res?.data ?? [];
   const solarHistory = [];
   const solarBatteryHistory = [];
@@ -162,7 +163,7 @@ export function registerWatchRoute(app, deps) {
       // Internal loopback call, same process (see welcome.js/daybrief.js
       // for the same pattern) — reuses /api/stats/overview's existing,
       // gap-handling-heavy today computation rather than re-deriving it.
-      const overview = await fetchJson(deps.statsOverviewUrl).catch(() => null);
+      const overview = await fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() }).catch(() => null);
       const flows = overview?.data?.flows;
       const today = overview?.data?.byPeriod?.today;
       const costs = overview?.data?.costs;
