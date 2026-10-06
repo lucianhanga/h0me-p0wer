@@ -6,7 +6,7 @@ Home-energy dashboard **and controller** for an **Anker SOLIX** home setup —
 its sockets (16.6 kWh total), Smart Meter Gen 2 (AE1X0, local Modbus TCP),
 12×500 W PV (6 kWp). Live monitoring, history, AI briefings, ROI tracking,
 and a PV-aware power plan that drives the battery schedule. Three view modes:
-full (tabs Welcome / Live / Strategy / Graph / Plugs / Dashboard / ROI), simple
+full (tabs Welcome / Live / Strategy / Graph / Consume / Dashboard / ROI), simple
 (default for fresh visitors), and the header toggle between them — see
 README.md for the user-facing tour; this file is the "why," not the "what."
 

@@ -12,8 +12,9 @@ import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 //   2. Power Production — PV production and its split (→ battery / → home)
 //   3. Battery — charging vs discharging
 // Span buttons and zoom/pan are PER GRAPH (independent windows). No range
-// sliders for now.
-const SHORTCUTS = [
+// sliders for now. Exported for the Plugs tab (2026-10-06) — its cards use
+// the same resolution choices, don't fork the list.
+export const SHORTCUTS = [
   { labelKey: "graph.span.1h", ms: 3600 * 1000 },
   { labelKey: "graph.span.6h", ms: 6 * 3600 * 1000 },
   { labelKey: "graph.span.12h", ms: 12 * 3600 * 1000 },
