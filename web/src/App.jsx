@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import LiveTab from "./live/LiveTab.jsx";
 import StrategyTab from "./strategy/StrategyTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
+import PlugsTab from "./plugs/PlugsTab.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
@@ -20,6 +21,7 @@ const PAGES = [
   { key: "live", labelKey: "nav.live" },
   { key: "strategy", labelKey: "nav.strategy" },
   { key: "graph", labelKey: "nav.graph" },
+  { key: "plugs", labelKey: "nav.plugs" },
   { key: "dashboard", labelKey: "nav.dashboard" },
   { key: "roi", labelKey: "nav.roi" },
 ];
@@ -107,6 +109,8 @@ function Shell() {
           <StrategyTab />
         ) : page === "graph" ? (
           <GraphTab />
+        ) : page === "plugs" ? (
+          <PlugsTab />
         ) : page === "roi" ? (
           <RoiTab />
         ) : (

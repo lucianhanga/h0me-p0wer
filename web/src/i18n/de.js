@@ -8,6 +8,15 @@ export const de = {
     graph: "Diagramm",
     dashboard: "Übersicht",
     roi: "ROI",
+    plugs: "Steckdosen",
+  },
+  plugs: {
+    rest: "Rest des Hauses",
+    restSub: "Haus − Steckdosen",
+    today: "heute",
+    offline: "offline",
+    empty: "Noch keine Smart Plugs auf diesem Konto gefunden.",
+    note: "Der Verlauf der Steckdosen-Leistung wird ab jetzt lokal aufgezeichnet — die Anker-Cloud speichert nur Tageswerte, die Kurven füllen sich also mit der Zeit.",
   },
   common: {
     updated: "aktualisiert {time}",

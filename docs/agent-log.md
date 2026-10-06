@@ -6128,3 +6128,36 @@ cross-cutting), every finding re-verified by hand before fixing:
   at(-1) — and the splice must fill with map[offset] (the ORIGINAL index),
   not the intermediate-string offset. Verified in isolation across all
   three languages, mapping included.
+
+## Plugs tab: smart plugs (A17X8) live + history (2026-10-06, user request)
+
+- User added 6 Smart Plugs Gen2 (A17X8) to the site and asked for a full-view
+  tab listing them, each with a consumption graph, plus a "rest of home"
+  graph = total consumption − Σ plugs.
+- Data availability (probed live before designing): v2 device
+  energy_analysis REJECTS plug SNs (any device_type: "Failed to request");
+  get_user_op_shelly_status 400s (Shelly-only). What works: (1) live
+  per-plug watts in get_scen_info's smart_plug_info.smartplug_list
+  (current_power) — piggybacked on the existing 10 s scene poll in
+  getBatteryInfo, zero extra API calls; (2) per-plug DAILY kWh in the
+  home_usage energy_analysis response's smart_plug_info.smartplug_list[]
+  .total_power — the SAME query the home-trend sync already runs, also zero
+  extra calls. NO intraday per-plug power history exists in the cloud, so
+  the curves are local accumulation only (plug_samples table, 10 s cadence,
+  7-day retention) and fill in from deploy day; daily kWh lands in
+  plug_daily via both the 15-min sync and the startup backfill.
+- Gotcha: a home_usage query for a day whose plug aggregation isn't
+  finalized yet returns an EMPTY smartplug_list + total_power "0.00"
+  (seen for yesterday while today was already populated) — that's a
+  not-yet-aggregated day, not "plugs used nothing".
+- "Rest of home" is computed CLIENT-side: the tab fetches
+  /api/plugs/timeseries and /api/timeseries with the same `bucket` param
+  (rows align by t), derives home via derive.js's homeOf, subtracts Σ plugs,
+  floors at 0 (meter 1 s vs plug 10 s sampling skew makes small negatives at
+  load edges an artifact). Deliberately NOT added to the /api/timeseries
+  merge — that contract is the most intricate code in the repo and plugs
+  don't need to touch it.
+- Frontend: PlugsTab (web/src/plugs/PlugsTab.jsx) — one card per plug
+  (live W + today kWh header, 24 h ECharts line, palette per plug) + a gray
+  "Rest of home" card; charts refresh 60 s, headers poll /api/plugs 10 s.
+  Tab registered in App.jsx PAGES as "plugs"; i18n en/de/ro.
