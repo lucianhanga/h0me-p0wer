@@ -6161,3 +6161,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   (live W + today kWh header, 24 h ECharts line, palette per plug) + a gray
   "Rest of home" card; charts refresh 60 s, headers poll /api/plugs 10 s.
   Tab registered in App.jsx PAGES as "plugs"; i18n en/de/ro.
+
+## Consume tab: Graph-style resolution choices + rename (2026-10-06, user requests)
+
+- User: "have the plugs have the same resolution choices like the graphs" and
+  "instead of plugs call the tab consume". Two changes:
+  1. PlugsTab charts now behave like GraphTab's: per-card span buttons
+     (SHORTCUTS now EXPORTED from GraphTab.jsx — don't fork the list),
+     zoom/pan with the 250 ms debounced padded refetch, live-edge
+     incremental appends (10 s tick — plug samples arrive at the scene-poll
+     cadence, GraphTab's 5 s would find nothing new), and last-span
+     persistence across tab switches via a module-level savedSpanMs keyed by
+     card (sn / "rest"). Per-plug cards fetch only /api/plugs/timeseries;
+     the Rest card adds /api/timeseries with the same bucket. The old
+     tab-level 60 s full refetch is gone.
+  2. Tab label renamed Plugs → Consume / Verbrauch / Consum (en/de/ro). The
+     internal route key stays "plugs" (hash #plugs, i18n prefix plugs.*,
+     file PlugsTab.jsx) — only the visible label changed.

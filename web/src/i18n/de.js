@@ -8,7 +8,7 @@ export const de = {
     graph: "Diagramm",
     dashboard: "Übersicht",
     roi: "ROI",
-    plugs: "Steckdosen",
+    plugs: "Verbrauch",
   },
   plugs: {
     rest: "Rest des Hauses",

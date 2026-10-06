@@ -8,7 +8,7 @@ export const ro = {
     graph: "Grafic",
     dashboard: "Sumar",
     roi: "ROI",
-    plugs: "Prize",
+    plugs: "Consum",
   },
   plugs: {
     rest: "Restul casei",

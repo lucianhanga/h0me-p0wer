@@ -3,24 +3,32 @@ import echarts from "../echarts.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { homeOf } from "../graph/derive.js";
+import { SHORTCUTS } from "../graph/GraphTab.jsx";
 
-// Smart plugs tab (2026-10-06): one card per A17X8 plug with a 24 h power
-// chart, plus a derived "rest of home" chart (home − Σ plugs, floored at 0 —
-// plug and meter sample cadences differ by seconds, so small negatives at
-// load edges are skew artifacts, not data). Per-plug intraday history is
-// LOCAL ONLY (plug_samples, accumulated by the 10 s scene poll): the Anker
-// cloud exposes per-plug daily kWh but no power trend, so the curves start
-// filling in from the moment this shipped.
+// Smart plugs tab (2026-10-06): one card per A17X8 plug with a power chart,
+// plus a derived "rest of home" chart (home − Σ plugs, floored at 0 — plug
+// and meter sample cadences differ by seconds, so small negatives at load
+// edges are skew artifacts, not data). Per-plug intraday history is LOCAL
+// ONLY (plug_samples, accumulated by the 10 s scene poll): the Anker cloud
+// exposes per-plug daily kWh but no power trend, so the curves fill in from
+// deploy day.
 //
-// Data flow: card headers poll /api/plugs every 10 s (live watts + today's
-// kWh from the cloud home_usage sync); the charts refresh every minute from
-// /api/plugs/timeseries + /api/timeseries fetched with the SAME bucket size
-// so rows align by t and "rest" is a plain per-bucket subtraction (home
-// definition shared with the Graph tab via derive.js's homeOf).
-const WINDOW_MS = 24 * 3600 * 1000;
-const CHART_REFRESH_MS = 60 * 1000;
+// Charts behave like the Graph tab's (same resolution choices, 2026-10-06
+// user request): per-card span buttons (SHORTCUTS shared with GraphTab),
+// zoom/pan with a debounced 250 ms padded refetch, live-edge incremental
+// appends every 10 s (plug samples land at the 10 s scene cadence), and the
+// last span remembered across tab switches. Per-plug cards fetch only
+// /api/plugs/timeseries; the Rest card also fetches /api/timeseries with
+// the same bucket so rows align by t and "rest" is a per-bucket
+// subtraction (home definition shared via derive.js's homeOf).
+// Card headers poll /api/plugs every 10 s for live watts + today's kWh.
+const LIVE_EDGE_MS = 2 * 60 * 1000; // "live" when right edge within 2 min of now
 const PLUG_COLORS = ["#5fce80", "#f7a44f", "#c084fc", "#6bb8f5", "#e5544b", "#f5d76b", "#8ee3a8", "#e8ecef"];
 const REST_COLOR = "#90a4ae";
+
+// Remembers each card's selected span across tab switches (the tab unmounts
+// on switch — see App.jsx), same pattern as GraphTab's savedSpanMs.
+const savedSpanMs = {};
 
 function chartOption(color) {
   const isPhone = window.matchMedia("(max-width: 600px)").matches;
@@ -76,26 +84,156 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ title, subtitle, color, watts, todayKwh, offline, data, t }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t }) {
   const ref = useRef(null);
-  const chartRef = useRef(null);
+  const apiRef = useRef(null);
+  const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
 
   useEffect(() => {
     // No width/height at init — the pinned-size rotation bug (2026-09-12).
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption(chartOption(color));
-    chartRef.current = chart;
+    let rows = []; // [[t, watts|null], ...]
+    let bucketMs = 0;
+    let fetchSeq = 0;
+    let fetchTimer = null;
+    let programmatic = false;
+    let liveBusy = false;
+    let disposed = false;
+
+    // Fetch this card's series over [fromMs, toMs]. `extra` carries either
+    // points+view (full loads) or bucket (live-edge appends).
+    async function fetchRows(fromMs, toMs, extra) {
+      const pr = await fetch(
+        `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}`,
+      )
+        .then((r) => r.json())
+        .catch(() => null);
+      if (!pr?.ok) return null;
+      if (!isRest) {
+        return { bucketMs: pr.bucketMs, data: pr.data.map((r) => [r.t, r[`plug__${sn}`] ?? null]) };
+      }
+      const hr = await fetch(
+        `/api/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&bucket=${pr.bucketMs}`,
+      )
+        .then((r) => r.json())
+        .catch(() => null);
+      const homeByT = new Map();
+      if (hr?.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
+      return {
+        bucketMs: pr.bucketMs,
+        data: pr.data.map((r) => {
+          let sum = 0;
+          for (const s of pr.plugs) {
+            const v = r[`plug__${s}`];
+            if (v != null) sum += v;
+          }
+          const home = homeByT.get(r.t);
+          return [r.t, home == null ? null : Math.max(0, Math.round(home - sum))];
+        }),
+      };
+    }
+
+    function setWindow(fromMs, toMs) {
+      programmatic = true;
+      chart.setOption({ dataZoom: [{ startValue: fromMs, endValue: toMs }] });
+      programmatic = false;
+    }
+
+    function visibleWindow() {
+      const win = chart.getOption().dataZoom?.[0];
+      const start = Number(win?.startValue);
+      const end = Number(win?.endValue);
+      return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
+    }
+
+    async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
+      const seq = ++fetchSeq;
+      const payload = await fetchRows(fromMs, toMs, `points=800&view=${Math.round(viewMs)}`);
+      if (!payload || seq !== fetchSeq || disposed) return;
+      rows = payload.data;
+      bucketMs = payload.bucketMs;
+      chart.setOption({ series: [{ data: rows }] });
+    }
+
+    function loadVisible() {
+      const win = visibleWindow();
+      if (!win) return;
+      const pad = (win[1] - win[0]) / 2;
+      loadRange(win[0] - pad, win[1] + pad, win[1] - win[0]);
+    }
+
+    function scheduleLoad() {
+      clearTimeout(fetchTimer);
+      fetchTimer = setTimeout(loadVisible, 250);
+    }
+
+    chart.on("datazoom", () => {
+      if (programmatic) return;
+      scheduleLoad();
+      const win = visibleWindow();
+      if (win) {
+        const span = win[1] - win[0];
+        const match = SHORTCUTS.find((s) => Math.abs(span - s.ms) / s.ms < 0.02);
+        if (match) savedSpanMs[cardKey] = match.ms;
+        setActiveSpan(match?.ms ?? null);
+      }
+    });
+
+    async function setSpan(ms) {
+      savedSpanMs[cardKey] = ms;
+      setActiveSpan(ms);
+      const to = Date.now();
+      const from = to - ms;
+      await loadRange(from, to);
+      setWindow(from, to);
+    }
+    apiRef.current = { setSpan };
+
+    // Initial view: the span this card was last showing, else 24h.
+    setSpan(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
+
+    // Keep the view fresh while watching the live edge (10 s — plug samples
+    // arrive at the scene-poll cadence, faster polling finds nothing new).
+    const liveTimer = setInterval(async () => {
+      if (liveBusy) return;
+      const win = visibleWindow();
+      if (!win) return;
+      if (win[1] < Date.now() - LIVE_EDGE_MS) return;
+      liveBusy = true;
+      try {
+        const width = win[1] - win[0];
+        const lastT = rows.length ? rows[rows.length - 1][0] : win[0];
+        const payload = await fetchRows(lastT + 1, Date.now(), `bucket=${bucketMs}`);
+        if (payload?.data.length) {
+          const cutoff = Date.now() - width * 1.5;
+          const byT = new Map();
+          for (const r of rows) if (r[0] >= cutoff) byT.set(r[0], r);
+          for (const r of payload.data) byT.set(r[0], r);
+          rows = [...byT.values()].sort((a, b) => a[0] - b[0]);
+          chart.setOption({ series: [{ data: rows }] });
+        }
+        // Only slide the window if the right edge is still at the live edge.
+        const win2 = visibleWindow();
+        if (win2 && win2[1] >= Date.now() - LIVE_EDGE_MS) {
+          setWindow(Date.now() - width, Date.now());
+        }
+      } finally {
+        liveBusy = false;
+      }
+    }, 10000);
+
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(ref.current);
     return () => {
+      disposed = true;
+      clearInterval(liveTimer);
+      clearTimeout(fetchTimer);
       ro.disconnect();
       chart.dispose();
+      apiRef.current = null;
     };
-  }, [color]);
-
-  useEffect(() => {
-    chartRef.current?.setOption({ series: [{ data: data ?? [] }] });
-  }, [data]);
+  }, [cardKey, sn, isRest, color]);
 
   return (
     <div className={`card plug-card${offline ? " plug-offline" : ""}`}>
@@ -111,6 +249,17 @@ function PlugCard({ title, subtitle, color, watts, todayKwh, offline, data, t })
           {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {t("plugs.today")}</span>}
         </div>
       </div>
+      <div className="controls">
+        {SHORTCUTS.map((s) => (
+          <button
+            key={s.labelKey}
+            className={activeSpan === s.ms ? "span-active" : ""}
+            onClick={() => apiRef.current?.setSpan(s.ms)}
+          >
+            {t(s.labelKey)}
+          </button>
+        ))}
+      </div>
       <div className="plug-chart" ref={ref} />
     </div>
   );
@@ -122,46 +271,6 @@ export default function PlugsTab() {
     intervalMs: 10000,
     keepLastGoodOnError: true,
   });
-  const [curves, setCurves] = useState(null); // { bySn: {sn: [[t,w]..]}, rest: [[t,w]..] }
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      const to = Date.now();
-      const from = to - WINDOW_MS;
-      try {
-        const pr = await fetch(`/api/plugs/timeseries?from=${from}&to=${to}&points=800`).then((r) => r.json());
-        if (!pr.ok) return;
-        const hr = await fetch(
-          `/api/timeseries?from=${from}&to=${to}&bucket=${pr.bucketMs}`,
-        ).then((r) => r.json());
-        const homeByT = new Map();
-        if (hr.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
-        const bySn = {};
-        for (const sn of pr.plugs) bySn[sn] = [];
-        const rest = [];
-        for (const row of pr.data) {
-          let sum = 0;
-          for (const sn of pr.plugs) {
-            const v = row[`plug__${sn}`];
-            bySn[sn].push([row.t, v]);
-            if (v != null) sum += v;
-          }
-          const home = homeByT.get(row.t);
-          rest.push([row.t, home == null ? null : Math.max(0, Math.round(home - sum))]);
-        }
-        if (!cancelled) setCurves({ bySn, rest });
-      } catch {
-        // transient — next minute's tick retries
-      }
-    }
-    load();
-    const iv = setInterval(load, CHART_REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(iv);
-    };
-  }, []);
 
   if (error && !live) return <p className="error">{String(error)}</p>;
   if (!live) return <p>{t("common.loading")}</p>;
@@ -175,24 +284,27 @@ export default function PlugsTab() {
         {plugs.map((p, i) => (
           <PlugCard
             key={p.sn}
+            cardKey={p.sn}
+            sn={p.sn}
+            isRest={false}
             title={p.name}
             subtitle={p.typeTag && p.typeTag !== "Smart Plug" ? p.typeTag : p.tag}
             color={PLUG_COLORS[i % PLUG_COLORS.length]}
             watts={p.watts}
             todayKwh={live.todayKwh?.[p.sn]}
             offline={!p.online}
-            data={curves?.bySn?.[p.sn]}
             t={t}
           />
         ))}
         <PlugCard
+          cardKey="rest"
+          isRest={true}
           title={t("plugs.rest")}
           subtitle={t("plugs.restSub")}
           color={REST_COLOR}
           watts={null}
           todayKwh={null}
           offline={false}
-          data={curves?.rest}
           t={t}
         />
       </div>
