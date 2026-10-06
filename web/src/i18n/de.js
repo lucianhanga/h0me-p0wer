@@ -363,6 +363,7 @@ export const de = {
     thisWeek: "Diese Woche",
     thisMonth: "Dieser Monat",
     thisYear: "Dieses Jahr",
+    consumers: { title: "Verbraucher" },
     producedKwh: "{kwh} kWh produziert",
     coverage: "⚠ {pct}% des heutigen Tages abgedeckt, selbst nach Wiederherstellung aus Ankers Cloud — die tatsächlichen Summen können höher sein als angezeigt",
     stored: "gespeichert",

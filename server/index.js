@@ -1354,8 +1354,9 @@ app.get(
 );
 
 // Smart plugs (A17X8) — live list + locally accumulated power history
-// (2026-10-06, Plugs tab). Live values come from latestPlugs (the 10 s scene
-// poll); the power curves come from plug_samples because the cloud exposes
+// (2026-10-06, Plugs tab). Live values come from latestPlugs (the scene
+// poll — 7 s baseline, ~2.5 s while a UI is watched); the power curves come
+// from plug_samples because the cloud exposes
 // per-plug DAILY kWh only, no intraday trend.
 app.get("/api/plugs", (req, res) => {
   const today = localDate();
@@ -2096,7 +2097,7 @@ setInterval(refreshConsumptionProfile, 3600 * 1000).unref();
 // app) is the primary source once connected; the 30 s REST scen_info sync is
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null; // the AGGREGATE of all solarbanks on the site
-// Live smart plugs (A17X8) from the same 10 s scene poll as latestBattery
+// Live smart plugs (A17X8) from the same scene poll as latestBattery
 // (2026-10-06, Plugs tab): [{sn, name, tag, typeTag, watts, online, ts}].
 let latestPlugs = [];
 let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
@@ -2381,7 +2382,7 @@ async function syncBattery() {
   if (!anker.configured) return;
   // In-flight guard (2026-09-22 code review): syncBatteryThrottled stamps
   // its timestamp BEFORE awaiting, so one hung/slow scen_info call used to
-  // let both the 10 s baseline and the 1 s fast-path loop stack MORE
+  // let both the 7 s baseline and the 1 s fast-path loop stack MORE
   // overlapping calls onto the same rate-limited endpoint — exactly when
   // Anker is already slow. Never stack.
   if (syncBatteryInFlight) return;
@@ -2486,9 +2487,11 @@ async function syncBatteryInner() {
   }
 }
 // Background-first (2026-09-14): the server always pulls — clients just read
-// what's in memory/DB. Unconditional 10 s scen_info cadence (6 calls/min,
-// safely inside the ~10-12/min guideline); MQTT push layers on top as the
-// fast channel.
+// what's in memory/DB. Unconditional 7 s scen_info cadence (~8.6 calls/min,
+// inside the ~10-12/min guideline with headroom for the rare on-demand
+// refresh; lowered from 10 s on 2026-10-06 — user request: plug values
+// change on every probe, so read them as often as the limit responsibly
+// allows); MQTT push layers on top as the fast channel.
 let lastBatterySyncAt = 0;
 async function syncBatteryThrottled(minGapMs) {
   if (Date.now() - lastBatterySyncAt < minGapMs) return;
@@ -2496,7 +2499,7 @@ async function syncBatteryThrottled(minGapMs) {
   await syncBattery();
 }
 setTimeout(syncBattery, 10 * 1000);
-setInterval(() => syncBatteryThrottled(10 * 1000), 10 * 1000).unref();
+setInterval(() => syncBatteryThrottled(7 * 1000), 7 * 1000).unref();
 
 
 
@@ -2531,7 +2534,7 @@ setInterval(() => {
 // only), so MQTT can never be made faster than ~3-5 s anyway, and it
 // silently degrades to nothing during these broker stalls. Matched here:
 // 3 s scen_info cadence whenever at least one WS client is connected (the
-// UI is being watched), deduped against the 10 s baseline loop. Above the
+// UI is being watched), deduped against the 7 s baseline loop. Above the
 // ~10-12/min guideline (~20/min) — same on-demand precedent as the
 // modbus-down 3 s sync (failures just log), and exactly the traffic
 // pattern the Anker app itself produces.

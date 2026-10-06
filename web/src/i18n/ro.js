@@ -359,6 +359,7 @@ export const ro = {
     thisWeek: "Săptămâna aceasta",
     thisMonth: "Luna aceasta",
     thisYear: "Anul acesta",
+    consumers: { title: "Consumatori" },
     producedKwh: "{kwh} kWh produși",
     coverage: "⚠ {pct}% din ziua de azi acoperit, chiar și după recuperarea a ce s-a putut din cloudul Anker — totalurile reale pot fi încă mai mari decât cele afișate",
     stored: "stocat",

@@ -23,8 +23,10 @@ import { SHORTCUTS } from "../graph/GraphTab.jsx";
 // subtraction (home definition shared via derive.js's homeOf).
 // Card headers poll /api/plugs every 10 s for live watts + today's kWh.
 const LIVE_EDGE_MS = 2 * 60 * 1000; // "live" when right edge within 2 min of now
-const PLUG_COLORS = ["#5fce80", "#f7a44f", "#c084fc", "#6bb8f5", "#e5544b", "#f5d76b", "#8ee3a8", "#e8ecef"];
-const REST_COLOR = "#90a4ae";
+// Palette shared with the Dashboard's Consumers tile (2026-10-06) — a plug
+// must keep the same color in both places, and both sort plugs by name.
+export const PLUG_COLORS = ["#5fce80", "#f7a44f", "#c084fc", "#6bb8f5", "#e5544b", "#f5d76b", "#8ee3a8", "#e8ecef"];
+export const REST_COLOR = "#90a4ae";
 
 // Remembers each card's selected span across tab switches (the tab unmounts
 // on switch — see App.jsx), same pattern as GraphTab's savedSpanMs.
@@ -198,8 +200,9 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     // Initial view: the span this card was last showing, else 24h.
     setSpan(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
 
-    // Keep the view fresh while watching the live edge (10 s — plug samples
-    // arrive at the scene-poll cadence, faster polling finds nothing new).
+    // Keep the view fresh while watching the live edge. 3 s: the server's
+    // scene poll runs at ~2.5 s whenever a WS client is connected (someone
+    // watching the UI), so a 3 s tick picks up every new plug sample.
     const liveTimer = setInterval(async () => {
       if (liveBusy) return;
       const win = visibleWindow();
@@ -226,7 +229,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       } finally {
         liveBusy = false;
       }
-    }, 10000);
+    }, 3000);
 
     const ro = new ResizeObserver(() => chart.resize());
     ro.observe(ref.current);
@@ -273,7 +276,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
 export default function PlugsTab() {
   const t = useT();
   const { data: live, error } = usePolledResource("/api/plugs", {
-    intervalMs: 10000,
+    intervalMs: 3000,
     keepLastGoodOnError: true,
   });
 

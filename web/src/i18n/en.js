@@ -346,6 +346,7 @@ export const en = {
     thisWeek: "This week",
     thisMonth: "This month",
     thisYear: "This year",
+    consumers: { title: "Consumers" },
     producedKwh: "{kwh} kWh produced",
     coverage: "⚠ {pct}% of today covered, even after recovering what we could from Anker's cloud — actual totals may still be higher than shown",
     stored: "stored",

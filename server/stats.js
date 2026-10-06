@@ -15,6 +15,9 @@ import {
   getCloudTrend,
   getLatestBattery,
   getGridDaily,
+  getPlugDaily,
+  getEarliestPlugDate,
+  getCloudHomeDayPower,
 } from "./db.js";
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
@@ -792,6 +795,82 @@ export function registerStatsRoute(app, deps) {
     });
   });
   
+  // Per-consumer (smart plug) day breakdown — the Dashboard's Consumers
+  // tile (2026-10-06, user request). Day-type only: plugs have no finer
+  // cloud granularity than daily kWh (plug_daily), so there is nothing to
+  // gain from week/month types. offset=0 = today (running totals, refreshed
+  // by the 15-min home_usage sync). Home kWh per day integrates
+  // cloud_home_history's 20-min averages the same way hourlyKwhFromRows
+  // does. `bars` covers the 7 days ENDING at the selected day for the flip
+  // side's stacked chart; "rest" = home − Σ plugs, floored at 0 (same
+  // convention as the Consume tab's Rest-of-home).
+  app.get("/api/stats/consumers", (req, res) => {
+    const offset = Math.max(0, Math.min(Number(req.query.offset ?? 0) || 0, 400));
+    const r2 = (v) => Math.round(v * 100) / 100;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const selected = new Date(dayStart.getTime() - offset * 86400000);
+    const dateStr = localDate(selected);
+    const windowStart = localDate(new Date(selected.getTime() - 6 * 86400000));
+
+    const homeByDate = new Map();
+    for (const r of getCloudHomeDayPower(windowStart, dateStr)) {
+      const d = localDate(new Date(r.ts));
+      homeByDate.set(d, (homeByDate.get(d) ?? 0) + ((r.power ?? 0) * (20 / 60)) / 1000);
+    }
+    const plugsByDate = new Map(); // date -> Map(sn -> kwh)
+    const names = new Map(); // sn -> name (any row in the window)
+    for (const r of getPlugDaily(windowStart)) {
+      if (r.date > dateStr) continue;
+      if (!plugsByDate.has(r.date)) plugsByDate.set(r.date, new Map());
+      plugsByDate.get(r.date).set(r.sn, r.kwh);
+      if (r.name) names.set(r.sn, r.name);
+    }
+
+    // Same ordering as the Consume tab (localeCompare by name) so a plug
+    // keeps the same color in both places.
+    const sns = [...names.keys()].sort((a, b) =>
+      (names.get(a) ?? a).localeCompare(names.get(b) ?? b),
+    );
+    const dayPlugs = plugsByDate.get(dateStr) ?? new Map();
+    const plugs = sns.map((sn) => ({
+      sn,
+      name: names.get(sn) ?? sn,
+      kwh: r2(dayPlugs.get(sn) ?? 0),
+    }));
+    const homeKwh = r2(homeByDate.get(dateStr) ?? 0);
+    const plugSum = [...dayPlugs.values()].reduce((a, v) => a + (v ?? 0), 0);
+
+    const bars = [];
+    for (let i = 0; i < 7; i++) {
+      const d = localDate(new Date(selected.getTime() - (6 - i) * 86400000));
+      const pd = plugsByDate.get(d) ?? new Map();
+      const home = homeByDate.get(d) ?? 0;
+      const sum = [...pd.values()].reduce((a, v) => a + (v ?? 0), 0);
+      const bar = { label: d, rest: r2(Math.max(0, home - sum)) };
+      for (const sn of sns) bar[`plug__${sn}`] = r2(pd.get(sn) ?? 0);
+      bars.push(bar);
+    }
+
+    const earliest = getEarliestPlugDate();
+    res.json({
+      ok: true,
+      data: {
+        label: offset === 0 ? null : offset === 1 ? "Yesterday" : dateStr,
+        date: dateStr,
+        // A day without plug rows is a plugs-didn't-exist (or not yet
+        // aggregated) day — the data edge for this tile, NOT "plugs used 0".
+        hasData: dayPlugs.size > 0,
+        hasEarlier: earliest != null && earliest < windowStart,
+        homeKwh,
+        plugs,
+        restKwh: r2(Math.max(0, homeKwh - plugSum)),
+        bars,
+        historyV: getHistoryVersion(),
+      },
+    });
+  });
+
   // Top/bottom 3 production days (Dashboard tiles) — ranked by pv_daily's
   // `produced` (total PV production, to-home + to-battery), the same field
   // "Right now"/"How today will end" use as the day's PV total. Only
