@@ -16,6 +16,7 @@ export const ro = {
     today: "azi",
     offline: "offline",
     empty: "Nicio priză inteligentă găsită încă pe acest cont.",
+    house: "Toată casa",
     note: "Istoricul puterii prizelor se înregistrează local de acum încolo — cloud-ul Anker păstrează doar totaluri zilnice, așa că curbele se umplu în timp.",
   },
   common: {

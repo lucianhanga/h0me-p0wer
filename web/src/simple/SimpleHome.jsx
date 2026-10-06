@@ -11,6 +11,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
 import PvStrings from "./PvStrings.jsx";
+import ConsumersRing from "./ConsumersRing.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import Hint from "../components/Hint.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
@@ -272,6 +273,9 @@ export default function SimpleHome() {
             data={overview.byPeriod.month}
             formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
           />
+          {/* Today's consumption split as a flip ring (2026-10-06, user
+              request) — renders nothing on accounts without plugs. */}
+          <ConsumersRing />
         </div>
         </>
       )}

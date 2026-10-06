@@ -6204,3 +6204,17 @@ cross-cutting), every finding re-verified by hand before fixing:
   offline/unbound, so no Modbus snapshots → the meter-gated cloud sync
   starter never fires locally → week/month cloud trends stale → Dashboard
   week/month tiles read 0 locally. Production (meter-2) unaffected.
+
+## Simple view: Consumers ring flip tile (2026-10-06, user request)
+
+- Simple view gained a Consumers tile in the Totals row (after the month
+  SourceCard): front = ECharts donut of today's split (one segment per
+  plug + Rest-of-home; the ring's total IS the whole house, shown as an
+  HTML center overlay), back = value list (consumers, rest, then the Whole
+  house total row). Same /api/stats/consumers data + shared PLUG_COLORS/
+  REST_COLOR as the Dashboard tile and Consume tab. Renders nothing on
+  plug-less accounts.
+- Gotcha: the slim ECharts build (web/src/echarts.js) has no TitleComponent
+  — an ECharts `title` option silently renders nothing. PieChart had to be
+  registered for the donut; the center total is an HTML overlay instead
+  (also more in the app's "values ON the visuals" style).
