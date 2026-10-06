@@ -1,5 +1,10 @@
 # Watch API — implementation request
 
+**Status: `GET /api/watch/status` is implemented and live** (see
+`server/watch.js`, merged in `1866ea7`). The sections below are the
+original request, kept for reference. See **Follow-up: day-spanning
+history** at the bottom for a new, smaller ask on top of it.
+
 A companion Garmin Connect IQ watch app ("Home Power", repo
 `h0me-p0wer-garmin`) polls this backend every 15s for a flat status
 JSON. That endpoint does not exist yet in this backend — this file is
@@ -98,3 +103,79 @@ app's own repo (`h0me-p0wer-garmin/README.md`) documents the same
 contract from the client side, and `source/Config.mc` there points
 `API_URL` at `https://h0me-p0wer.lucianhanga.stream/api/watch/status`
 when `USE_DEMO_DATA` is flipped to `false`.
+
+## Follow-up: day-spanning history
+
+**Done — see `ed951c7`.**
+
+The watch app now renders `solarHistory` (and will likely do the same
+for `homeHistory`/`gridHistory` next) as a **line graph spanning the
+full day on its x-axis** — 0h on the left, "now" wherever the current
+clock time lands, rest of the day left blank — rather than a plain
+bar sparkline. It plots whichever points it receives stretched evenly
+across that 0h-to-now range, under the assumption they're evenly
+spaced samples starting at midnight.
+
+That assumption doesn't hold today: `recentHistory()` in
+`server/watch.js` hardcodes `HISTORY_HOURS = 8`, so the arrays are
+always a trailing 8-hour window, not midnight-to-now. Late in the day
+this makes the graph render a declining-only slice (e.g. the actual
+live response at ~19:40 was
+`[2.27, 2.44, 2.55, 1.83, 1.75, 1.06, 0.59, 0.08, 0.01]` — all
+afternoon/evening) stretched across the whole axis as if it covered
+the entire day, instead of the real shape (near-zero at midnight,
+ramping up at sunrise, peaking midday, tapering at sunset).
+
+**Ask**: change `recentHistory()`'s window from a fixed trailing
+`HISTORY_HOURS` to "since local midnight" — i.e. `from` should be
+today's `00:00` local time instead of `now - 8h`, so the array's
+first point is always hour 0 and the last is always "now," whatever
+that elapsed span is (1 bucket if it's just past midnight, up to ~24
+if it's 11pm). `HISTORY_BUCKET_MS` (currently 1h) can probably stay
+as-is — at ~24 points max that's still well within what `points`-less
+`bucket` querying to `/api/timeseries` handles fine, per the existing
+comment there about `bucket` vs `points`.
+
+Same applies to `homeHistory`/`gridHistory`, which share the same
+`recentHistory()` call — no separate fix needed once the window logic
+changes, all three come from the same loop.
+
+## Follow-up 2: PV→battery split for the Solar graph (new field)
+
+**Done — see `7438a37`.** That same change also went further than this
+ask: `batteryMinutesToEmpty`/`batteryFloorPct`/`batteryMaxPct`,
+`homeFromGridHistory`/`homeFromBatteryHistory` (the Home page's
+stacked-bar split), and `solarDirectToday`/`batteryDischargedToday`/
+`batteryChargedToday` (`7438a37`, `ff62f32`, fixed in `a2362fc`) are
+all live too — the current full contract lives in
+`h0me-p0wer-garmin/README.md`, which is the source of truth from here
+on; this file stays as a historical record of the original ask.
+
+The Solar page now renders a **stacked area** under the production
+line — PV→battery stacked below PV→home, total production traced on
+top — the same composition as the web app's own Graph tab "Power
+Production" chart (`web/src/graph/GraphTab.jsx`: `pvBatt` + `pvHome`
+stacked series, `pv` total line on top, colors `#3DA568` / `#8EE3A8` /
+`#5FCE80`).
+
+The watch has `solarHistory` (total) but nothing for the split, so
+right now it falls back to a static demo curve for the battery band,
+which doesn't match real data and just looks wrong once the real
+production line is live.
+
+**Ask**: add a new array field, same cadence/length as `solarHistory`:
+
+```json
+"solarBatteryHistory": [0.0, 0.1, 0.4, 0.9, 1.2, 1.1, 0.6, 0.1]
+```
+
+kW of that interval's PV production routed to the battery (i.e. the
+`pvBatt` series' values, W→kW same as the other history arrays). The
+watch computes PV→home itself as `solarHistory[i] - solarBatteryHistory[i]`
+per point — no need to send that separately. Likely source: the same
+`/api/timeseries` call `recentHistory()` already makes should have (or
+can be extended to have) a per-bucket PV→battery figure alongside the
+`pv` figure it already reads — check what `computeFlowPayload()`'s
+`pvToBattery` derivation (used by `/api/flow`) corresponds to in the
+timeseries data, or whether that split needs adding to the timeseries
+endpoint's own bucket aggregation.
