@@ -3417,3 +3417,85 @@ pre {
   margin-top: 0.8rem;
   font-size: 0.85rem;
 }
+
+/* Plugs tab (2026-10-06): per-plug cards with 24 h power charts. */
+.plug-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.plug-card {
+  padding: 0.6rem 0.75rem 0.4rem;
+}
+
+.plug-offline .plug-name,
+.plug-offline .plug-sub {
+  opacity: 0.5;
+}
+
+.plug-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.plug-card-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.plug-name {
+  font-weight: 600;
+  color: #e8ecef;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plug-sub {
+  color: #8b98a5;
+  font-size: 0.72rem;
+}
+
+.plug-card-stats {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  white-space: nowrap;
+}
+
+.plug-watts {
+  font-weight: 600;
+  color: #e8ecef;
+  font-variant-numeric: tabular-nums;
+}
+
+.plug-kwh {
+  color: #8b98a5;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.plug-chart {
+  height: 140px;
+  margin-top: 0.25rem;
+}
+
+.plug-note {
+  color: #8b98a5;
+  font-size: 0.8rem;
+}
+
+.plug-empty {
+  color: #8b98a5;
+}
+
+@media (max-width: 600px) {
+  .plug-cards {
+    grid-template-columns: 1fr;
+  }
+}

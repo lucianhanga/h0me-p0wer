@@ -8,6 +8,15 @@ export const en = {
     graph: "Graph",
     dashboard: "Dashboard",
     roi: "ROI",
+    plugs: "Plugs",
+  },
+  plugs: {
+    rest: "Rest of home",
+    restSub: "home − plugs",
+    today: "today",
+    offline: "offline",
+    empty: "No smart plugs found on this account yet.",
+    note: "Per-plug power history is recorded locally from now on — the Anker cloud only keeps daily totals, so curves fill in over time.",
   },
   common: {
     updated: "updated {time}",

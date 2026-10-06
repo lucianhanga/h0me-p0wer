@@ -6,7 +6,7 @@ Home-energy dashboard **and controller** for an **Anker SOLIX** home setup —
 its sockets (16.6 kWh total), Smart Meter Gen 2 (AE1X0, local Modbus TCP),
 12×500 W PV (6 kWp). Live monitoring, history, AI briefings, ROI tracking,
 and a PV-aware power plan that drives the battery schedule. Three view modes:
-full (tabs Welcome / Live / Strategy / Graph / Dashboard / ROI), simple
+full (tabs Welcome / Live / Strategy / Graph / Plugs / Dashboard / ROI), simple
 (default for fresh visitors), and the header toggle between them — see
 README.md for the user-facing tour; this file is the "why," not the "what."
 
@@ -82,12 +82,25 @@ EPIPE noise on every client disconnect).
   startup backfill of 30 daily trends is throttled to 1 call/6 s.
 - Cloud values are strings; `""` = not applicable. Cloud history only exists
   since the meter was linked to the account (2026-09-07).
+- **Smart plugs (A17X8, since 2026-10-06)**: v2 `device/energy_analysis`
+  REJECTS plug SNs with any device_type; the Shelly endpoint is Shelly-only.
+  Live per-plug watts come from `get_scen_info`'s
+  `smart_plug_info.smartplug_list[].current_power` (piggybacked on the 10 s
+  scene poll — zero extra calls); per-plug DAILY kWh from the `home_usage`
+  energy_analysis response's `smart_plug_info` (the query the home-trend
+  sync already runs). NO intraday per-plug cloud history exists — the Plugs
+  tab's curves are local accumulation (`plug_samples`) and fill in from
+  2026-10-06. A not-yet-aggregated day returns an EMPTY smartplug_list (≠ 0
+  consumption).
 
 ### Data model (SQLite, `server/data.db`, git-ignored)
 - `snapshots`: raw 5 s Modbus samples, 48 h retention, pruned hourly.
 - `cloud_history`: `data_trend` rows keyed by (device_sn, period_type,
   period_start, label) + fetched_at. Day-trend labels are meter-local
   "HH:MM:SS"; absolute ts = `new Date(period_start + "T" + label)`.
+- `plug_samples`: per-plug watts at the 10 s scene-poll cadence, 7-day
+  retention. `plug_daily`: per-plug daily kWh from `home_usage`'s
+  smart_plug_info, kept forever.
 
 ### `/api/timeseries` merge rules (the chart's contract)
 1. Bucket size from the **visible** window (`view` param), rounded up to 5 s,

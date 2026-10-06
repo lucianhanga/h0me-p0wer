@@ -1038,3 +1038,88 @@ const selectFirstBatteryAfter = db.prepare(
 export function getFirstBatteryAfter(fromMs) {
   return selectFirstBatteryAfter.get(fromMs) ?? null;
 }
+
+// --- Smart plugs (A17X8): live power samples + daily energy ----------------
+// Live watts piggyback on the 10 s scene poll (anker-cloud.js getBatteryInfo
+// extracts smart_plug_info); the cloud exposes NO intraday plug history, so
+// this local accumulation is the only source for per-plug power curves
+// (2026-10-06, Plugs tab). Daily per-plug kWh comes from the home_usage
+// energy_analysis response's smart_plug_info (same query the home trend
+// sync already runs — zero extra API calls).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS plug_samples (
+    ts INTEGER NOT NULL,
+    sn TEXT NOT NULL,
+    watts REAL
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_plug_samples_ts ON plug_samples(ts)`);
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS plug_daily (
+    date TEXT NOT NULL,
+    sn TEXT NOT NULL,
+    name TEXT,
+    kwh REAL,
+    fetched_at INTEGER NOT NULL,
+    PRIMARY KEY (date, sn)
+  )
+`);
+
+const insertPlugSample = db.prepare(
+  `INSERT INTO plug_samples (ts, sn, watts) VALUES (?, ?, ?)`,
+);
+
+export function savePlugSamples(ts, plugs) {
+  if (!plugs?.length) return;
+  db.exec("BEGIN");
+  try {
+    for (const p of plugs) insertPlugSample.run(ts, p.sn, p.watts);
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+const selectPlugSamples = db.prepare(
+  `SELECT ts, sn, watts FROM plug_samples WHERE ts >= ? AND ts <= ? ORDER BY ts ASC`,
+);
+
+export function getPlugSamples(fromMs, toMs) {
+  return selectPlugSamples.all(fromMs, toMs);
+}
+
+const prunePlugSamplesStmt = db.prepare(`DELETE FROM plug_samples WHERE ts < ?`);
+
+// 7 days of intraday detail (long-term per-plug history lives in plug_daily).
+export function prunePlugSamples() {
+  prunePlugSamplesStmt.run(Date.now() - 7 * 86400000);
+}
+
+const upsertPlugDaily = db.prepare(
+  `INSERT OR REPLACE INTO plug_daily (date, sn, name, kwh, fetched_at) VALUES (?, ?, ?, ?, ?)`,
+);
+
+export function savePlugDaily(date, plugs) {
+  if (!plugs?.length) return;
+  const now = Date.now();
+  db.exec("BEGIN");
+  try {
+    for (const p of plugs) {
+      upsertPlugDaily.run(date, p.device_sn, p.device_name ?? null, num(p.total_power), now);
+    }
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
+}
+
+const selectPlugDailySince = db.prepare(
+  `SELECT date, sn, name, kwh FROM plug_daily WHERE date >= ? ORDER BY date ASC`,
+);
+
+export function getPlugDaily(sinceDate) {
+  return selectPlugDailySince.all(sinceDate);
+}

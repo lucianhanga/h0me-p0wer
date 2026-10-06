@@ -374,6 +374,17 @@ export class AnkerClient {
       errCode: primary.errCode,
       heatingPower: primary.heatingPower,
       members,
+      // Smart plugs (A17X8) bound to the site: live per-plug watts from the
+      // same scene payload — piggybacked on the 10 s battery poll at zero
+      // extra API cost (2026-10-06, Plugs tab).
+      plugs: (scene.smart_plug_info?.smartplug_list ?? []).map((p) => ({
+        sn: p.device_sn,
+        name: p.device_name,
+        tag: p.tag_alias || p.tag || null,
+        typeTag: p.type_tag || null,
+        watts: num(p.current_power),
+        online: p.status === "1",
+      })),
       siteId,
     };
   }

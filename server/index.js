@@ -58,6 +58,11 @@ import {
   kvSet,
   saveModuleSnapshot,
   getModuleHistory,
+  savePlugSamples,
+  getPlugSamples,
+  prunePlugSamples,
+  savePlugDaily,
+  getPlugDaily,
   logActivity,
   getActivity,
   getHistoryVersion,
@@ -1348,6 +1353,77 @@ app.get(
   }),
 );
 
+// Smart plugs (A17X8) — live list + locally accumulated power history
+// (2026-10-06, Plugs tab). Live values come from latestPlugs (the 10 s scene
+// poll); the power curves come from plug_samples because the cloud exposes
+// per-plug DAILY kWh only, no intraday trend.
+app.get("/api/plugs", (req, res) => {
+  const today = localDate();
+  const since = localDate(new Date(Date.now() - 30 * 86400000));
+  const daily = getPlugDaily(since);
+  const todayKwh = {};
+  for (const r of daily) {
+    if (r.date === today) todayKwh[r.sn] = r.kwh;
+  }
+  res.json({
+    ok: true,
+    data: {
+      plugs: latestPlugs,
+      todayKwh,
+      daily,
+    },
+  });
+});
+
+// Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
+// nulls where no samples (server off). No interpolation — at the 10 s
+// sample cadence every chart-sized bucket either has samples or the gap is
+// real. The frontend aligns these with /api/timeseries (same `bucket`
+// param) to derive "rest of home" = home − Σ plugs client-side.
+app.get("/api/plugs/timeseries", (req, res) => {
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) {
+    return res.status(400).json({ ok: false, error: "from must be before to" });
+  }
+  const viewMs = Math.max(Number(req.query.view ?? 0) || to - from, 1000);
+  const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
+  const minBucketMs = poller.pollIntervalMs;
+  const requestedBucketMs = Number(req.query.bucket ?? 0);
+  const bucketMs =
+    requestedBucketMs > 0
+      ? Math.max(minBucketMs, requestedBucketMs)
+      : Math.max(minBucketMs, Math.ceil(viewMs / points / minBucketMs) * minBucketMs);
+
+  const sns = new Set(latestPlugs.map((p) => p.sn));
+  const acc = new Map(); // bt -> Map(sn -> {s, c})
+  for (const r of getPlugSamples(from, to)) {
+    sns.add(r.sn);
+    if (r.watts == null) continue;
+    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+    let m = acc.get(bt);
+    if (!m) {
+      m = new Map();
+      acc.set(bt, m);
+    }
+    const cell = m.get(r.sn) ?? { s: 0, c: 0 };
+    cell.s += r.watts;
+    cell.c++;
+    m.set(r.sn, cell);
+  }
+  const rows = [];
+  for (let bt = Math.floor(from / bucketMs) * bucketMs; bt < to; bt += bucketMs) {
+    const row = { t: bt };
+    const m = acc.get(bt);
+    for (const sn of sns) {
+      const cell = m?.get(sn);
+      row[`plug__${sn}`] = cell ? Math.round(cell.s / cell.c) : null;
+    }
+    rows.push(row);
+  }
+  res.json({ ok: true, data: rows, bucketMs, plugs: [...sns] });
+});
+
 // Refresh the current day/week/month/year in the background so the UI always
 // reads from the local DB. 4 sequential calls every 15 min stays well below
 // Anker's rate limits.
@@ -1458,6 +1534,14 @@ async function syncCloudHistory() {
         });
         const rows = (data?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
         saveCloudHomeTrend("day", day, rows);
+        // Per-plug daily kWh rides the same response (smart_plug_info) —
+        // no extra call. Note: the day-type trend reports the plugs'
+        // running totals for that date.
+        try {
+          savePlugDaily(day, data?.smart_plug_info?.smartplug_list);
+        } catch (err) {
+          console.warn("[db] failed to persist plug daily:", err.message);
+        }
       } catch (err) {
         console.warn(`[cloud-sync] home usage day ${day} failed: ${err.message}`);
       }
@@ -1657,6 +1741,11 @@ async function catchUpBatteryPvHistory() {
         });
         const homeRows = (homeData?.power ?? []).map((p) => ({ time: p.time, power: p.value }));
         saveCloudHomeTrend("day", start, homeRows);
+        try {
+          savePlugDaily(start, homeData?.smart_plug_info?.smartplug_list);
+        } catch (err) {
+          console.warn("[db] failed to persist plug daily:", err.message);
+        }
       } catch (err) {
         console.warn(`[cloud-sync] home-usage backfill day ${start} failed: ${err.message}`);
         completed = false;
@@ -1961,6 +2050,7 @@ function repairInflatedPvDays() {
 pruneOld();
 pruneBattery();
 pruneCloudGrid();
+prunePlugSamples();
 rollupPvDaily();
 rollupGridDaily();
 repairZeroedPvHistory();
@@ -1969,6 +2059,7 @@ setInterval(() => {
   pruneOld();
   pruneBattery();
   pruneCloudGrid();
+  prunePlugSamples();
   rollupPvDaily();
   rollupGridDaily();
 }, 3600 * 1000).unref();
@@ -2005,6 +2096,9 @@ setInterval(refreshConsumptionProfile, 3600 * 1000).unref();
 // app) is the primary source once connected; the 30 s REST scen_info sync is
 // the baseline/fallback and also discovers the battery SN needed for MQTT.
 let latestBattery = null; // the AGGREGATE of all solarbanks on the site
+// Live smart plugs (A17X8) from the same 10 s scene poll as latestBattery
+// (2026-10-06, Plugs tab): [{sn, name, tag, typeTag, watts, online, ts}].
+let latestPlugs = [];
 let lastCloudOkAt = null; // last successful cloud call (for the cloud badge)
 // Last GENUINELY FRESH REST scen_info sync (2026-09-29 review, tightened
 // 2026-10-05 — user report: "values remain stuck... until the Anker app
@@ -2364,6 +2458,17 @@ async function syncBatteryInner() {
         lastRestSyncAt = Date.now();
       }
       saveBatterySnapshot(latestBattery);
+      // Smart plugs ride the same scene poll — persist a 10 s power sample
+      // per plug (the only intraday plug history that exists; the cloud
+      // offers daily kWh only).
+      if (info.plugs?.length) {
+        latestPlugs = info.plugs.map((p) => ({ ...p, ts: info.ts }));
+        try {
+          savePlugSamples(info.ts, info.plugs);
+        } catch (err) {
+          console.warn("[db] failed to persist plug samples:", err.message);
+        }
+      }
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside
       // Grid channel from the same call — the best available source when
       // Modbus is down; graphs merge it below local snapshots.
