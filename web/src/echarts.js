@@ -1,7 +1,7 @@
 // Slim ECharts build: only the pieces this app uses (keeps the bundle small
 // instead of importing all of echarts).
 import * as echarts from "echarts/core";
-import { LineChart, BarChart } from "echarts/charts";
+import { LineChart, BarChart, PieChart } from "echarts/charts";
 import {
   GridComponent,
   TooltipComponent,
@@ -17,6 +17,7 @@ import { CanvasRenderer } from "echarts/renderers";
 echarts.use([
   LineChart,
   BarChart,
+  PieChart,
   GridComponent,
   TooltipComponent,
   LegendComponent,
