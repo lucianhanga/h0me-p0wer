@@ -6178,3 +6178,29 @@ cross-cutting), every finding re-verified by hand before fixing:
   2. Tab label renamed Plugs → Consume / Verbrauch / Consum (en/de/ro). The
      internal route key stays "plugs" (hash #plugs, i18n prefix plugs.*,
      file PlugsTab.jsx) — only the visible label changed.
+
+## Faster plug reads + Dashboard Consumers tile (2026-10-06, user requests)
+
+- "Read the values as often as possible" (Consume): probing showed the
+  cloud's plug current_power changes on EVERY 5 s probe, so sampling was
+  the limiter. Baseline scen_info cadence lowered 10 s → 7 s (~8.6/min,
+  still inside the ~10-12/min guideline with headroom for on-demand
+  refreshes); while any UI is watched the pre-existing fast path already
+  polls at ~2.5 s (Anker-app parity, ~20/min). Consume tab ticks lowered
+  to 3 s (header poll + chart live-append) to match the watched cadence.
+- Dashboard Consumers tile (web/src/dashboard/ConsumersCard.jsx +
+  /api/stats/consumers in server/stats.js): front = day's home kWh total +
+  one row per plug (color dot, name, kWh, %) with the Rest-of-home row
+  pinned last; flip side = stacked bars for the 7 days ending at the
+  selected day, rest series FIRST (bottom of stack), plug colors matching
+  the front AND the Consume tab (PLUG_COLORS/REST_COLOR exported from
+  PlugsTab.jsx; both sort plugs by name). Day navigation (‹ › + swipe)
+  mirrors SourceCard; immutable days (offset ≥ 2) cached in the browser.
+  Home kWh integrates cloud_home_history's 20-min rows; per-plug kWh is
+  plug_daily. hasData requires plug rows for the selected day — plug
+  history starts 2026-10-06, so the past opens as days accumulate.
+- NOTE: local dev-server oddity seen while verifying (pre-existing, NOT
+  this change): .env's METER_IP=192.168.1.102 is meter-1, which is
+  offline/unbound, so no Modbus snapshots → the meter-gated cloud sync
+  starter never fires locally → week/month cloud trends stale → Dashboard
+  week/month tiles read 0 locally. Production (meter-2) unaffected.

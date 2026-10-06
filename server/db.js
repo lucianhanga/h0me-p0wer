@@ -1123,3 +1123,9 @@ const selectPlugDailySince = db.prepare(
 export function getPlugDaily(sinceDate) {
   return selectPlugDailySince.all(sinceDate);
 }
+
+const selectEarliestPlugDate = db.prepare(`SELECT MIN(date) AS d FROM plug_daily`);
+
+export function getEarliestPlugDate() {
+  return selectEarliestPlugDate.get()?.d ?? null;
+}

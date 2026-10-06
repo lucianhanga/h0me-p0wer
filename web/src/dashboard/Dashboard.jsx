@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
+import ConsumersCard from "./ConsumersCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import Hint from "../components/Hint.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
@@ -103,6 +104,7 @@ export default function Dashboard() {
           data={stats.byPeriod.year}
           formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
         />
+        <ConsumersCard />
       </div>
       {topDays && (topDays.top.length > 0 || topDays.bottom.length > 0) && (
         <div className="topdays-grid">

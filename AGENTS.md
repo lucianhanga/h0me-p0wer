@@ -85,8 +85,9 @@ EPIPE noise on every client disconnect).
 - **Smart plugs (A17X8, since 2026-10-06)**: v2 `device/energy_analysis`
   REJECTS plug SNs with any device_type; the Shelly endpoint is Shelly-only.
   Live per-plug watts come from `get_scen_info`'s
-  `smart_plug_info.smartplug_list[].current_power` (piggybacked on the 10 s
-  scene poll — zero extra calls); per-plug DAILY kWh from the `home_usage`
+  `smart_plug_info.smartplug_list[].current_power` (piggybacked on the
+  scene poll — 7 s baseline, ~2.5 s while a UI is watched, zero extra
+  calls); per-plug DAILY kWh from the `home_usage`
   energy_analysis response's `smart_plug_info` (the query the home-trend
   sync already runs). NO intraday per-plug cloud history exists — the Plugs
   tab's curves are local accumulation (`plug_samples`) and fill in from
@@ -98,9 +99,9 @@ EPIPE noise on every client disconnect).
 - `cloud_history`: `data_trend` rows keyed by (device_sn, period_type,
   period_start, label) + fetched_at. Day-trend labels are meter-local
   "HH:MM:SS"; absolute ts = `new Date(period_start + "T" + label)`.
-- `plug_samples`: per-plug watts at the 10 s scene-poll cadence, 7-day
-  retention. `plug_daily`: per-plug daily kWh from `home_usage`'s
-  smart_plug_info, kept forever.
+- `plug_samples`: per-plug watts at the scene-poll cadence (7 s baseline,
+  ~2.5 s watched), 7-day retention. `plug_daily`: per-plug daily kWh from
+  `home_usage`'s smart_plug_info, kept forever.
 
 ### `/api/timeseries` merge rules (the chart's contract)
 1. Bucket size from the **visible** window (`view` param), rounded up to 5 s,
