@@ -155,7 +155,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-03, v1.5.173, `main`.** Production deploys are the user's own
+**As of 2026-10-06, v1.5.219, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a
@@ -189,6 +189,16 @@ production screenshot, check the deployed version:
   rendered via headless Chrome) — Chrome does NOT scale a bare SVG to tiny
   viewports (renders it 1:1, cropped); re-render sizes through a wrapper
   HTML with an `<img style="width:Npx;height:Npx">`.
+- **API token auth** (`server/auth.js`): Bearer token checked against
+  `API_TOKEN` in .env, expiry in `API_TOKEN_EXPIRES_AT` (4 weeks);
+  `generate-token.js` writes .env directly and warns before replacing a live
+  token. Deliberately **fails open when `API_TOKEN` is unset**. Internal
+  loopback calls must send the token too — auth once broke them (regression
+  fixed in PR #376).
+- **Garmin watch companion** consumes `GET /api/watch/status` (midnight-
+  anchored history window, home/battery source split, today's breakdown).
+  The contract's source of truth is `h0me-p0wer-garmin/README.md`;
+  `WATCH.readme` here is a historical record only — its follow-ups are done.
 
 ## Ideas for next iterations
 
