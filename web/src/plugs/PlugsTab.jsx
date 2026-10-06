@@ -59,6 +59,11 @@ function chartOption(color) {
     yAxis: {
       type: "value",
       splitNumber: 2,
+      // Never finer than 50 W steps (2026-10-06, user request): low-power
+      // plugs (a 9 W idle draw) otherwise get 5/10 W tick labels that read
+      // as false precision. Bigger steps are still allowed when the data
+      // range needs them.
+      minInterval: 50,
       axisLabel: {
         color: "#8b98a5",
         fontSize: 10,
