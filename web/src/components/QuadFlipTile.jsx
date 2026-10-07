@@ -37,10 +37,14 @@ export default function QuadFlipTile({ title, faceLabel, onFlip, children }) {
 
   return (
     <div className="quadflip">
-      <button className="quadflip-title" onClick={flip} aria-live="polite">
-        {title}
-        {faceLabel && <span className="quadflip-face"> · {faceLabel} ⟳</span>}
-      </button>
+      {/* Title bar is optional (2026-10-07, user request): the Consume
+          period tiles flip by tapping the box alone — no face-name label. */}
+      {title != null && (
+        <button className="quadflip-title" onClick={flip} aria-live="polite">
+          {title}
+          {faceLabel && <span className="quadflip-face"> · {faceLabel} ⟳</span>}
+        </button>
+      )}
       <div
         className="quadflip-box"
         onPointerDown={(e) => (downPos.current = [e.clientX, e.clientY])}
