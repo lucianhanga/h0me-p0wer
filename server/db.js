@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { displayDeviceName } from "./device-name.js";
 
 const DB_PATH =
   process.env.DB_PATH ??
@@ -1107,7 +1108,7 @@ export function savePlugDaily(date, plugs) {
   db.exec("BEGIN");
   try {
     for (const p of plugs) {
-      upsertPlugDaily.run(date, p.device_sn, p.device_name ?? null, num(p.total_power), now);
+      upsertPlugDaily.run(date, p.device_sn, p.device_name ? displayDeviceName(p.device_name) : null, num(p.total_power), now);
     }
     db.exec("COMMIT");
   } catch (err) {
@@ -1121,7 +1122,12 @@ const selectPlugDailySince = db.prepare(
 );
 
 export function getPlugDaily(sinceDate) {
-  return selectPlugDailySince.all(sinceDate);
+  // Rows written before the display-name convention (2026-10-07) still
+  // carry the h-solar- prefix — normalize on read.
+  return selectPlugDailySince.all(sinceDate).map((r) => ({
+    ...r,
+    name: r.name ? displayDeviceName(r.name) : r.name,
+  }));
 }
 
 const selectEarliestPlugDate = db.prepare(`SELECT MIN(date) AS d FROM plug_daily`);
@@ -1139,7 +1145,7 @@ const selectAllPlugNames = db.prepare(
 export function getAllPlugNames() {
   const names = new Map();
   for (const r of selectAllPlugNames.all()) {
-    if (r.name) names.set(r.sn, r.name);
+    if (r.name) names.set(r.sn, displayDeviceName(r.name));
     else if (!names.has(r.sn)) names.set(r.sn, null);
   }
   return names;

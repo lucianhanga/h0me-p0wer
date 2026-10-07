@@ -6313,3 +6313,17 @@ cross-cutting), every finding re-verified by hand before fixing:
   whole-house row too. PR #393 also carried the version bump PR #392
   (PVs spacing) missed — the every-PR-bumps-version rule applies even to
   single-file CSS PRs.
+
+## Display names: strip the h-solar-/h- prefix (2026-10-07, user request)
+
+- The account's devices are named with an internal convention
+  ("h-solar-tv", "h-solarbank-4") that leaked into every UI surface. New
+  displayDeviceName() (server/device-name.js) strips ^h-(solar-)? and is
+  applied at UI-payload emit points ONLY: plugs in anker-cloud.js's
+  getBatteryInfo, pvUnits in index.js's livePvUnits, battery live names in
+  battery-params.js, plug_daily names on write AND on read (old rows keep
+  the prefix in the DB).
+- HARD-WON: strip AFTER internal lookups — pvSlotPeakWatts builds
+  PV_PORT_W_<sanitized name> env keys from the RAW unit name; stripping
+  m.name itself would silently zero every PV port's capacity bar
+  (verified intact after the change: peaks 500/1000 per port).

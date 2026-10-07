@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { WebSocketServer } from "ws";
 import { MeterPoller } from "./modbus.js";
+import { displayDeviceName } from "./device-name.js";
 import { AnkerClient, AnkerApiError } from "./anker-cloud.js";
 import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
@@ -2189,7 +2190,9 @@ function livePvUnits(b) {
       const portW = pvSlotPeakWatts(m.name);
       return {
         sn: m.sn,
-        name: m.name,
+        // Display-only: pvSlotPeakWatts above uses the RAW m.name for the
+        // PV_PORT_W_* env key — never strip before that lookup.
+        name: displayDeviceName(m.name),
         channels: m.pvChannels.map((c) => {
           const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
           return {

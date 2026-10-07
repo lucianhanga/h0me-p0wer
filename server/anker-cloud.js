@@ -2,6 +2,7 @@ import { createECDH, createCipheriv, createHash } from "node:crypto";
 import { readFileSync, writeFileSync, chmodSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { displayDeviceName } from "./device-name.js";
 
 const API = "https://ankerpower-api-eu.anker.com";
 
@@ -379,7 +380,9 @@ export class AnkerClient {
       // extra API cost (2026-10-06, Plugs tab).
       plugs: (scene.smart_plug_info?.smartplug_list ?? []).map((p) => ({
         sn: p.device_sn,
-        name: p.device_name,
+        // Display-only stripping (device-name.js): plug names have no
+        // internal lookups attached, unlike battery unit names.
+        name: displayDeviceName(p.device_name),
         tag: p.tag_alias || p.tag || null,
         typeTag: p.type_tag || null,
         watts: num(p.current_power),
