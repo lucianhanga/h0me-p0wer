@@ -817,8 +817,8 @@ h4 {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  margin: 0.5rem 0;
+  gap: 0.5rem;
+  margin: 0.25rem 0;
 }
 
 /* Each solarbank is its own tile (2026-10-04, user request: "make each
@@ -829,7 +829,10 @@ h4 {
   background: #1a2128;
   border: 1px solid #2a3238;
   border-radius: 8px;
-  padding: 1rem;
+  /* Tightened 2026-10-07 (user request): 1rem all around read as dead
+     space; the unit label keeps a clear gap below it (see
+     .pv-slot-groups .pv-unit-label). */
+  padding: 0.6rem 0.75rem;
 }
 
 /* Lines up "h-solarbank-4" etc. with "PV1" — and with the bar itself —
@@ -844,6 +847,10 @@ h4 {
    in sync if either changes. */
 .pv-slot-groups .pv-unit-label {
   padding-left: 1.5rem;
+  /* Explicit (2026-10-07, user request): the browser-default p margins
+     put ~1em above AND below; the title needs a modest gap to the
+     contents below, not dead space above it. */
+  margin: 0.1rem 0 0.5rem;
 }
 
 /* Section-wide total, above the per-port breakdown (2026-10-04, user
@@ -853,7 +860,9 @@ h4 {
    a background/border box any more (see .pv-slot below). */
 .pv-slot-total {
   width: 100%;
-  margin: 0.5rem 0 1rem;
+  /* Tightened 2026-10-07 (user request): a bit less before the Total,
+     a bit more off the gap after it. */
+  margin: 0.25rem 0 0.5rem;
 }
 
 .pv-slot-total .pv-slot-label span:first-child {
@@ -863,8 +872,8 @@ h4 {
 .pv-slot-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin: 0.5rem 0 1rem;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
 }
 
 /* Card width is proportional to the port's configured capacity
@@ -888,7 +897,7 @@ h4 {
      wider min-width the bar fills almost the full card edge-to-edge on
      most rows; the extra margin keeps it from looking flush against the
      tile. .pv-unit-label's own left padding above matches this. */
-  padding: 0.65rem 1.5rem;
+  padding: 0.35rem 1.5rem;
   flex-grow: var(--pv-weight, 1);
   flex-basis: 0;
   /* 190px, not 140px (2026-10-04, user report with screenshot: "PV1 looks
