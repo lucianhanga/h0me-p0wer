@@ -27,8 +27,14 @@ function dayImmutable(offset) {
   return d.getTime() - (offset - 1) * 86400000 <= immutableBeforeMs();
 }
 
-function ConsumerBars({ bars, plugs, t }) {
+// Stacked per-day kWh bars (rest at the bottom, then one series per plug in
+// the shared palette) — the flip side of the Dashboard's Consumers tile
+// and a face of the simple view's Consume period tiles (exported
+// 2026-10-07). formatLabel defaults to weekday-short (day/week bars);
+// month bars pass a day-of-month formatter.
+export function ConsumerBars({ bars, plugs, t, formatLabel }) {
   const ref = useRef(null);
+  const labelOf = formatLabel ?? ((l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" }));
 
   useEffect(() => {
     if (!bars?.length) return undefined;
@@ -46,7 +52,7 @@ function ConsumerBars({ bars, plugs, t }) {
       },
       xAxis: {
         type: "category",
-        data: bars.map((b) => new Date(`${b.label}T12:00:00`).toLocaleDateString([], { weekday: "short" })),
+        data: bars.map((b) => labelOf(b.label)),
         axisLabel: { color: "#8b98a5", fontSize: 9, hideOverlap: true },
         axisLine: { lineStyle: { color: "#2a3238" } },
         axisTick: { show: false },
@@ -74,7 +80,7 @@ function ConsumerBars({ bars, plugs, t }) {
       ro.disconnect();
       chart.dispose();
     };
-  }, [bars, plugs, t]);
+  }, [bars, plugs, t, labelOf]);
 
   return <div ref={ref} className="back-bars" />;
 }

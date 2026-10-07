@@ -11,7 +11,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
 import PvStrings from "./PvStrings.jsx";
-import ConsumersRing from "./ConsumersRing.jsx";
+import ConsumersSection from "./ConsumersSection.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import Hint from "../components/Hint.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
@@ -273,12 +273,12 @@ export default function SimpleHome() {
             data={overview.byPeriod.month}
             formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
           />
-          {/* Today's consumption split as a flip ring (2026-10-06, user
-              request) — renders nothing on accounts without plugs. */}
-          <ConsumersRing />
         </div>
         </>
       )}
+      {/* Consumption split by consumer — own section after Totals
+          (2026-10-07, user request); hides itself on plug-less accounts. */}
+      <ConsumersSection />
       <UpdatedStamp at={flow?.ts ?? primary?.live?.ts ?? null} />
     </div>
   );

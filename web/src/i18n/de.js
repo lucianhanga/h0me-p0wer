@@ -17,6 +17,7 @@ export const de = {
     offline: "offline",
     empty: "Noch keine Smart Plugs auf diesem Konto gefunden.",
     house: "Ganzes Haus",
+    faces: { ring: "Ring", bars: "Balken", list: "Werte" },
     note: "Der Verlauf der Steckdosen-Leistung wird ab jetzt lokal aufgezeichnet — die Anker-Cloud speichert nur Tageswerte, die Kurven füllen sich also mit der Zeit.",
   },
   common: {

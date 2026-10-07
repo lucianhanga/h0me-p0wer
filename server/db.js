@@ -1129,3 +1129,18 @@ const selectEarliestPlugDate = db.prepare(`SELECT MIN(date) AS d FROM plug_daily
 export function getEarliestPlugDate() {
   return selectEarliestPlugDate.get()?.d ?? null;
 }
+
+// All plug SNs ever seen, with their latest name — the Consumers tiles list
+// every known plug even in periods where it reported 0 (2026-10-07).
+const selectAllPlugNames = db.prepare(
+  `SELECT sn, name FROM plug_daily ORDER BY date ASC`,
+);
+
+export function getAllPlugNames() {
+  const names = new Map();
+  for (const r of selectAllPlugNames.all()) {
+    if (r.name) names.set(r.sn, r.name);
+    else if (!names.has(r.sn)) names.set(r.sn, null);
+  }
+  return names;
+}
