@@ -6302,3 +6302,14 @@ cross-cutting), every finding re-verified by hand before fixing:
   isn't possible — bundle-level check + needs a real-phone pass.
 - Not affected: SimpleCharts/BackBars/ConsumerBars (no inside dataZoom →
   no roam controller → scroll was never blocked there).
+
+## Totals tiles: 'To grid' value alignment (2026-10-07, user report)
+
+- The To-grid row's kWh aligned under the OTHER rows' percentages, not
+  their values: .src-pct's min-width (2.6em) only exists on share-bearing
+  rows, so share-less rows ran to the row's right edge. CSS-only fix:
+  .src-value:not(:has(.src-pct)):not(:has(.src-eur)) .src-kwh gets
+  margin-right = pct min-width + row gap. Covers the Consume list's
+  whole-house row too. PR #393 also carried the version bump PR #392
+  (PVs spacing) missed — the every-PR-bumps-version rule applies even to
+  single-file CSS PRs.
