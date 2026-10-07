@@ -91,3 +91,32 @@ export function immutableBeforeMs() {
   d.setHours(0, 0, 0, 0);
   return d.getTime() - 86400000;
 }
+
+// Is this past period immutable? (2026-10-01, user request: cache history
+// in the browser — only values that never change.) The cloud sync rewrites
+// today+yesterday, so a period is immutable only when it ENDED before
+// yesterday 00:00 local. Moved here from Dashboard.jsx 2026-10-07 (the
+// Consume period tiles in components/ need it too, and importing it from
+// Dashboard.jsx would be a circular import).
+export function periodImmutable(type, offset) {
+  if (offset < 1) return false; // current period — live
+  const bound = immutableBeforeMs();
+  const now = new Date();
+  let endMs;
+  if (type === "day") {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    endMs = d.getTime() - (offset - 1) * 86400000;
+  } else if (type === "week") {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    const dow = (d.getDay() + 6) % 7; // Monday = 0
+    endMs = d.getTime() - dow * 86400000 - (offset - 1) * 7 * 86400000;
+  } else if (type === "month") {
+    endMs = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1).getTime();
+  } else {
+    // year
+    endMs = new Date(now.getFullYear() - offset + 1, 0, 1).getTime();
+  }
+  return endMs <= bound;
+}

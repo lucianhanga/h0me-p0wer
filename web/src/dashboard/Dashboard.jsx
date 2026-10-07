@@ -1,39 +1,11 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
-import ConsumersCard from "./ConsumersCard.jsx";
+import ConsumersPeriodCard from "../components/ConsumersPeriodCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import Hint from "../components/Hint.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
-import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
-
-// Is this past period immutable? (2026-10-01, user request: cache history
-// in the browser — only values that never change.) The cloud sync rewrites
-// today+yesterday, so a period is immutable only when it ENDED before
-// yesterday 00:00 local. Exported 2026-10-07 for the simple view's Consume
-// section tiles (same browser-cache rule).
-export function periodImmutable(type, offset) {
-  if (offset < 1) return false; // current period — live
-  const bound = immutableBeforeMs();
-  const now = new Date();
-  let endMs;
-  if (type === "day") {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    endMs = d.getTime() - (offset - 1) * 86400000;
-  } else if (type === "week") {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    const dow = (d.getDay() + 6) % 7; // Monday = 0
-    endMs = d.getTime() - dow * 86400000 - (offset - 1) * 7 * 86400000;
-  } else if (type === "month") {
-    endMs = new Date(now.getFullYear(), now.getMonth() - offset + 1, 1).getTime();
-  } else {
-    // year
-    endMs = new Date(now.getFullYear() - offset + 1, 0, 1).getTime();
-  }
-  return endMs <= bound;
-}
+import { readCached, writeCached, periodImmutable } from "../historyCache.js";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -105,7 +77,13 @@ export default function Dashboard() {
           data={stats.byPeriod.year}
           formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
         />
-        <ConsumersCard />
+        {/* Consumers period tiles (2026-10-07, user request — same 3-face
+            ring/bars/list tiles as the simple view's Consume section).
+            Titles carry the "Consume ·" prefix because this grid has no
+            section headers and the Totals tiles already say "Today" etc. */}
+        <ConsumersPeriodCard type="day" title={`${t("nav.plugs")} · ${t("dashboard.today")}`} />
+        <ConsumersPeriodCard type="week" title={`${t("nav.plugs")} · ${t("dashboard.thisWeek")}`} />
+        <ConsumersPeriodCard type="month" title={`${t("nav.plugs")} · ${t("dashboard.thisMonth")}`} />
       </div>
       {topDays && (topDays.top.length > 0 || topDays.bottom.length > 0) && (
         <div className="topdays-grid">
