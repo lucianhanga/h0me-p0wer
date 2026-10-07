@@ -6218,3 +6218,23 @@ cross-cutting), every finding re-verified by hand before fixing:
   — an ECharts `title` option silently renders nothing. PieChart had to be
   registered for the donut; the center total is an HTML overlay instead
   (also more in the app's "values ON the visuals" style).
+
+## Simple view: Consume section with period tiles + 3-face flip (2026-10-07, user request)
+
+- The Consumers ring moved OUT of the Totals row into its own "Consume"
+  section after it, and became THREE period tiles (day / week / month) —
+  "like in case of total". Each tile round-robins three faces via
+  QuadFlipTile: ring (donut split + house total center) → stacked per-day
+  bars (rest at bottom) → value list (consumers, rest, whole house).
+  Period nav (‹ › + swipe) mirrors SourceCard; immutable periods cached
+  via periodImmutable (now exported from Dashboard.jsx).
+- Server: /api/stats/consumers gained type=week|month (calendar week
+  Monday-Sunday, calendar month; current period clamps to today). Bars:
+  day keeps the 7-day trailing window, week/month give one bar per day in
+  the period. The plug list now comes from getAllPlugNames() (every plug
+  ever seen) so a plug that reported 0 in a period still shows.
+- ConsumersRing.jsx deleted (superseded); ConsumerBars exported from
+  dashboard/ConsumersCard.jsx for reuse; PieChart stayed registered.
+- Headless-verification trap (hit twice): tile titles render uppercase via
+  CSS text-transform but textContent keeps the original case —
+  case-insensitive matching only.

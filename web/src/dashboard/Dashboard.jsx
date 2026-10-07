@@ -10,8 +10,9 @@ import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 // Is this past period immutable? (2026-10-01, user request: cache history
 // in the browser — only values that never change.) The cloud sync rewrites
 // today+yesterday, so a period is immutable only when it ENDED before
-// yesterday 00:00 local.
-function periodImmutable(type, offset) {
+// yesterday 00:00 local. Exported 2026-10-07 for the simple view's Consume
+// section tiles (same browser-cache rule).
+export function periodImmutable(type, offset) {
   if (offset < 1) return false; // current period — live
   const bound = immutableBeforeMs();
   const now = new Date();

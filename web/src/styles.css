@@ -3548,3 +3548,12 @@ pre {
 .consumers-ring-total .src-label {
   color: #e8ecef;
 }
+
+/* Consume section bars face: the shared ConsumerBars chart is absolutely
+   positioned (.back-bars), so its QuadFlipTile face needs an explicit
+   sized, positioned box. */
+.consumers-bars-face {
+  position: relative;
+  height: 200px;
+  padding: 0.4rem;
+}
