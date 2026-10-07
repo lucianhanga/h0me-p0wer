@@ -1481,6 +1481,15 @@ pre {
   min-width: 2.6em;
 }
 
+/* Rows WITHOUT a % share (To grid, the Consume list's whole-house total)
+   must keep their kWh in the value column — without the %-span's min-width
+   they drifted right, aligning under the other rows' percentages
+   (2026-10-07, user report). Rows with a .src-eur annotation (To battery's
+   "stored") keep their own layout. */
+.src-value:not(:has(.src-pct)):not(:has(.src-eur)) .src-kwh {
+  margin-right: calc(2.6em + 0.35rem); /* .src-pct min-width + .src-value gap */
+}
+
 /* Card footer: total spent (grid) vs total saved (battery + PV) — pinned to
    the tile bottom so all footers align across the row. */
 .src-money {
