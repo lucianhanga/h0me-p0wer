@@ -274,7 +274,11 @@ export default function GraphTab() {
           splitLine: { lineStyle: { color: "#2a323866" } },
         },
         // Inside zoom only — no range sliders for now.
-        dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
+        // preventDefaultMouseMove: false (2026-10-07, user report from the
+        // Consume tab): the inside-zoom roam controller otherwise
+        // preventDefaults touchmove-as-mousemove, so a vertical swipe over
+        // ANY chart showed the tooltip but never scrolled the page.
+        dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none", preventDefaultMouseMove: false }],
         series: def.series.map((s, si) => ({
           name: s.name,
           type: "line",
