@@ -8,6 +8,7 @@
 // when the user edits them in the app. `?refresh=1` forces a refetch.
 
 import { kvGet, kvSet, logActivity } from "./db.js";
+import { displayDeviceName } from "./device-name.js";
 
 const CONFIG_KV_KEY = "battery_config";
 // How long the (rarely-changing) account config is cached. Was 6 h —
@@ -407,7 +408,7 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
           member: true,
           live: {
             ts: m.ts ?? null,
-            name: m.name ?? "Solarbank",
+            name: displayDeviceName(m.name ?? "Solarbank"),
             sn: m.sn,
             pn: m.pn ?? null,
             expansionPacks: m.expansionPacks ?? 0,

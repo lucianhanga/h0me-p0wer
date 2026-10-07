@@ -148,6 +148,14 @@ EPIPE noise on every client disconnect).
   container; the ResizeObserver + `chart.resize()` then works on rotation.
 
 ### Gotchas already hit
+- **Device names carry the account's internal prefix** ("h-solar-tv",
+  "h-solarbank-4") and INTERNAL lookups depend on the RAW name —
+  `PV_PORT_W_<sanitized raw unit name>` env keys are built from it
+  (`pvSlotPeakWatts` in index.js). Strip only at UI-payload emit points
+  via `displayDeviceName()` (server/device-name.js, 2026-10-07): plugs in
+  anker-cloud.js, pvUnits in index.js (AFTER the env lookup), battery
+  live names in battery-params.js, plug_daily names on write AND read
+  (pre-convention rows stay prefixed in the DB).
 - `node:sqlite` binds JS numbers as REAL → SQL `(ts/b)*b` is float division;
   **bucket in JS, not SQL**.
 - `.env` lives at the repo ROOT; `index.js` resolves it relative to the module
