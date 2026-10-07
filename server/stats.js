@@ -807,7 +807,7 @@ export function registerStatsRoute(app, deps) {
   // (like the source tiles). "rest" = home − Σ plugs, floored at 0 (same
   // convention as the Consume tab's Rest-of-home).
   app.get("/api/stats/consumers", (req, res) => {
-    const type = ["day", "week", "month"].includes(req.query.type) ? req.query.type : "day";
+    const type = ["day", "week", "month", "year"].includes(req.query.type) ? req.query.type : "day";
     const offset = Math.max(0, Math.min(Number(req.query.offset ?? 0) || 0, 400));
     const r2 = (v) => Math.round(v * 100) / 100;
     const dayMs = 86400000;
@@ -832,18 +832,29 @@ export function registerStatsRoute(app, deps) {
       const lastDay = localDate(new Date(start.getTime() + 6 * dayMs));
       endStr = lastDay > todayStr ? todayStr : lastDay;
       label = offset === 0 ? null : `${startStr.slice(5)} – ${lastDay.slice(5)}`;
-      for (let d = new Date(start); localDate(d) <= endStr; d = new Date(d.getTime() + dayMs)) {
+      // ALL 7 day slots — future days render as empty placeholders (same
+      // contract as the Totals/production tiles, 2026-10-07 user request).
+      for (let d = new Date(start); localDate(d) <= lastDay; d.setDate(d.getDate() + 1)) {
         barDates.push(localDate(d));
       }
-    } else {
+    } else if (type === "month") {
       const first = new Date(dayStart.getFullYear(), dayStart.getMonth() - offset, 1);
       startStr = localDate(first);
       const lastDay = localDate(new Date(first.getFullYear(), first.getMonth() + 1, 0));
       endStr = lastDay > todayStr ? todayStr : lastDay;
       label = offset === 0 ? null : first.toLocaleDateString("en", { month: "long", year: "numeric" });
-      for (let d = new Date(first); localDate(d) <= endStr; d = new Date(d.getTime() + dayMs)) {
+      // Every day of the month; days after today stay empty.
+      for (let d = new Date(first); localDate(d) <= lastDay; d.setDate(d.getDate() + 1)) {
         barDates.push(localDate(d));
       }
+    } else {
+      // year: sums over the year; bars are the 12 monthly slots (built
+      // below — barDates stays empty here).
+      const y = dayStart.getFullYear() - offset;
+      startStr = `${y}-01-01`;
+      const lastDay = `${y}-12-31`;
+      endStr = lastDay > todayStr ? todayStr : lastDay;
+      label = offset === 0 ? null : String(y);
     }
 
     // Home kWh per day over the period (and bar days for week/month).
@@ -921,6 +932,34 @@ export function registerStatsRoute(app, deps) {
           plugSumH += kwh;
         }
         bar.rest = r2(Math.max(0, homeH[h] - plugSumH));
+        bars.push(bar);
+      }
+    } else if (type === "year") {
+      // 12 monthly slots, months after the current one empty (same
+      // placeholder contract as week/day). Month sums group the per-day
+      // maps built above.
+      const homeByMonth = new Map();
+      for (const [d, v] of homeByDate) {
+        const m = d.slice(0, 7);
+        homeByMonth.set(m, (homeByMonth.get(m) ?? 0) + v);
+      }
+      const plugByMonth = new Map(); // month -> Map(sn -> kwh)
+      for (const [d, pd] of plugsByDate) {
+        const m = d.slice(0, 7);
+        if (!plugByMonth.has(m)) plugByMonth.set(m, new Map());
+        for (const [sn, kwh] of pd) {
+          plugByMonth.get(m).set(sn, (plugByMonth.get(m).get(sn) ?? 0) + (kwh ?? 0));
+        }
+      }
+      const y = startStr.slice(0, 4);
+      bars = [];
+      for (let m = 1; m <= 12; m++) {
+        const ym = `${y}-${String(m).padStart(2, "0")}`;
+        const pd = plugByMonth.get(ym) ?? new Map();
+        const home = homeByMonth.get(ym) ?? 0;
+        const sum = [...pd.values()].reduce((a, v) => a + v, 0);
+        const bar = { label: ym, rest: r2(Math.max(0, home - sum)) };
+        for (const sn of sns) bar[`plug__${sn}`] = r2(pd.get(sn) ?? 0);
         bars.push(bar);
       }
     } else {

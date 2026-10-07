@@ -84,6 +84,7 @@ export default function Dashboard() {
         <ConsumersPeriodCard type="day" title={`${t("nav.plugs")} · ${t("dashboard.today")}`} />
         <ConsumersPeriodCard type="week" title={`${t("nav.plugs")} · ${t("dashboard.thisWeek")}`} />
         <ConsumersPeriodCard type="month" title={`${t("nav.plugs")} · ${t("dashboard.thisMonth")}`} />
+        <ConsumersPeriodCard type="year" title={`${t("nav.plugs")} · ${t("dashboard.thisYear")}`} />
       </div>
       {topDays && (topDays.top.length > 0 || topDays.bottom.length > 0) && (
         <div className="topdays-grid">
