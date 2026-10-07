@@ -6238,3 +6238,18 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Headless-verification trap (hit twice): tile titles render uppercase via
   CSS text-transform but textContent keeps the original case —
   case-insensitive matching only.
+
+## Dashboard: same Consume period tiles as the simple view (2026-10-07, user request)
+
+- The Dashboard's day-only ConsumersCard (added 2026-10-06) is REPLACED by
+  the same three period tiles the simple view's Consume section got hours
+  earlier: Consume · Today / This week / This month, each with the
+  ring → bars → list round-robin. "Consume ·" prefix on the titles because
+  the Dashboard grid has no section headers and the Totals tiles already
+  read "Today"/"This week"/"This month".
+- Refactor to make that sharing clean: ConsumersPeriodCard (+ RingFace,
+  ListFace, ConsumerBars) moved to web/src/components/; periodImmutable
+  moved from Dashboard.jsx to historyCache.js (importing it from
+  Dashboard.jsx into a components/ file used BY Dashboard.jsx would have
+  been a circular import). dashboard/ConsumersCard.jsx deleted;
+  simple/ConsumersSection.jsx is now just the section wrapper.
