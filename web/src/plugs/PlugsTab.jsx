@@ -74,7 +74,11 @@ function chartOption(color) {
       },
       splitLine: { lineStyle: { color: "#2a323866" } },
     },
-    dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none" }],
+    // preventDefaultMouseMove: false (2026-10-07, user report): with the
+    // default (true) the inside-zoom roam controller preventDefaults
+    // touchmove-as-mousemove — a vertical swipe over a chart showed the
+    // tooltip but never scrolled the page on phones.
+    dataZoom: [{ type: "inside", xAxisIndex: 0, filterMode: "none", preventDefaultMouseMove: false }],
     series: [
       {
         name: "W",

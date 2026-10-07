@@ -6285,3 +6285,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   loops produced 32 "days" for October 2026 (CEST→CET on Oct 25) —
   day-stepping must use `setDate(d.getDate() + 1)`, not millisecond
   arithmetic.
+
+## Phone scroll blocked over charts (2026-10-07, user report)
+
+- Symptom (Consume tab, phone): a vertical swipe over a chart showed the
+  axis tooltip but the page never scrolled. Root cause (traced through
+  zrender → ECharts): zrender maps touchmove to mousemove; the inside
+  dataZoom's RoamController is created with `preventDefaultMouseMove: true`
+  (the DEFAULT), which preventDefaults every touchmove-as-mousemove → the
+  browser never gets to scroll. The tooltip still shows because the event
+  is processed before being swallowed.
+- Fix: `preventDefaultMouseMove: false` on the inside dataZoom in BOTH
+  chart builders that have one (PlugsTab + GraphTab — same latent bug on
+  the Graph tab). Desktop drag-pan is unaffected (the preventDefault there
+  only suppresses text selection). Headless verification of touch scroll
+  isn't possible — bundle-level check + needs a real-phone pass.
+- Not affected: SimpleCharts/BackBars/ConsumerBars (no inside dataZoom →
+  no roam controller → scroll was never blocked there).
