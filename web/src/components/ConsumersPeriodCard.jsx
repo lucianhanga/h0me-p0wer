@@ -254,12 +254,15 @@ export default function ConsumersPeriodCard({ type, title }) {
   if (!data || !data.plugs.length) return null;
 
   const face = FACES[faceIdx];
-  // Bars: day/week windows label by weekday, month by day-of-month —
-  // mirroring the Totals tiles' back-face label granularity.
+  // Bars granularity mirrors the Totals tiles (2026-10-07, user request):
+  // the day tile's bars are HOURLY (epoch-ms labels → HH:MM), week windows
+  // label by weekday, month by day-of-month.
   const barLabel =
-    type === "month"
-      ? (l) => l.slice(8)
-      : (l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" });
+    type === "day"
+      ? (l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : type === "month"
+        ? (l) => l.slice(8)
+        : (l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" });
 
   return (
     <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
@@ -274,8 +277,10 @@ export default function ConsumersPeriodCard({ type, title }) {
           ›
         </button>
       </div>
+      {/* No face-name title (2026-10-07, user request) — the box alone
+          flips through ring → bars → list. */}
       <QuadFlipTile
-        title={t(`plugs.faces.${face}`)}
+        title={null}
         onFlip={() => setFaceIdx((i) => (i + 1) % FACES.length)}
       >
         {face === "ring" ? (

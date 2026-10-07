@@ -17,7 +17,6 @@ export const en = {
     offline: "offline",
     empty: "No smart plugs found on this account yet.",
     house: "Whole house",
-    faces: { ring: "Ring", bars: "Bars", list: "Values" },
     note: "Per-plug power history is recorded locally from now on — the Anker cloud only keeps daily totals, so curves fill in over time.",
   },
   common: {

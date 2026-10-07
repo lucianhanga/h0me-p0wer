@@ -6253,3 +6253,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   Dashboard.jsx into a components/ file used BY Dashboard.jsx would have
   been a circular import). dashboard/ConsumersCard.jsx deleted;
   simple/ConsumersSection.jsx is now just the section wrapper.
+
+## Consume section: face labels removed + hourly bars for Today (2026-10-07, user request)
+
+- The QuadFlipTile face-name title ("Ring"/"Bars"/"Values") is gone from
+  all Consume tiles — QuadFlipTile's title is now optional (title == null
+  → no title bar; the box alone flips). SimpleCharts still passes titles.
+  plugs.faces.* i18n keys removed again (added yesterday, now unused).
+- /api/stats/consumers type=day bars are now HOURLY (24 bars, epoch-ms
+  labels formatted HH:MM by the frontend) — same granularity as the Totals
+  "Today" tile: home per hour from the cloud 20-min home trend, per-plug
+  per hour from LOCAL plug_samples (mean watts over the hour = Wh). Days
+  past plug_samples' 7-day retention render home-only (rest) bars. Week/
+  month bars stay per-day (weekday / day-of-month labels) — they already
+  matched the Totals tiles.
+- Note: early-morning hours can show rest=0 with plug segments only — the
+  home trend syncs every 15 min while plug samples are live, so the
+  current hour's home figure lags; the floor-at-0 keeps it sane.

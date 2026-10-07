@@ -19,6 +19,7 @@ import {
   getEarliestPlugDate,
   getAllPlugNames,
   getCloudHomeDayPower,
+  getPlugSamples,
 } from "./db.js";
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
@@ -825,7 +826,6 @@ export function registerStatsRoute(app, deps) {
       startStr = localDate(selected);
       endStr = startStr;
       label = offset === 0 ? null : offset === 1 ? "Yesterday" : startStr;
-      for (let i = 6; i >= 0; i--) barDates.push(localDate(new Date(selected.getTime() - i * dayMs)));
     } else if (type === "week") {
       const start = new Date(mondayOf(dayStart).getTime() - offset * 7 * dayMs);
       startStr = localDate(start);
@@ -846,8 +846,8 @@ export function registerStatsRoute(app, deps) {
       }
     }
 
-    // Home kWh per day over the union of period + bar days.
-    const homeFrom = type === "day" ? barDates[0] : startStr;
+    // Home kWh per day over the period (and bar days for week/month).
+    const homeFrom = startStr;
     const homeByDate = new Map();
     for (const r of getCloudHomeDayPower(homeFrom, endStr)) {
       const d = localDate(new Date(r.ts));
@@ -883,20 +883,56 @@ export function registerStatsRoute(app, deps) {
     const { perSn, any } = sumIn(startStr, endStr);
     const plugs = sns.map((sn) => ({ sn, name: names.get(sn) ?? sn, kwh: r2(perSn.get(sn) ?? 0) }));
     const homeKwh = r2(
-      barDates.length && type === "day"
-        ? (homeByDate.get(startStr) ?? 0)
-        : [...homeByDate.entries()].reduce((a, [d, v]) => (d >= startStr && d <= endStr ? a + v : a), 0),
+      [...homeByDate.entries()].reduce((a, [d, v]) => (d >= startStr && d <= endStr ? a + v : a), 0),
     );
     const plugSum = plugs.reduce((a, p) => a + p.kwh, 0);
 
-    const bars = barDates.map((d) => {
-      const pd = plugsByDate.get(d) ?? new Map();
-      const home = homeByDate.get(d) ?? 0;
-      const sum = [...pd.values()].reduce((a, v) => a + (v ?? 0), 0);
-      const bar = { label: d, rest: r2(Math.max(0, home - sum)) };
-      for (const sn of sns) bar[`plug__${sn}`] = r2(pd.get(sn) ?? 0);
-      return bar;
-    });
+    let bars;
+    if (type === "day") {
+      // HOURLY bars for the selected day (2026-10-07, user request — same
+      // granularity as the Totals "Today" tile's bars): home per hour from
+      // the cloud 20-min home trend, per-plug per hour from the LOCAL
+      // plug_samples (mean watts over the hour = Wh). The cloud keeps no
+      // intraday plug history, so days past plug_samples' 7-day retention
+      // render home-only (rest) bars.
+      const dayStartMs = new Date(`${startStr}T00:00:00`).getTime();
+      const homeH = new Array(24).fill(0);
+      for (const r of getCloudHomeDayPower(startStr, endStr)) {
+        homeH[new Date(r.ts).getHours()] += (Math.max(r.power ?? 0, 0) * (20 / 60)) / 1000;
+      }
+      const plugWH = new Map(); // sn -> 24 × {s, c}
+      for (const r of getPlugSamples(dayStartMs, dayStartMs + dayMs - 1)) {
+        if (r.watts == null) continue;
+        const h = new Date(r.ts).getHours();
+        if (!plugWH.has(r.sn)) plugWH.set(r.sn, Array.from({ length: 24 }, () => ({ s: 0, c: 0 })));
+        const cell = plugWH.get(r.sn)[h];
+        cell.s += r.watts;
+        cell.c++;
+      }
+      bars = [];
+      for (let h = 0; h < 24; h++) {
+        const bar = { label: dayStartMs + h * 3600000 }; // epoch ms — the
+        // frontend formats HH:MM like the Totals Today tile
+        let plugSumH = 0;
+        for (const sn of sns) {
+          const cell = plugWH.get(sn)?.[h];
+          const kwh = cell?.c ? r2(cell.s / cell.c / 1000) : 0;
+          bar[`plug__${sn}`] = kwh;
+          plugSumH += kwh;
+        }
+        bar.rest = r2(Math.max(0, homeH[h] - plugSumH));
+        bars.push(bar);
+      }
+    } else {
+      bars = barDates.map((d) => {
+        const pd = plugsByDate.get(d) ?? new Map();
+        const home = homeByDate.get(d) ?? 0;
+        const sum = [...pd.values()].reduce((a, v) => a + (v ?? 0), 0);
+        const bar = { label: d, rest: r2(Math.max(0, home - sum)) };
+        for (const sn of sns) bar[`plug__${sn}`] = r2(pd.get(sn) ?? 0);
+        return bar;
+      });
+    }
 
     const earliest = getEarliestPlugDate();
     res.json({
