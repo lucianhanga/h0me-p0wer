@@ -6270,3 +6270,18 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Note: early-morning hours can show rest=0 with plug segments only — the
   home trend syncs every 15 min while plug samples are live, so the
   current hour's home figure lags; the floor-at-0 keeps it sane.
+
+## Consume tiles: full-period empty-slot bars + year tile (2026-10-07, user request)
+
+- Bars now show the WHOLE period with future slots empty, like the
+  production/Totals tiles: week = all 7 Mon–Sun slots (not clamped to
+  today), month = all 28–31 day slots, and a NEW year tile (12 monthly
+  slots, month-name labels). Added to both the simple Consume section and
+  the Dashboard's Consume row. Period SUMS (ring/list faces) still clamp
+  to today — the placeholders are bar-chart-only.
+- Server: /api/stats/consumers gained type=year (12 monthly bars grouped
+  from the per-day maps; label = year number for past years).
+- DST bug caught by verification: building bar days with `+86400000 ms`
+  loops produced 32 "days" for October 2026 (CEST→CET on Oct 25) —
+  day-stepping must use `setDate(d.getDate() + 1)`, not millisecond
+  arithmetic.

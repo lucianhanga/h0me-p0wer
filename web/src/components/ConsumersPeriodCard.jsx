@@ -256,13 +256,15 @@ export default function ConsumersPeriodCard({ type, title }) {
   const face = FACES[faceIdx];
   // Bars granularity mirrors the Totals tiles (2026-10-07, user request):
   // the day tile's bars are HOURLY (epoch-ms labels → HH:MM), week windows
-  // label by weekday, month by day-of-month.
+  // label by weekday, month by day-of-month, year by month name.
   const barLabel =
     type === "day"
       ? (l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : type === "month"
         ? (l) => l.slice(8)
-        : (l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" });
+        : type === "year"
+          ? (l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })
+          : (l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" });
 
   return (
     <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>

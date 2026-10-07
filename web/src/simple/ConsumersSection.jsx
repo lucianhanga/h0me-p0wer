@@ -25,6 +25,7 @@ export default function ConsumersSection() {
         <ConsumersPeriodCard type="day" title={t("dashboard.today")} />
         <ConsumersPeriodCard type="week" title={t("dashboard.thisWeek")} />
         <ConsumersPeriodCard type="month" title={t("dashboard.thisMonth")} />
+        <ConsumersPeriodCard type="year" title={t("dashboard.thisYear")} />
       </div>
     </>
   );
