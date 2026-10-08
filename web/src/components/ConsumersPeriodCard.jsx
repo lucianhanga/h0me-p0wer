@@ -179,7 +179,13 @@ export function ListFace({ data, t }) {
 export default function ConsumersPeriodCard({ type, title }) {
   const t = useT();
   const [offset, setOffset] = useState(0);
-  const [data, setData] = useState(null);
+  // Split state (2026-10-08, user report "tiles cannot be navigated"):
+  // `current` is owned by the refresh effect (offset 0 only), `past` by
+  // go(). A single `data` state got CLOBBERED by the effect — navigating
+  // flipped the `offset === 0` dep, the effect re-ran and overwrote the
+  // just-navigated period with today's data, so the tile never moved.
+  const [current, setCurrent] = useState(null);
+  const [past, setPast] = useState(null);
   const [blocked, setBlocked] = useState(false);
   const [faceIdx, setFaceIdx] = useState(0);
   const swipeStart = useRef(null);
@@ -206,7 +212,7 @@ export default function ConsumersPeriodCard({ type, title }) {
     const tick = async () => {
       const d = await load(0);
       if (!cancelled && d) {
-        setData(d);
+        setCurrent(d);
         setBlocked(!d.hasEarlier);
       }
     };
@@ -240,6 +246,12 @@ export default function ConsumersPeriodCard({ type, title }) {
   async function go(dir) {
     const next = offset + dir;
     if (next < 0) return;
+    if (next === 0) {
+      setOffset(0);
+      setPast(null);
+      setBlocked(!(current?.hasEarlier ?? false));
+      return;
+    }
     const d = await load(next);
     if (!d) return;
     if (!d.hasData) {
@@ -247,10 +259,11 @@ export default function ConsumersPeriodCard({ type, title }) {
       return;
     }
     setBlocked(!d.hasEarlier);
-    setData(d);
+    setPast(d);
     setOffset(next);
   }
 
+  const data = offset === 0 ? current : past;
   if (!data || !data.plugs.length) return null;
 
   const face = FACES[faceIdx];

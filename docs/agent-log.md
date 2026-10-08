@@ -6327,3 +6327,18 @@ cross-cutting), every finding re-verified by hand before fixing:
   PV_PORT_W_<sanitized name> env keys from the RAW unit name; stripping
   m.name itself would silently zero every PV port's capacity bar
   (verified intact after the change: peaks 500/1000 per port).
+
+## Consume tiles: period navigation clobbered by the refresh effect (2026-10-08, user report)
+
+- Symptom: ‹ on a Consume tile (simple Consume section AND Dashboard row —
+  same shared component) never moved the tile to the previous period.
+- Root cause (single-state design flaw in ConsumersPeriodCard): go() set
+  the navigated period into the SAME `data` state the offset-0 refresh
+  effect owns; the effect's `offset === 0` dep flipped on navigation,
+  re-ran, and overwrote the navigated data with today's — so the tile
+  kept showing today while offset said 1. SourceCard avoids this by
+  keeping overview data (props) and past data (state) separate.
+- Fix: split into `current` (effect-owned, offset 0) + `past` (go-owned);
+  active = offset === 0 ? current : past; go(−1→0) clears past and
+  restores blocked from current.hasEarlier. Verified headless: ‹ turns
+  the Today tile into "Yesterday".
