@@ -2870,6 +2870,16 @@ pre {
   box-shadow: inset 2px 0 0 #f7a44f;
 }
 
+/* Scannability (notification-center UX guidance): a quiet hover state that
+   never overrides the unread highlight. */
+.activity-row:hover {
+  background: #ffffff08;
+}
+
+.activity-new:hover {
+  background: #f7a44f1f;
+}
+
 .drift-actions {
   display: inline-flex;
   gap: 0.4rem;

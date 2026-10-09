@@ -361,7 +361,7 @@ export default function StrategyTab() {
 
       {pendingPatch && (
         <div className="ask-backdrop" onClick={() => setPendingPatch(null)}>
-          <div className="ask-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="ask-panel card" onClick={(e) => e.stopPropagation()}>
             <button className="ask-close" onClick={() => setPendingPatch(null)} aria-label={t("ask.close")}>
               ×
             </button>

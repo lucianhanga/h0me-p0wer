@@ -6385,3 +6385,17 @@ cross-cutting), every finding re-verified by hand before fixing:
   the dev instance, whose meter SN is in no site). Both now resolve via
   `this.anker.siteId ?? await this.anker.resolveSiteId()`, same as
   getBatteryInfo.
+
+## Activity panel readability (2026-10-09, user report: "transparent background makes it hard to read")
+
+- Root cause was not a design choice but a missing class: every modal in
+  the app composes `ask-panel card` (`.card` carries the opaque #1a2128
+  background) — the ActivityBell panel was `ask-panel activity-panel`
+  WITHOUT card, and the StrategyTab PIN modal had the same omission. Both
+  fixed. Best-practice sweep (notification-center UX guidance) added:
+  Esc-to-close, and a quiet row-hover state that never overrides the
+  unread highlight.
+- Verified with a raw-CDP headless-Chrome script (/tmp/shot-activity-panel.mjs,
+  drives the real page over the DevTools protocol using the repo's ws
+  package — reusable pattern for click-dependent UI checks): computed
+  background rgb(26,33,40), 50 rows, screenshot inspected.
