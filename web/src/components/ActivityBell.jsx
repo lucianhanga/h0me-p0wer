@@ -55,6 +55,16 @@ export default function ActivityBell() {
     return () => clearTimeout(timer);
   }, [streamMsg, refresh]);
 
+  // Esc closes the panel (standard popover behavior).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
   function openPanel() {
     setPrevSeenAt(seenAt);
     const now = entries[0]?.ts ?? Date.now();
@@ -105,7 +115,7 @@ export default function ActivityBell() {
       </button>
       {open && (
         <div className="ask-backdrop" onClick={() => setOpen(false)}>
-          <div className="ask-panel activity-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="ask-panel activity-panel card" onClick={(e) => e.stopPropagation()}>
             <button className="ask-close" onClick={() => setOpen(false)} aria-label={t("ask.close")}>
               ×
             </button>
