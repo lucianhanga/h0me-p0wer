@@ -177,7 +177,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-09, v1.5.233, `main`.** Production deploys are the user's own
+**As of 2026-10-09, v1.5.235, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a
@@ -223,6 +223,13 @@ production screenshot, check the deployed version:
   token. Deliberately **fails open when `API_TOKEN` is unset**. Internal
   loopback calls must send the token too — auth once broke them (regression
   fixed in PR #376).
+- **Config-drift watchdog** (`server/config-watchdog.js`, 2026-10-09):
+  alerts (`config_drift` activity) when the battery schedule (5-min read)
+  or smart-plug membership (scene poll) change outside this server —
+  account-takeover detection. Own writes self-attribute via
+  `powerPlan.hooks.onScheduleWritten` (3-min grace for cloud propagation);
+  owner resolves via PIN-protected Accept/Revert in the ActivityBell. No
+  auto-rollback (owner's own app changes are legitimate drift).
 - **Garmin watch companion** consumes `GET /api/watch/status` (midnight-
   anchored history window, home/battery source split, today's breakdown).
   The contract's source of truth is `h0me-p0wer-garmin/README.md`;

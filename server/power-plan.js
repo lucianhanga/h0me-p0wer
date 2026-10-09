@@ -285,6 +285,10 @@ export class PowerPlanController {
     this.lastWriteAt = 0;
     this.lastError = null;
     this.lastDecision = null; // {at, pvW, demandW, soc, targetW, wrote, reason}
+    // Out-of-band schedule-write reporters (2026-10-09): the config-drift
+    // watchdog registers onScheduleWritten here so OUR writes update its
+    // baseline and never count as drift. Set by index.js after construction.
+    this.hooks = {};
     try {
       const saved = JSON.parse(readFileSync(this.stateFile, "utf8"));
       this.enabled = saved.enabled === true;
@@ -345,8 +349,13 @@ export class PowerPlanController {
   }
 
   async readSchedule() {
+    // Resolve like getBatteryInfo does (2026-10-09 watchdog fix): on the
+    // site_list[0] FALLBACK path resolveSiteId deliberately returns
+    // UNCACHED (this.anker.siteId stays undefined) — posting site_id:
+    // undefined then makes the cloud answer HTTP 400.
+    const siteId = this.anker.siteId ?? (await this.anker.resolveSiteId());
     const resp = await this.anker.post(GET_EP, {
-      site_id: this.anker.siteId,
+      site_id: siteId,
       param_type: PARAM_TYPE,
     });
     const raw = resp?.param_data ?? resp?.data?.param_data;
@@ -357,8 +366,9 @@ export class PowerPlanController {
   }
 
   async writeSchedule(parsed) {
+    const siteId = this.anker.siteId ?? (await this.anker.resolveSiteId());
     const resp = await this.anker.post(SET_EP, {
-      site_id: this.anker.siteId,
+      site_id: siteId,
       param_type: PARAM_TYPE,
       cmd: CMD,
       param_data: JSON.stringify(parsed),
@@ -948,6 +958,7 @@ export class PowerPlanController {
           this.pendingUp = null;
           wrote = true;
           this.saveState();
+          this.hooks.onScheduleWritten?.(JSON.stringify(body));
         } else {
           reason = `${reason} — waiting (min write gap)`;
         }
@@ -1013,6 +1024,7 @@ export class PowerPlanController {
       });
       this.template = null;
       this.lastWrittenPower = null;
+      this.hooks.onScheduleWritten?.(this.originalRaw);
       // Persist AGAIN after nulling the belief (2026-09-22 code review):
       // previously the only saveState() ran BEFORE this null, leaving a
       // stale lastWrittenPower on disk — the same stale-belief class as

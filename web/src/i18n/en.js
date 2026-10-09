@@ -83,6 +83,13 @@ export const en = {
     },
     pin_ip_locked: "PIN: device blocked after 3 wrong attempts ({ip})",
     pin_ip_unlocked: "PIN: device unblocked ({ip})",
+    config_drift: "⚠️ Settings changed outside this app ({field}): {from} → {to}",
+    config_drift_accept: "Settings change confirmed — adopted as the new baseline",
+    config_drift_revert: "Unexpected settings change reverted to the baseline schedule",
+    drift: {
+      accept: "Accept",
+      revert: "Revert",
+    },
     meter: {
       up: "Smart meter connection restored (direct)",
       down: "Smart meter connection lost — using cloud data",
