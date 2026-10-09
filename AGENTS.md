@@ -177,7 +177,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-06, v1.5.219, `main`.** Production deploys are the user's own
+**As of 2026-10-09, v1.5.233, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a
@@ -186,10 +186,16 @@ production screenshot, check the deployed version:
 "it's not fixed" reports were production lagging behind `main`.
 
 - **System**: one Anker site ("h-power", recreated 2026-09-27): Power Dock +
-  SB4 + SB2 Pro + meter-2. Site resolution is pinned to the site containing
-  the local meter's SN (never `site_list[0]`). Production `.env`:
+  SB4 + SB2 Pro + meter-2 + **6 Smart Plugs Gen2 (A17X8, since 2026-10-06)**.
+  Site resolution is pinned to the site containing the local meter's SN
+  (never `site_list[0]`). Production `.env`:
   `METER_IP=192.168.1.15` (meter-2), `PV_PEAK_KWP=6.0`, `STRATEGY_PIN`,
   `BIND_IP=127.0.0.1` (app reachable only via the Cloudflare tunnel).
+  Plug surfaces: Consume tab (full view), Consume section (simple view) +
+  Consume rows (Dashboard) — all on /api/stats/consumers +
+  /api/plugs/timeseries. In-flight WIP from a parallel session 2026-10-09:
+  branch `wip/watch-consumers-today` (watch endpoint gains per-plug kWh;
+  saved unverified, check the Garmin contract before finishing it).
 - **No automated tests anywhere** — verification is manual dry-run scripts,
   the standalone simulation harness pattern (fake Date.now + stateful mock
   anker + real PowerPlanController), and live-in-browser checks.
