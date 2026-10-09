@@ -22,6 +22,7 @@ import { trackVisitor, activeVisitorCount, touchVisitor, visitorKeyFromUpgradeRe
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
 import { PowerPlanController } from "./power-plan.js";
+import { ConfigWatchdog } from "./config-watchdog.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -2473,6 +2474,13 @@ async function syncBatteryInner() {
           console.warn("[db] failed to persist plug samples:", err.message);
         }
       }
+      // Config-drift watchdog: plug membership rides this poll (zero extra
+      // cloud calls); the schedule is checked separately on a 5-min cadence.
+      try {
+        configWatchdog.onScene(info);
+      } catch (err) {
+        console.warn("[watchdog] scene check failed:", err.message);
+      }
       broadcastLive({ batteryTriggered: true }); // REST cadence 10 s, throttled inside
       // Grid channel from the same call — the best available source when
       // Modbus is down; graphs merge it below local snapshots.
@@ -2586,6 +2594,91 @@ setInterval(async () => {
 // Tick on every battery sync (10 s cadence); the controller itself decides
 // whether a rewrite is warranted.
 const powerPlan = new PowerPlanController(anker, () => latestBattery ?? getLatestBattery(), activity);
+
+// Config-drift watchdog (2026-10-09, user request — see config-watchdog.js
+// for the threat model): detects Anker-device settings changed outside this
+// server (account takeover, or the owner's own app usage) and alerts via the
+// activity channel. The power-plan reports its own writes through hooks so
+// they never count as drift.
+const configWatchdog = new ConfigWatchdog({
+  readSchedule: () => powerPlan.readSchedule(),
+  writeSchedule: (parsed) => powerPlan.writeSchedule(parsed),
+  kvGet,
+  kvSet,
+  activity,
+});
+powerPlan.hooks = { onScheduleWritten: (raw) => configWatchdog.adoptSchedule(raw) };
+// First check shortly after startup (the cloud client needs its token
+// first), then the module's internal 5-min cadence gates further reads.
+setTimeout(() => {
+  configWatchdog.checkSchedule({ force: true }).catch((err) => {
+    console.warn("[watchdog] initial schedule check failed:", err.message);
+  });
+}, 45 * 1000).unref();
+setInterval(() => {
+  configWatchdog.checkSchedule().catch((err) => {
+    console.warn("[watchdog] schedule check failed:", err.message);
+  });
+}, 60 * 1000).unref();
+
+app.get("/api/security/drift", (req, res) => {
+  res.json({ ok: true, data: configWatchdog.getState() });
+});
+
+// PIN gate for the drift actions below — same rules as /api/power-plan/
+// strategy (blacklist first, 3 strikes, correct PIN resets the counter).
+function pinGate(req, res) {
+  const ip = clientIp(req);
+  if (pinBlacklist().includes(ip)) {
+    res.status(403).json({ ok: false, error: "locked", locked: true });
+    return false;
+  }
+  if ((req.body?.pin ?? null) !== (process.env.STRATEGY_PIN ?? "0000")) {
+    const fails = (pinAttempts.get(ip) ?? 0) + 1;
+    pinAttempts.set(ip, fails);
+    if (fails >= PIN_MAX_ATTEMPTS) {
+      pinBlock(ip);
+      res.status(403).json({ ok: false, error: "locked", locked: true });
+    } else {
+      res
+        .status(403)
+        .json({ ok: false, error: "invalid PIN", attemptsLeft: PIN_MAX_ATTEMPTS - fails });
+    }
+    return false;
+  }
+  pinAttempts.delete(ip);
+  return true;
+}
+
+// Accept the drifted config as the new trusted baseline (the change was the
+// owner's own, e.g. made in the Anker app).
+app.post("/api/security/drift/accept", (req, res) => {
+  if (!pinGate(req, res)) return;
+  configWatchdog.accept();
+  activity("config_drift_accept", {});
+  res.json({ ok: true, data: configWatchdog.getState() });
+});
+
+// Write the baseline schedule back to the device (the change was NOT the
+// owner's). Schedule only — plugs have no write path in this codebase.
+app.post("/api/security/drift/revert", async (req, res) => {
+  if (!pinGate(req, res)) return;
+  try {
+    await configWatchdog.revertSchedule();
+    // Keep the power-plan's belief truthful after an out-of-band write —
+    // same reconcile discipline as after its own reads.
+    try {
+      const { parsed } = await powerPlan.readSchedule();
+      powerPlan.reconcileWrittenPower(parsed);
+    } catch {
+      /* next tick reconciles anyway */
+    }
+    activity("config_drift_revert", {});
+    res.json({ ok: true, data: configWatchdog.getState() });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message });
+  }
+});
 
 // Envelope matches the rest of the API ({ok, data}/{ok, error}, same as
 // cloudRoute() below) — these four used to return the bare state object on

@@ -6342,3 +6342,46 @@ cross-cutting), every finding re-verified by hand before fixing:
   active = offset === 0 ? current : past; go(−1→0) clears past and
   restores blocked from current.hasEarlier. Verified headless: ‹ turns
   the Today tile into "Yesterday".
+
+## Config-drift watchdog (2026-10-09, user request — fear: Anker account takeover silently changing device settings)
+
+- Threat model: the cloud account is a remote write-channel that CANNOT be
+  closed from our side (devices always listen to Anker's cloud MQTT; local
+  Modbus control does not unsubscribe them). No TOTP 2FA on Anker accounts
+  as far as the community tooling shows. So the defense is DETECTION +
+  owner decision, not prevention.
+- New server/config-watchdog.js (ConfigWatchdog): watches the battery
+  schedule (param_type 6, own 5-min read cadence — ~0.3 req/min, no
+  rate-limit pressure) and smart-plug MEMBERSHIP (sn+name+tag, rides the
+  existing scene poll free). Plug on/off state is NOT watched (scene parse
+  gives connectivity only). SOC floors were already covered by
+  battery-params.js's floor_changed.
+- Baseline in kv `config_watchdog`; first run adopts silently. Comparison
+  is a sorted recursive stringify — the cloud reshuffles JSON key order
+  between reads, naive string compare would false-alert.
+- Self-change attribution: power-plan got a `hooks.onScheduleWritten(raw)`
+  callback (set by index.js after construction — constructor takes no new
+  param), fired after its preset writes AND the disable() restore; the
+  watchdog adopts the written value as baseline and opens a 3-min grace
+  window in which BOTH old and new values pass (cloud propagation lag
+  would otherwise "detect" our own write's old value as drift).
+- NO auto-rollback — a drift can be the owner's own legitimate Anker-app
+  change and auto-revert would fight them. Instead: one
+  activity("config_drift") per distinct value (alert-once per value, not
+  per sighting), ActivityBell rows get PIN-protected Accept (adopt
+  observed as new baseline) / Revert (schedule only — plugs have no write
+  path) buttons; the PIN is shared with the strategy gate's sessionStorage
+  entry. Routes: GET /api/security/drift, POST .../accept, .../revert
+  (pinGate extracted from the strategy route's pattern, same blacklist
+  rules).
+- Verified with the throwaway-harness pattern (/tmp/watchdog-sim.mjs, 18
+  checks: baseline adoption, key-order shuffle, foreign drift once-only,
+  grace suppression, own-write silence, plug add/remove/rename, accept,
+  revert, restart persistence) + live endpoints after restart.
+- Latent bug found + fixed while wiring it: power-plan's
+  readSchedule/writeSchedule read `this.anker.siteId` DIRECTLY, but on the
+  site_list[0] fallback path resolveSiteId deliberately returns UNCACHED —
+  siteId stays undefined and the param endpoints answer HTTP 400 (seen on
+  the dev instance, whose meter SN is in no site). Both now resolve via
+  `this.anker.siteId ?? await this.anker.resolveSiteId()`, same as
+  getBatteryInfo.

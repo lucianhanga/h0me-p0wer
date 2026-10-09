@@ -63,6 +63,35 @@ export default function ActivityBell() {
     setOpen(true);
   }
 
+  // Owner actions on a config-drift entry (2026-10-09): accept = the change
+  // was mine, adopt it as the new baseline; revert = write the baseline
+  // schedule back. Both are PIN-protected server-side; the PIN is shared
+  // with the strategy gate's sessionStorage entry, asked once per session.
+  async function driftAction(action) {
+    let pin = sessionStorage.getItem("strategyPin");
+    if (pin == null) {
+      pin = window.prompt(t("pin.body"));
+      if (pin == null) return;
+    }
+    const r = await fetch(`/api/security/drift/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+    const s = await r.json();
+    if (r.status === 403) {
+      sessionStorage.removeItem("strategyPin");
+      window.alert(s.locked ? t("pin.locked") : t("pin.wrong"));
+      return;
+    }
+    if (!r.ok || !s.ok) {
+      window.alert(s.error ?? `HTTP ${r.status}`);
+      return;
+    }
+    sessionStorage.setItem("strategyPin", pin);
+    refresh();
+  }
+
   return (
     <>
       <button
@@ -93,7 +122,21 @@ export default function ActivityBell() {
                 return (
                   <div key={e.id} className={`activity-row${e.ts > prevSeenAt ? " activity-new" : ""}`}>
                     <span className="activity-time muted">{time}</span>
-                    <span className="activity-text">{text}</span>
+                    <span className="activity-text">
+                      {text}
+                      {e.kind === "config_drift" && (
+                        <span className="drift-actions">
+                          <button onClick={() => driftAction("accept")}>
+                            {t("activity.drift.accept")}
+                          </button>
+                          {e.params?.field === "schedule" && (
+                            <button onClick={() => driftAction("revert")}>
+                              {t("activity.drift.revert")}
+                            </button>
+                          )}
+                        </span>
+                      )}
+                    </span>
                     <SpeakButton id={`activity-${e.id}`} text={text} />
                   </div>
                 );

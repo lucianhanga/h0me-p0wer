@@ -94,6 +94,13 @@ export const ro = {
     },
     pin_ip_locked: "PIN: dispozitiv blocat după 3 încercări greșite ({ip})",
     pin_ip_unlocked: "PIN: dispozitiv deblocat ({ip})",
+    config_drift: "⚠️ Setări modificate în afara aplicației ({field}): {from} → {to}",
+    config_drift_accept: "Modificare confirmată — adoptată ca nouă referință",
+    config_drift_revert: "Modificare neașteptată revertită la programul de referință",
+    drift: {
+      accept: "Acceptă",
+      revert: "Revertește",
+    },
     meter: {
       up: "Conexiunea cu contorul inteligent restabilită (direct)",
       down: "Conexiunea cu contorul inteligent pierdută — se folosesc date din cloud",

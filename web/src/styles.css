@@ -2870,6 +2870,26 @@ pre {
   box-shadow: inset 2px 0 0 #f7a44f;
 }
 
+.drift-actions {
+  display: inline-flex;
+  gap: 0.4rem;
+  margin-left: 0.5rem;
+}
+
+.drift-actions button {
+  font-size: 0.78rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid #f7a44f;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.drift-actions button:hover {
+  background: #f7a44f22;
+}
+
 .activity-time {
   flex-shrink: 0;
   font-size: 0.75rem;

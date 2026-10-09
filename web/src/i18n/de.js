@@ -98,6 +98,13 @@ export const de = {
     },
     pin_ip_locked: "PIN: Gerät nach 3 Fehlversuchen gesperrt ({ip})",
     pin_ip_unlocked: "PIN: Gerät entsperrt ({ip})",
+    config_drift: "⚠️ Einstellung außerhalb dieser App geändert ({field}): {from} → {to}",
+    config_drift_accept: "Änderung bestätigt — als neue Basislinie übernommen",
+    config_drift_revert: "Unerwartete Änderung auf den Basis-Zeitplan zurückgesetzt",
+    drift: {
+      accept: "Übernehmen",
+      revert: "Zurücksetzen",
+    },
     meter: {
       up: "Smart-Meter-Verbindung wiederhergestellt (direkt)",
       down: "Smart-Meter-Verbindung verloren — Cloud-Daten werden genutzt",
