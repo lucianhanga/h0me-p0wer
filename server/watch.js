@@ -12,8 +12,17 @@
 import { fetchJson } from "./welcome-sources.js";
 import { deriveBatteryFlow } from "./battery-params.js";
 import { internalAuthHeaders } from "./auth.js";
+import { getPlugDaily, getAllPlugNames } from "./db.js";
 
 const w2kw = (w) => (w == null ? null : Math.round((w / 1000) * 100) / 100);
+const r2 = (v) => Math.round(v * 100) / 100;
+
+// Account-local day string — plug_daily dates are account-local days (see
+// the localDate copies in stats.js/roi.js for why this is not imported).
+function localDate(d = new Date()) {
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 
 // Minutes until the account's charge ceiling at the current charge rate —
 // same arithmetic the React frontend's battery ETA does client-side (see
@@ -200,6 +209,39 @@ export function registerWatchRoute(app, deps) {
       });
     } catch (err) {
       console.warn(`[watch] stats-overview fetch failed (${err.message})`);
+    }
+
+    try {
+      // Today's per-consumer (smart plug) kWh — same source and ordering as
+      // /api/stats/consumers?type=day (plug_daily rows from the home_usage
+      // sync, sorted by name so a plug keeps the same color across every
+      // client). Names arrive already display-stripped by getAllPlugNames()
+      // (the displayDeviceName convention, device-name.js). A day with NO
+      // plug rows is the plugs-haven't-reported-yet case → empty array +
+      // rest 0, NOT "all plugs used 0".
+      const todayStr = localDate();
+      const kwhBySn = new Map();
+      for (const r of getPlugDaily(todayStr)) {
+        if (r.date === todayStr) kwhBySn.set(r.sn, r.kwh ?? 0);
+      }
+      if (!kwhBySn.size) {
+        out.consumersToday = [];
+        out.consumersRestToday = 0;
+      } else {
+        const names = getAllPlugNames();
+        const sns = [...names.keys()].sort((a, b) =>
+          (names.get(a) ?? a).localeCompare(names.get(b) ?? b),
+        );
+        const consumersToday = sns.map((sn) => ({
+          name: names.get(sn) ?? sn,
+          kwh: r2(kwhBySn.get(sn) ?? 0),
+        }));
+        const plugSum = consumersToday.reduce((a, p) => a + p.kwh, 0);
+        out.consumersToday = consumersToday;
+        out.consumersRestToday = r2(Math.max(0, (out.homeToday ?? 0) - plugSum));
+      }
+    } catch (err) {
+      console.warn(`[watch] consumers query failed (${err.message})`);
     }
 
     try {
