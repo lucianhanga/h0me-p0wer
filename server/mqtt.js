@@ -87,8 +87,25 @@ const FIELDS_0405_AE103 = {
   c9: { key: "pv4W", factor: 1 },
 };
 
+// Smart Plug Gen 2 (A17X8) 0405 — community _A17X8_0405 (2026-10-10, for
+// the account-level/site-less plug ingestion: Anker caps a home energy
+// system at 10 Gen-2 plugs, so plugs 11+ live on the account WITHOUT a
+// site and never appear in scen_info — MQTT is their only telemetry
+// channel). Streams ~5 s under the same 0057 realtime trigger. ab is the
+// plug's cumulative energy counter (kWh) — semantics logged live before
+// being trusted for daily-kWh math.
+const FIELDS_0405_A17X8 = {
+  a4: { key: "on", factor: 1 }, // ac_output_power_switch: 0 off, 1 on
+  a8: { key: "voltageV", factor: 0.1 },
+  a9: { key: "currentA", factor: 0.01 },
+  aa: { key: "watts", factor: 0.1 }, // power
+  ab: { key: "totalKwh", factor: 0.001 }, // output_energy (cumulative?)
+};
+
 function fields0405For(pn) {
-  return pn === "AE103" ? FIELDS_0405_AE103 : FIELDS_0405;
+  if (pn === "AE103") return FIELDS_0405_AE103;
+  if (pn === "A17X8") return FIELDS_0405_A17X8;
+  return FIELDS_0405;
 }
 
 // Round like the community client: decimals derived from the factor.
@@ -272,6 +289,9 @@ export class AnkerMqtt {
     this.anker = ankerClient;
     this.sn = batterySn;
     this.pn = pn;
+    // A17X8 = smart plug — the 0405 mapping below emits {watts, on, ...}
+    // instead of battery channels.
+    this.kind = pn === "A17X8" ? "plug" : "battery";
     this.onData = null; // set by caller: ({ts, soc, outputW, chargeW, pvW, toHomeW, temperatureC})
     this.client = null;
     this.mqttInfo = null;
@@ -326,7 +346,7 @@ export class AnkerMqtt {
       this.connectedAt = Date.now();
       // NOTE: backoff is reset only when telemetry actually arrives (#onMessage),
       // not here — a connect that never delivers data must keep escalating.
-      console.log(`[mqtt] connected to ${info.endpoint_addr}, subscribing to battery ${this.sn}`);
+      console.log(`[mqtt] connected to ${info.endpoint_addr}, subscribing to ${this.kind} ${this.sn}`);
       // Subscribe with the # wildcard (2026-09-26 bug, found live): the
       // A17C3 published telemetry on the BARE topic dt/.../sn/, but the
       // A17C1 (Pro) publishes on SUBTOPICS (dt/.../sn/param_info,
@@ -470,6 +490,29 @@ export class AnkerMqtt {
         if (typeof raw === "number" && Number.isFinite(raw)) {
           out[def.key] = applyFactor(raw, def.factor);
         }
+      }
+      // Smart plug (A17X8): entirely different channel set — watts, switch
+      // state, voltage/current, and the energy counter. No REST payload to
+      // merge with (site-less plugs never appear in scen_info), so forward
+      // whatever arrived as-is.
+      if (this.kind === "plug") {
+        const data = { ts: out.ts };
+        if (out.watts != null) data.watts = out.watts;
+        if (out.on != null) data.on = out.on === 1;
+        if (out.voltageV != null) data.voltageV = out.voltageV;
+        if (out.currentA != null) data.currentA = out.currentA;
+        if (out.totalKwh != null) data.totalKwh = out.totalKwh;
+        if (!this.loggedFirstData) {
+          this.loggedFirstData = true;
+          console.log(
+            `[mqtt] first plug telemetry (${this.sn}): ${data.watts ?? "?"} W, ` +
+              `switch ${data.on ?? "?"}, energy counter ${data.totalKwh ?? "?"} kWh`,
+          );
+        }
+        this.lastDataAt = Date.now();
+        this.backoffMs = 5000;
+        this.onData?.(data);
+        return;
       }
       // Map onto the REST sync payload shape: outputW is the TOTAL inverter
       // output (d3 output_power on SB2, ad on AE103) — NOT the cells-only

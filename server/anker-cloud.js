@@ -253,6 +253,28 @@ export class AnkerClient {
     return this.post("power_service/v1/app/get_relate_and_bind_devices", {});
   }
 
+  // Account-level smart plugs (A17X8), regardless of site membership
+  // (2026-10-10): the discovery channel for SITE-LESS plugs — Anker caps a
+  // home energy system at 10 Gen-2 plugs, so extras stay bound to the
+  // account without a site and never appear in scen_info. Their telemetry
+  // comes via per-device MQTT instead (see index.js syncAccountPlugs).
+  // Names are RAW (account prefix included) — strip at emit points with
+  // displayDeviceName(), same convention as scene plugs.
+  async getAccountPlugs() {
+    const resp = await this.getBindDevices();
+    const list = Array.isArray(resp?.data) ? resp.data : (resp?.data?.device_list ?? []);
+    return list
+      .filter((d) => d.product_code === "A17X8")
+      .map((d) => ({
+        sn: d.device_sn,
+        pn: d.product_code,
+        name: d.alias_name || d.device_name || d.device_sn,
+        tag: d.tag_alias ?? d.tag ?? "",
+        typeTag: d.type_tag ?? "",
+        online: d.wifi_online === true,
+      }));
+  }
+
   // Resolve THE site this app belongs to, deterministically (2026-09-24):
   // the account gained a second site ("h-power": Solarbank 4 + Power Dock +
   // a second meter) and `site_list[0]` silently started returning THAT one —

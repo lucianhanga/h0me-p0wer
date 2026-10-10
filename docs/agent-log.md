@@ -6420,3 +6420,32 @@ cross-cutting), every finding re-verified by hand before fixing:
   plug_daily for today only when today's row is absent (e.g. after
   midnight); the 15-min rewrite of today still needs the meter gate lifted
   (open offer from 2026-10-09).
+
+## Site-less plug ingestion via MQTT (2026-10-10, user request — hit Anker's cap: "maximum device limit reached" on plug #11)
+
+- Anker caps a home energy system at 10 Smart Plug Gen 2 (SB4/Max AC; 5 on
+  older solarbanks; 5 mixed Gen1+Gen2) — official spec. Plug #11+
+  (h-solar-sofa) stays bound to the ACCOUNT without a site: never in
+  scen_info, no cloud daily kWh, no Anker smart features.
+- Ingestion: getAccountPlugs() (anker-cloud.js, bind_devices — response's
+  data is an ARRAY, not {device_list}) every 15 min; per-device MQTT with
+  the community A17X8 0405 map (aa=watts ×0.1, a4=switch, a8/a9
+  voltage/current, ab=energy counter ×0.001 kWh — sofa read 0 kWh at
+  pairing, consistent with a lifetime counter; DAILY-vs-lifetime semantics
+  still unverified — if lifetime, daily kWh could later switch from
+  sample-integration to counter-delta, robust to server downtime).
+  AnkerMqtt gained kind="plug" (pn-derived) — the connect/subscribe/
+  trigger/TLV machinery was already device-generic.
+- Daily kWh for site-less plugs is LOCAL: plugDayKwhFromSamples
+  (trapezoid over plug_samples, gaps clamped to 15 min) →
+  upsertPlugDailyRow → Consume tiles include them. todayKwh in /api/plugs
+  computed the same way.
+- Merge contract: latestPlugs stays the SCENE list (site membership
+  source); mergedPlugs() = scene + site-less for /api/plugs +
+  /api/plugs/timeseries. A plug joining the site later wins — its MQTT
+  client stops. accountLevel: true marks them in the payload.
+- Watchdog: onAccountPlugs() watches account-level membership (own
+  baseline field, alert-once, adopt via the same Accept action).
+- Verified live with the online sofa plug: discovered at +60 s, MQTT
+  telemetry decoded (1.4 W, switch on, counter 0 kWh), present in
+  /api/plugs (11 plugs) and /api/stats/consumers, no false drift alert.

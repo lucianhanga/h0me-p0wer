@@ -67,6 +67,8 @@ import {
   prunePlugSamples,
   savePlugDaily,
   getPlugDaily,
+  plugDayKwhFromSamples,
+  upsertPlugDailyRow,
   logActivity,
   getActivity,
   getHistoryVersion,
@@ -1370,11 +1372,17 @@ app.get("/api/plugs", (req, res) => {
   for (const r of daily) {
     if (r.date === today) todayKwh[r.sn] = r.kwh;
   }
+  // Site-less plugs: no cloud daily kWh — integrate today's local samples.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  for (const p of latestAccountPlugs.values()) {
+    todayKwh[p.sn] = plugDayKwhFromSamples(p.sn, dayStart.getTime(), Date.now());
+  }
   const colorIdx = getPlugColorIdx();
   res.json({
     ok: true,
     data: {
-      plugs: latestPlugs.map((p) => ({ ...p, colorIdx: colorIdx.get(p.sn) ?? null })),
+      plugs: mergedPlugs().map((p) => ({ ...p, colorIdx: colorIdx.get(p.sn) ?? null })),
       todayKwh,
       daily,
     },
@@ -1401,7 +1409,7 @@ app.get("/api/plugs/timeseries", (req, res) => {
       ? Math.max(minBucketMs, requestedBucketMs)
       : Math.max(minBucketMs, Math.ceil(viewMs / points / minBucketMs) * minBucketMs);
 
-  const sns = new Set(latestPlugs.map((p) => p.sn));
+  const sns = new Set(mergedPlugs().map((p) => p.sn));
   const acc = new Map(); // bt -> Map(sn -> {s, c})
   for (const r of getPlugSamples(from, to)) {
     sns.add(r.sn);
@@ -2384,6 +2392,111 @@ function primaryMqtt() {
   return batteryMqtts.get(latestBattery?.sn) ?? batteryMqtts.values().next().value ?? null;
 }
 
+// ---------------------------------------------------------------------------
+// Site-less smart plugs (2026-10-10, user request): Anker caps a home energy
+// system at 10 Smart Plug Gen 2 — plugs beyond that stay bound to the
+// ACCOUNT without a site, never appear in scen_info, and get no cloud daily
+// kWh. We still own their data path: discovery via getAccountPlugs (every
+// 15 min), live watts via per-device MQTT (A17X8 0405 map), samples into
+// plug_samples like scene plugs, and daily kWh integrated LOCALLY from those
+// samples into plug_daily (upsertPlugDailyRow) so the Consume tiles treat
+// them like any other plug. If a plug later joins the site, the scene poll
+// owns it and its MQTT client is stopped (site membership wins).
+const accountPlugMqtts = new Map(); // SN -> AnkerMqtt (site-less plugs only)
+const latestAccountPlugs = new Map(); // SN -> live plug object (site-less)
+const plugDailyLastWrite = new Map(); // SN -> last plug_daily upsert time
+
+function mergedPlugs() {
+  return [...latestPlugs, ...latestAccountPlugs.values()];
+}
+
+async function syncAccountPlugs() {
+  if (!anker.configured) return;
+  // Site membership comes from the scene poll — without one successful sync
+  // we can't tell site-less from site plugs; wait for the next round.
+  if (!lastRestSyncAt) return;
+  let accountPlugs;
+  try {
+    accountPlugs = await anker.getAccountPlugs();
+  } catch (err) {
+    console.warn(`[plugs] account discovery failed: ${err.message}`);
+    return;
+  }
+  configWatchdog.onAccountPlugs(accountPlugs);
+  const siteSns = new Set(latestPlugs.map((p) => p.sn));
+  const siteLess = accountPlugs.filter((p) => !siteSns.has(p.sn));
+  ensurePlugColors(siteLess.map((p) => p.sn));
+
+  // Daily kWh for site-less plugs: integrate local samples, upsert into
+  // plug_daily (today + yesterday — the yesterday write finalizes the day
+  // after midnight). Throttled per plug; the same code runs on the 15-min
+  // discovery cadence.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const yesterdayStart = new Date(dayStart.getTime() - 86400000);
+  for (const p of siteLess) {
+    const last = plugDailyLastWrite.get(p.sn) ?? 0;
+    if (Date.now() - last < 60 * 1000) continue;
+    plugDailyLastWrite.set(p.sn, Date.now());
+    try {
+      const name = displayDeviceName(p.name);
+      upsertPlugDailyRow(
+        localDate(dayStart), p.sn, name,
+        plugDayKwhFromSamples(p.sn, dayStart.getTime(), Date.now()),
+      );
+      upsertPlugDailyRow(
+        localDate(yesterdayStart), p.sn, name,
+        plugDayKwhFromSamples(p.sn, yesterdayStart.getTime(), dayStart.getTime() - 1),
+      );
+    } catch (err) {
+      console.warn("[db] failed to persist account-plug daily kWh:", err.message);
+    }
+  }
+
+  // MQTT lifecycle: start clients for new site-less plugs, stop clients for
+  // plugs that vanished from the account or joined the site.
+  const wanted = new Set(siteLess.map((p) => p.sn));
+  for (const p of siteLess) {
+    if (accountPlugMqtts.has(p.sn)) continue;
+    const client = new AnkerMqtt(anker, p.sn, p.pn ?? "A17X8");
+    client.onData = (d) => {
+      const prev = latestAccountPlugs.get(p.sn) ?? {};
+      latestAccountPlugs.set(p.sn, {
+        ...prev,
+        sn: p.sn,
+        name: displayDeviceName(p.name),
+        tag: p.tag,
+        typeTag: p.typeTag,
+        watts: d.watts ?? prev.watts ?? null,
+        on: d.on ?? prev.on ?? null,
+        voltageV: d.voltageV ?? prev.voltageV ?? null,
+        currentA: d.currentA ?? prev.currentA ?? null,
+        totalKwh: d.totalKwh ?? prev.totalKwh ?? null,
+        online: true,
+        accountLevel: true,
+        ts: d.ts,
+      });
+      try {
+        savePlugSamples(d.ts, [{ sn: p.sn, watts: d.watts ?? null }]);
+      } catch (err) {
+        console.warn("[db] failed to persist account-plug sample:", err.message);
+      }
+    };
+    client.start(); // never rejects — retries internally with backoff
+    accountPlugMqtts.set(p.sn, client);
+    console.log(`[plugs] site-less plug ${displayDeviceName(p.name)} (${p.sn}) — MQTT ingestion started`);
+  }
+  for (const [sn, client] of accountPlugMqtts) {
+    if (!wanted.has(sn)) {
+      client.stop();
+      accountPlugMqtts.delete(sn);
+      latestAccountPlugs.delete(sn);
+    }
+  }
+}
+setTimeout(() => syncAccountPlugs(), 60 * 1000).unref();
+setInterval(() => syncAccountPlugs(), 15 * 60 * 1000).unref();
+
 let syncBatteryInFlight = false;
 async function syncBattery() {
   if (!anker.configured) return;
@@ -2816,6 +2929,7 @@ function gracefulShutdown() {
 
   poller.stop();
   for (const client of batteryMqtts.values()) client.stop();
+  for (const client of accountPlugMqtts.values()) client.stop();
   // WebSocket clients would keep server.close() waiting forever — kill them.
   for (const ws of wss.clients) ws.terminate();
   wss.close();

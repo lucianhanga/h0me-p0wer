@@ -93,6 +93,18 @@ EPIPE noise on every client disconnect).
   tab's curves are local accumulation (`plug_samples`) and fill in from
   2026-10-06. A not-yet-aggregated day returns an EMPTY smartplug_list (≠ 0
   consumption).
+- **Site-less plugs (since 2026-10-10)**: Anker caps a home energy system
+  at **10 Smart Plug Gen 2** (SB4/Max AC; 5 for older solarbanks, 5 mixed
+  Gen1+Gen2). Plugs beyond the cap stay bound to the ACCOUNT without a
+  site — never in scen_info, no cloud daily kWh. Ingestion path:
+  `getAccountPlugs()` discovery (bind_devices, 15 min), per-device MQTT
+  (A17X8 0405 map: aa=watts ×0.1, a4=switch, ab=energy counter — verify
+  daily-vs-lifetime semantics before trusting it), local daily kWh
+  integrated from plug_samples (`plugDayKwhFromSamples` →
+  `upsertPlugDailyRow`). `accountLevel: true` marks them in /api/plugs;
+  site membership always wins (MQTT client stops if a plug joins the
+  site). The watchdog watches account membership separately
+  (`onAccountPlugs`).
 
 ### Data model (SQLite, `server/data.db`, git-ignored)
 - `snapshots`: raw 5 s Modbus samples, 48 h retention, pruned hourly.
@@ -177,7 +189,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-09, v1.5.235, `main`.** Production deploys are the user's own
+**As of 2026-10-10, v1.5.238, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a
@@ -186,7 +198,9 @@ production screenshot, check the deployed version:
 "it's not fixed" reports were production lagging behind `main`.
 
 - **System**: one Anker site ("h-power", recreated 2026-09-27): Power Dock +
-  SB4 + SB2 Pro + meter-2 + **6 Smart Plugs Gen2 (A17X8, since 2026-10-06)**.
+  SB4 + SB2 Pro + meter-2 + **Smart Plugs Gen2 (A17X8, since 2026-10-06;
+  10 in-site = Anker's system cap, extras site-less via MQTT — see
+  "Site-less plugs")**.
   Site resolution is pinned to the site containing the local meter's SN
   (never `site_list[0]`). Production `.env`:
   `METER_IP=192.168.1.15` (meter-2), `PV_PEAK_KWP=6.0`, `STRATEGY_PIN`,
