@@ -435,16 +435,28 @@ export function getPvStringKwhForDay(dateStr) {
   return { pv1Kwh, pv2Kwh };
 }
 
+// Per-module SOC/temperature history has NO cloud equivalent (MQTT 0405/
+// 040a is realtime-only) — pruning it at the 48 h live-sample retention
+// destroyed the only copy and capped the Graph tab's module charts at 2
+// days (user report 2026-10-10: "30-day view shows just 2 days"). Own
+// retention: 93 days (3× the largest graph span), with a 60 s write
+// throttle — MQTT telemetry arrives every 3-5 s, which untamed is ~25 M
+// rows/year; at 1/min it's ~0.5 M/quarter and SOC/temp move far slower
+// than that anyway.
+const MODULE_RETENTION_MS = 93 * 86400000;
+const MODULE_MIN_WRITE_GAP_MS = 60 * 1000;
+
 export function pruneBattery() {
   db.prepare(`DELETE FROM battery_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
-  db.prepare(`DELETE FROM module_snapshots WHERE ts < ?`).run(Date.now() - RETENTION_MS);
+  db.prepare(`DELETE FROM module_snapshots WHERE ts < ?`).run(Date.now() - MODULE_RETENTION_MS);
 }
 
 // --- Per-module battery data (MQTT 0405 main unit / 040a expansions) ------
 // SOC + temperature per PHYSICAL module (main unit + each expansion pack) —
 // the only place this exists (no REST/cloud-history equivalent); feeds the
-// Graph tab's module charts (2026-09-27). Same 48h retention as
-// battery_snapshots (pruned in pruneBattery above).
+// Graph tab's module charts (2026-09-27). 93-day retention + 60 s write
+// throttle (see pruneBattery above — the 48 h live-sample retention used to
+// cap these charts at 2 days, 2026-10-10).
 db.exec(`
   CREATE TABLE IF NOT EXISTS module_snapshots (
     ts INTEGER NOT NULL,
@@ -460,8 +472,20 @@ const upsertModuleRow = db.prepare(`
   VALUES (?, ?, ?, ?)
 `);
 
+// In-memory per-module throttle (session-scoped — a restart always writes
+// immediately, which is exactly what a restart should do).
+const lastModuleWriteAt = new Map();
+
 // module: "main" | "exp1" | "exp2" | … (matching the 040a pack order).
 export function saveModuleSnapshot(ts, module, soc, temperatureC) {
+  const isNullOnly = soc == null && temperatureC == null;
+  const last = lastModuleWriteAt.get(module) ?? 0;
+  // Null-only rows never arm the throttle — they'd starve the real value
+  // arriving seconds later (REST path writes unit-total soc for unmapped
+  // PNs; MQTT writes the real per-module values). Out-of-order (older) ts
+  // always writes — backfills/tests, never the live path.
+  if (!isNullOnly && ts - last >= 0 && ts - last < MODULE_MIN_WRITE_GAP_MS) return;
+  if (!isNullOnly) lastModuleWriteAt.set(module, ts);
   upsertModuleRow.run(ts, module, soc ?? null, temperatureC ?? null);
 }
 

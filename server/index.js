@@ -800,8 +800,9 @@ async function timeseriesInner(req, res) {
 
   // Source 1d: per-module battery data (MQTT 0405/040a — SOC + temperature
   // per physical module, 2026-09-27) for the Graph tab's module charts. No
-  // cloud fallback exists for these (040a is realtime-only): they exist from
-  // the MQTT subtopic fix onward, 48h retention.
+  // cloud fallback exists for these (040a is realtime-only) — retention is
+  // 93 days with a 60 s write throttle (raised from the 48 h live-sample
+  // default that capped these charts at 2 days, 2026-10-10).
   const seenModules = new Set();
   for (const r of getModuleHistory(from - CLOUD_INTERVAL_MS, to)) {
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
