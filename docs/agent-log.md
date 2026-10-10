@@ -6461,3 +6461,24 @@ cross-cutting), every finding re-verified by hand before fixing:
   after the consumers, whole-house total stays the footer. Colors are
   unaffected by the sort (they key off the stable server colorIdx, not
   list position — the 2026-10-10 palette work paying off immediately).
+
+## Module SOC/temp charts capped at 2 days (2026-10-10, user report: "30-day view shows just 2 days")
+
+- Root cause: module_snapshots — the ONLY source of per-module SOC% and
+  temperature (MQTT 0405/040a, no cloud equivalent anywhere) — was pruned
+  at RETENTION_MS = 48 h, the retention meant for live-resolution POWER
+  samples (which have cloud history as fallback). The prune destroyed
+  unrecoverable history; the 30-day SOC view physically could not show
+  more than 2 days. Pruned rows are gone for good — no recovery path.
+- Fix: MODULE_RETENTION_MS = 93 days (3× the largest graph span) + a 60 s
+  per-module write throttle in saveModuleSnapshot (MQTT writes every 3-5 s
+  ≈ 25 M rows/year untamed; throttled ≈ 0.5 M/quarter — SOC/temp move far
+  slower than that). Throttle subtleties: null-only rows never arm it
+  (they'd starve a real value arriving seconds later); out-of-order
+  (older-ts) writes always land (backfills/tests — caught by the harness,
+  which seeds oldest-last).
+- Verified: 6-check harness (retention boundaries 3d/50d/100d, throttle
+  spacing, null-arming, out-of-order) + live (clean 60 s row spacing per
+  module after restart; the interleaved pre-restart rows were the old
+  process draining). The 30-day view fills in going forward — complete a
+  month from the fix, on both this machine and production.
