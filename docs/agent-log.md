@@ -6399,3 +6399,24 @@ cross-cutting), every finding re-verified by hand before fixing:
   drives the real page over the DevTools protocol using the repo's ws
   package — reusable pattern for click-dependent UI checks): computed
   background rgb(26,33,40), 50 rows, screenshot inspected.
+
+## Stable, maximally-distinct plug colors (2026-10-10, user request)
+
+- Old palette had 8 colors with near-twins (#5fce80 vs #8ee3a8), wrapped at
+  plug #9, and — worst — assigned by NAME-SORTED position, so every new plug
+  whose name sorted earlier silently recolored all existing plugs (happened
+  twice on 2026-10-09 with cooking/kaffeemaschine).
+- New: 16 hues 22.5° apart (HSL S65/L62 for the dark card bg), ordered by
+  BIT-REVERSED index ([0,8,4,12,2,10,...]) so any used prefix is maximally
+  hue-separated and unused tail slots stay reserved+distinct for future
+  plugs. Assignment is stable: server keeps first-seen SN order in kv
+  `plug_color_order` (db.js ensurePlugColors, fed by the scene poll AND
+  /api/stats/consumers for plug_daily-only SNs), served as colorIdx on
+  /api/plugs + /api/stats/consumers; frontend plugColor() falls back to
+  list position for old payloads.
+- Verified live the same evening: a 10th plug (spüler) installed mid-work
+  landed in reserved slot 9 automatically. Side discovery: the startup
+  home_usage backfill only fetches MISSING days — a restart rewrites
+  plug_daily for today only when today's row is absent (e.g. after
+  midnight); the 15-min rewrite of today still needs the meter gate lifted
+  (open offer from 2026-10-09).

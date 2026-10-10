@@ -1031,6 +1031,27 @@ export function kvSet(key, value) {
   kvSetStmt.run(key, JSON.stringify(value), Date.now());
 }
 
+// Stable per-plug color assignment (2026-10-10, user request — with 9 plugs
+// the 8-color palette wrapped AND the old name-sorted position recolored
+// every plug whenever a new name sorted earlier). SNs are kept in first-seen
+// order; a plug's palette index never shifts again, and slots past the used
+// prefix stay "reserved" for future plugs (palette ordered by bit-reversed
+// hue — see PLUG_COLORS in web/src/plugs/PlugsTab.jsx).
+const PLUG_COLOR_ORDER_KEY = "plug_color_order";
+
+export function ensurePlugColors(sns) {
+  if (!sns?.length) return;
+  const order = kvGet(PLUG_COLOR_ORDER_KEY)?.value ?? [];
+  const known = new Set(order);
+  const added = sns.filter((sn) => !known.has(sn));
+  if (added.length) kvSet(PLUG_COLOR_ORDER_KEY, [...order, ...added]);
+}
+
+export function getPlugColorIdx() {
+  const order = kvGet(PLUG_COLOR_ORDER_KEY)?.value ?? [];
+  return new Map(order.map((sn, i) => [sn, i]));
+}
+
 // First battery sample at/after a moment (start-of-day SOC at sunrise).
 const selectFirstBatteryAfter = db.prepare(
   `SELECT ts, soc FROM battery_snapshots WHERE ts >= ? AND soc IS NOT NULL ORDER BY ts ASC LIMIT 1`,

@@ -58,6 +58,8 @@ import {
   getCloudPvDaySum,
   kvGet,
   kvSet,
+  ensurePlugColors,
+  getPlugColorIdx,
   saveModuleSnapshot,
   getModuleHistory,
   savePlugSamples,
@@ -1368,10 +1370,11 @@ app.get("/api/plugs", (req, res) => {
   for (const r of daily) {
     if (r.date === today) todayKwh[r.sn] = r.kwh;
   }
+  const colorIdx = getPlugColorIdx();
   res.json({
     ok: true,
     data: {
-      plugs: latestPlugs,
+      plugs: latestPlugs.map((p) => ({ ...p, colorIdx: colorIdx.get(p.sn) ?? null })),
       todayKwh,
       daily,
     },
@@ -2468,6 +2471,9 @@ async function syncBatteryInner() {
       // offers daily kWh only).
       if (info.plugs?.length) {
         latestPlugs = info.plugs.map((p) => ({ ...p, ts: info.ts }));
+        // Stable color assignment for the consumer charts — first-seen
+        // order, never reshuffled by later plug additions.
+        ensurePlugColors(info.plugs.map((p) => p.sn));
         try {
           savePlugSamples(info.ts, info.plugs);
         } catch (err) {

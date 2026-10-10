@@ -24,9 +24,25 @@ import { SHORTCUTS } from "../graph/GraphTab.jsx";
 // Card headers poll /api/plugs every 10 s for live watts + today's kWh.
 const LIVE_EDGE_MS = 2 * 60 * 1000; // "live" when right edge within 2 min of now
 // Palette shared with the Dashboard's Consumers tile (2026-10-06) — a plug
-// must keep the same color in both places, and both sort plugs by name.
-export const PLUG_COLORS = ["#5fce80", "#f7a44f", "#c084fc", "#6bb8f5", "#e5544b", "#f5d76b", "#8ee3a8", "#e8ecef"];
+// must keep the same color in both places.
+// 2026-10-10 redesign (user request): 16 hues 22.5° apart (HSL S65/L62,
+// tuned for the dark card background), ordered by BIT-REVERSED index so any
+// used prefix is maximally hue-separated and unused tail slots stay reserved
+// — and mutually distinct — for future plugs. Assignment is STABLE: the
+// server hands each plug its first-seen colorIdx (kv plug_color_order), so
+// adding/renaming a plug never recolors the others (the old name-sorted
+// position did exactly that). plugColor() falls back to list position for
+// payloads without colorIdx.
+export const PLUG_COLORS = [
+  "#dd5f5f", "#5fdddd", "#9edd5f", "#9e5fdd",
+  "#ddbe5f", "#5f7fdd", "#5fdd7f", "#dd5fbe",
+  "#dd8e5f", "#5faedd", "#6fdd5f", "#cd5fdd",
+  "#cddd5f", "#6f5fdd", "#5fddae", "#dd5f8e",
+];
 export const REST_COLOR = "#90a4ae";
+export function plugColor(p, fallbackIdx) {
+  return PLUG_COLORS[(p.colorIdx ?? fallbackIdx) % PLUG_COLORS.length];
+}
 
 // Remembers each card's selected span across tab switches (the tab unmounts
 // on switch — see App.jsx), same pattern as GraphTab's savedSpanMs.
@@ -301,7 +317,7 @@ export default function PlugsTab() {
             isRest={false}
             title={p.name}
             subtitle={p.typeTag && p.typeTag !== "Smart Plug" ? p.typeTag : p.tag}
-            color={PLUG_COLORS[i % PLUG_COLORS.length]}
+            color={plugColor(p, i)}
             watts={p.watts}
             todayKwh={live.todayKwh?.[p.sn]}
             offline={!p.online}
