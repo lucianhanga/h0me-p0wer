@@ -6449,3 +6449,15 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified live with the online sofa plug: discovered at +60 s, MQTT
   telemetry decoded (1.4 W, switch on, counter 0 kWh), present in
   /api/plugs (11 plugs) and /api/stats/consumers, no false drift alert.
+
+## Consumers tile face ordering (2026-10-10, user request)
+
+- Bars face (flip 2): ECharts axis tooltips default to seriesAsc, which
+  listed "rest of home" FIRST while it sits at the BOTTOM of the stack —
+  tooltip now order:"seriesDesc" so it reads exactly like the bar,
+  top segment first. Verified headless (CDP hover over a bar, tooltip DOM
+  dump).
+- List face (flip 3): consumers sort by kWh DESC; "rest of home" pinned
+  after the consumers, whole-house total stays the footer. Colors are
+  unaffected by the sort (they key off the stable server colorIdx, not
+  list position — the 2026-10-10 palette work paying off immediately).
