@@ -73,7 +73,7 @@ export class ConfigWatchdog {
     this.lastScheduleCheckAt = 0;
     // Last values actually observed on the device/cloud — accept() adopts
     // these as the new baseline.
-    this.observed = { schedule: null, scheduleSummary: null, plugs: null };
+    this.observed = { schedule: null, scheduleSummary: null, plugs: null, accountPlugs: null };
     const saved = kvGet(KV_KEY)?.value;
     this.state = saved ?? {
       baseline: { schedule: null, scheduleSummary: null, plugs: null },
@@ -165,6 +165,40 @@ export class ConfigWatchdog {
     this.save();
   }
 
+  // --- account-level plug membership (site-less plugs, 2026-10-10):
+  // Anker caps a system at 10 Gen-2 plugs, so extras live on the account
+  // without a site — they never pass through onScene(). Same membership
+  // watch, separate baseline, fed by the 15-min bind_devices discovery.
+
+  onAccountPlugs(plugs) {
+    if (!plugs) return;
+    const map = {};
+    for (const p of plugs) map[p.sn] = { name: p.name ?? "" };
+    const b = this.state.baseline;
+    if (b.accountPlugs === undefined) b.accountPlugs = null; // legacy states
+    if (b.accountPlugs === null) {
+      b.accountPlugs = map;
+      this.save();
+      return;
+    }
+    this.observed.accountPlugs = map;
+    const changes = [];
+    for (const [sn, cur] of Object.entries(map)) {
+      const old = b.accountPlugs[sn];
+      if (!old) changes.push(`account plug added: ${cur.name || sn}`);
+      else if (old.name !== cur.name) changes.push(`plug renamed: ${old.name} → ${cur.name}`);
+    }
+    for (const [sn, old] of Object.entries(b.accountPlugs)) {
+      if (!map[sn]) changes.push(`plug removed from account: ${old.name || sn}`);
+    }
+    if (!changes.length) return;
+    const canon = stableStringify(map);
+    if (this.state.alerted.accountPlugs === canon) return;
+    this.state.alerted.accountPlugs = canon;
+    this.drift("accountPlugs", `${Object.keys(b.accountPlugs).length} on account`, changes.join("; "));
+    this.save();
+  }
+
   // --- self-change attribution: our own writers report what they wrote
 
   adoptSchedule(raw) {
@@ -197,6 +231,7 @@ export class ConfigWatchdog {
       b.scheduleSummary = this.observed.scheduleSummary;
     }
     if (this.observed.plugs) b.plugs = this.observed.plugs;
+    if (this.observed.accountPlugs) b.accountPlugs = this.observed.accountPlugs;
     this.state.pending = [];
     this.state.alerted = {};
     this.state.grace = null;

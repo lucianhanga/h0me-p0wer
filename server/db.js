@@ -1108,6 +1108,33 @@ const selectPlugSamples = db.prepare(
   `SELECT ts, sn, watts FROM plug_samples WHERE ts >= ? AND ts <= ? ORDER BY ts ASC`,
 );
 
+// Trapezoid-integrated kWh for ONE plug over [fromMs, toMs] from local
+// samples — the daily-kWh source for SITE-LESS plugs (2026-10-10): the
+// cloud's per-plug daily kWh only exists for site members, so account-level
+// plugs integrate their MQTT-fed samples instead. Gaps (server off) simply
+// integrate across them — watts are assumed to hold between samples.
+export function plugDayKwhFromSamples(sn, fromMs, toMs) {
+  let wh = 0;
+  let prev = null;
+  for (const r of selectPlugSamples.all(fromMs, toMs)) {
+    if (r.sn !== sn || r.watts == null) continue;
+    if (prev != null) {
+      // Clamp long gaps to 15 min of credit — a stale value shouldn't
+      // integrate over hours of server downtime as if it ran constantly.
+      const dtH = Math.min(r.ts - prev.ts, 15 * 60 * 1000) / 3600000;
+      wh += ((prev.watts + r.watts) / 2) * dtH;
+    }
+    prev = r;
+  }
+  return Math.round(wh / 10) / 100; // Wh → kWh, 2 decimals
+}
+
+// Single-row daily upsert for site-less plugs (cloud rows for site plugs
+// come via savePlugDaily; these are computed locally from samples).
+export function upsertPlugDailyRow(date, sn, name, kwh) {
+  upsertPlugDaily.run(date, sn, name, kwh, Date.now());
+}
+
 export function getPlugSamples(fromMs, toMs) {
   return selectPlugSamples.all(fromMs, toMs);
 }
