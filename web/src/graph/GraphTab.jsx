@@ -491,31 +491,43 @@ export default function GraphTab() {
         );
       }
 
-      // Browser cache for immutable history windows (2026-10-01, user
-      // request): a window is cached only when its end lies before
-      // yesterday 00:00 local — today/yesterday still get rewritten by the
-      // cloud sync loop. Live-edge windows never hit the cache.
-      async function fetchTimeseries(params) {
+      // Browser cache for history windows:
+      // - immutable (end before yesterday 00:00 local): cached forever
+      //   (2026-10-01) — the cloud sync still rewrites today/yesterday.
+      // - live-edge SPAN loads (2026-10-10, user report — switching
+      //   7d→30d→7d refetched everything): cached for SPAN_CACHE_TTL_MS.
+      //   setSpan snaps the window to SPAN_SNAP_MS boundaries so repeat
+      //   clicks within a bucket share one URL (unsnapped, Date.now() made
+      //   every click a unique URL — the cache could never hit); the 5 s
+      //   live appender heals the slightly-stale right edge within seconds.
+      // Zoom/pan refetches and the 5 s live deltas are never cached —
+      // unique URLs every time, they'd just evict the useful LRU entries.
+      const SPAN_SNAP_MS = 5 * 60 * 1000;
+      const SPAN_CACHE_TTL_MS = 10 * 60 * 1000;
+      async function fetchTimeseries(params, { spanCache = false } = {}) {
         const url = `/api/timeseries?${params}`;
         const toMs = Number(new URLSearchParams(params).get("to"));
         const immutable = Number.isFinite(toMs) && toMs < immutableBeforeMs();
-        if (immutable) {
-          const hit = readCached(url);
-          if (hit) return hit;
-        }
+        const hit = immutable
+          ? readCached(url)
+          : spanCache
+            ? readCached(url, SPAN_CACHE_TTL_MS)
+            : null;
+        if (hit) return hit;
         try {
           const payload = await fetch(url).then((r) => r.json());
-          if (payload.ok && immutable) writeCached(url, payload);
+          if (payload.ok && (immutable || spanCache)) writeCached(url, payload);
           return payload.ok ? payload : null;
         } catch {
           return null; // backend unreachable — keep old data
         }
       }
 
-      async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
+      async function loadRange(fromMs, toMs, viewMs = toMs - fromMs, opts = {}) {
         const seq = ++fetchSeq;
         const payload = await fetchTimeseries(
           `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`,
+          opts,
         );
         if (!payload || seq !== fetchSeq) return;
         rowsRef.rows = payload.data;
@@ -552,9 +564,12 @@ export default function GraphTab() {
       const unit = {
         async setSpan(ms) {
           savedSpanMs[gi] = ms;
-          const to = Date.now();
+          // Snap the right edge UP to a 5-min boundary so repeated span
+          // clicks share one cache URL (see fetchTimeseries); the live
+          // timer re-anchors the visible window to now within seconds.
+          const to = Math.ceil(Date.now() / SPAN_SNAP_MS) * SPAN_SNAP_MS;
           const from = to - ms;
-          await loadRange(from, to);
+          await loadRange(from, to, ms, { spanCache: true });
           setWindow(from, to);
           setActiveArr((arr) => arr.map((a, i) => (i === gi ? ms : a)));
         },

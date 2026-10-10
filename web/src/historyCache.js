@@ -51,11 +51,14 @@ function evictOldestIfFull() {
 
 // Returns the cached payload, or null. A historyV mismatch with the
 // current server marker purges and misses (a repair rewrote history).
-export function readCached(url) {
+// maxAgeMs (default Infinity): live-edge entries expire — the immutable
+// history windows never do.
+export function readCached(url, maxAgeMs = Infinity) {
   try {
     const raw = localStorage.getItem(PREFIX + url);
     if (!raw) return null;
-    const { hv, v } = JSON.parse(raw);
+    const { at, hv, v } = JSON.parse(raw);
+    if (Date.now() - at > maxAgeMs) return null;
     if (knownHistoryV != null && hv !== knownHistoryV) {
       purgeAll();
       return null;

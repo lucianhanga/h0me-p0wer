@@ -6482,3 +6482,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   module after restart; the interleaved pre-restart rows were the old
   process draining). The 30-day view fills in going forward — complete a
   month from the fix, on both this machine and production.
+
+## Graph span caching (2026-10-10, user report: switching 7d→30d→7d refetches everything)
+
+- The browser history cache (historyCache.js) existed but span clicks could
+  never hit it, twice over: (1) only windows ENDING before yesterday 00:00
+  were cacheable (live-edge spans never qualified); (2) setSpan built
+  to=Date.now() per click — a unique URL each time, so even a relaxed
+  cache would never see the same key twice.
+- Fix: setSpan snaps the window UP to 5-min boundaries (repeat clicks
+  within a bucket share a URL; the 5 s live appender re-anchors and heals
+  the right edge), and live-edge span loads get a 10-min TTL in the same
+  localStorage cache (readCached gained maxAgeMs). Zoom/pan refetches and
+  the 5 s live deltas stay uncached — unique URLs would only pollute the
+  12-slot LRU. The server clamps a snapped-future `to` already.
+- Verified headless (CDP network tap): 7d→30d→7d = 2 network fetches, the
+  return trip served from cache; chart renders the cached window, live
+  edge heals within seconds.
