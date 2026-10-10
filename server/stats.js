@@ -18,6 +18,8 @@ import {
   getPlugDaily,
   getEarliestPlugDate,
   getAllPlugNames,
+  ensurePlugColors,
+  getPlugColorIdx,
   getCloudHomeDayPower,
   getPlugSamples,
 } from "./db.js";
@@ -878,6 +880,10 @@ export function registerStatsRoute(app, deps) {
     const sns = [...names.keys()].sort((a, b) =>
       (names.get(a) ?? a).localeCompare(names.get(b) ?? b),
     );
+    // Stable color assignment (2026-10-10): covers plug_daily-only SNs the
+    // scene poll never saw; scene-seen plugs are already registered.
+    ensurePlugColors(sns);
+    const colorIdx = getPlugColorIdx();
     const sumIn = (from, to) => {
       const perSn = new Map(sns.map((sn) => [sn, 0]));
       let any = false;
@@ -892,7 +898,12 @@ export function registerStatsRoute(app, deps) {
     };
 
     const { perSn, any } = sumIn(startStr, endStr);
-    const plugs = sns.map((sn) => ({ sn, name: names.get(sn) ?? sn, kwh: r2(perSn.get(sn) ?? 0) }));
+    const plugs = sns.map((sn) => ({
+      sn,
+      name: names.get(sn) ?? sn,
+      kwh: r2(perSn.get(sn) ?? 0),
+      colorIdx: colorIdx.get(sn) ?? null,
+    }));
     const homeKwh = r2(
       [...homeByDate.entries()].reduce((a, [d, v]) => (d >= startStr && d <= endStr ? a + v : a), 0),
     );

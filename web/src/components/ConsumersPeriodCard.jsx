@@ -3,7 +3,7 @@ import echarts from "../echarts.js";
 import QuadFlipTile from "./QuadFlipTile.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { readCached, writeCached, periodImmutable } from "../historyCache.js";
-import { PLUG_COLORS, REST_COLOR } from "../plugs/PlugsTab.jsx";
+import { plugColor, REST_COLOR } from "../plugs/PlugsTab.jsx";
 
 // Per-period consumer breakdown tile (2026-10-07, user request) — shared by
 // the simple view's Consume section and the full Dashboard grid. One tile
@@ -63,7 +63,7 @@ export function RingFace({ data, t }) {
             ...plugs.map((p, i) => ({
               name: p.name,
               value: p.kwh,
-              itemStyle: { color: PLUG_COLORS[i % PLUG_COLORS.length] },
+              itemStyle: { color: plugColor(p, i) },
             })),
             { name: t("plugs.rest"), value: data.restKwh, itemStyle: { color: REST_COLOR } },
           ],
@@ -125,7 +125,7 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
           name: p.name,
           type: "bar",
           stack: "s",
-          itemStyle: { color: PLUG_COLORS[i % PLUG_COLORS.length] },
+          itemStyle: { color: plugColor(p, i) },
           data: bars.map((b) => b[`plug__${p.sn}`] ?? 0),
         })),
       ],
@@ -145,7 +145,7 @@ export function ListFace({ data, t }) {
   const rows = data.plugs.map((p, i) => ({
     key: p.sn,
     label: p.name,
-    color: PLUG_COLORS[i % PLUG_COLORS.length],
+    color: plugColor(p, i),
     kwh: p.kwh,
   }));
   // Rest row pinned last of the consumers, then the whole-house total.
