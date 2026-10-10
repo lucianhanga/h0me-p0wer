@@ -106,6 +106,11 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
         borderColor: "#2a3238",
         textStyle: { color: "#e8ecef", fontSize: 11 },
         valueFormatter: (v) => `${v} kWh`,
+        // Read top-of-stack first (2026-10-10, user request): seriesAsc
+        // (default) lists rest FIRST while it sits at the BOTTOM of the
+        // stack — seriesDesc makes the tooltip match the bar's visual
+        // top-to-bottom order.
+        order: "seriesDesc",
       },
       xAxis: {
         type: "category",
@@ -142,12 +147,16 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
 }
 
 export function ListFace({ data, t }) {
-  const rows = data.plugs.map((p, i) => ({
-    key: p.sn,
-    label: p.name,
-    color: plugColor(p, i),
-    kwh: p.kwh,
-  }));
+  // Biggest consumer first (2026-10-10, user request); rest of home stays
+  // pinned after the consumers, whole-house total remains the footer.
+  const rows = [...data.plugs]
+    .sort((a, b) => (b.kwh ?? 0) - (a.kwh ?? 0))
+    .map((p) => ({
+      key: p.sn,
+      label: p.name,
+      color: plugColor(p, 0),
+      kwh: p.kwh,
+    }));
   // Rest row pinned last of the consumers, then the whole-house total.
   rows.push({ key: "rest", label: t("plugs.rest"), color: REST_COLOR, kwh: data.restKwh });
   return (
