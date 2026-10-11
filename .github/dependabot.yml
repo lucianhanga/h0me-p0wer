@@ -1,0 +1,26 @@
+# Weekly dependency update PRs for the three npm trees (2026-10-11).
+# Security ALERTS themselves are a repo setting (Settings → Security →
+# Dependabot alerts) — this file only enables version-update PRs.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:13"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "npm"
+    directory: "/server"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:13"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:13"
+    open-pull-requests-limit: 5

@@ -6499,3 +6499,23 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Verified headless (CDP network tap): 7d→30d→7d = 2 network fetches, the
   return trip served from cache; chart renders the cached window, live
   edge heals within seconds.
+
+## Dependency security sweep + Dependabot (2026-10-11, user request)
+
+- Dependabot was entirely absent: alerts disabled repo-side, no config
+  file. Added .github/dependabot.yml (weekly Monday ~06:13 PRs for the
+  root/server/web npm trees, 5-PR cap). NOTE: security ALERTS themselves
+  are a GitHub repo setting (Settings → Security → Dependabot alerts) —
+  the file only enables version-update PRs.
+- npm audit found 5 server-side vulns, one CRITICAL and directly relevant
+  here: proxy-addr IP spoofing via IPv4-mapped IPv6 trust subnet
+  (GHSA-jqcg-44mw-7w3h) — the PIN lockout blacklist is IP-based (mitigated
+  already: clientIp() prefers cf-connecting-ip). npm audit fix pulled
+  express 4.22.3 with patched proxy-addr/qs/ip-address; also mqtt 5.16.0,
+  ws 8.22.0, concurrently 9.2.5. 0 vulnerabilities after.
+- Deferred majors (need deliberate testing, not a sweep): react 19,
+  vite 8 + @vitejs/plugin-react 6, express 5, dotenv 18, concurrently 10.
+- Verified after restart: health, both battery units, 12 plugs (incl.
+  site-less sofa + keller), drift endpoint. (Watch out: the battery
+  details route is /api/battery/params — a bare /api/battery 404s, red
+  herring during verification.)
