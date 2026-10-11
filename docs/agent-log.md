@@ -6566,3 +6566,24 @@ cross-cutting), every finding re-verified by hand before fixing:
   branch. Engine reality check: vite 8 needs Node ^20.19/>=22.12 — the
   Dockerfile's node:22-alpine and CI's node 22 cover it; the h-iot-serv
   HOST node (v18) never runs the app (Docker), no host changes needed.
+
+## 6.0 kWp completion: ROI baseline refresh + upgrade tracking (2026-10-11, user request)
+
+- The 12×500 W array was completed today (eras: balcony 2×500 W →
+  +6 panels/4 kWp on 2026-09-26 → 6.0 kWp on 2026-10-11). The hardcoded
+  PV_EXPANSION_DATE became a proper PV_ERAS list in index.js (pvRepairCapW
+  picks the era's kWp for historical days).
+- Local .env PV_PEAK_KWP=6.0 (production already had it); baseline
+  recomputed via POST /api/roi/baseline/refresh: AI estimate €3.93/day
+  (€1435.82/yr, 6000 kWh @ 0.78 self-consumption — the ratio drop from
+  ~1.0 is the AI pricing in surplus curtailment of the bigger array).
+- New `upgrade` block in /api/roi + tile in the ROI tab: measured € vs
+  baseline-plan € from the upgrade day forward — the new system's own
+  read, undiluted by the 1/4 kWp eras. NOTE the deliberate side effect:
+  the all-time tracking % now compares old-era measurements to the new
+  6 kWp baseline and reads low (34% at refresh) — it converges as
+  post-upgrade days accumulate; the upgrade tile is the undistorted
+  window.
+- Reminder for the user: the 4 new panels belong in server/roi-bom.json
+  (invested sum drives payback), and production needs a deploy + its own
+  baseline refresh (kv is per-instance).

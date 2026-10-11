@@ -1939,12 +1939,24 @@ poller.onSnapshot((state) => {
 // 2031 W on a 1 kWp day). energy = Σpower/3000 holds via
 // cap-and-redistribute: cap each interval at the system's max for that
 // date, push the excess into the day's other producing intervals.
-// Pre-expansion days (the balcony 2×500 W era, inverter-capped 800 W) get
-// 1050 W; later days get the configured PV_PEAK_KWP × 1050 W/kWp... i.e.
-// ×1000 ×1.05. The expansion (6 more panels) arrived 2026-09-26+.
-const PV_EXPANSION_DATE = "2026-09-26";
+// PV eras (installed peak over time — 2026-10-11, three eras now): the
+// balcony 2×500 W era (inverter-capped 800 W) before the first expansion
+// (6 more panels → 4 kWp) on 2026-09-26, and the completed 12×500 W
+// 6.0 kWp array since 2026-10-11. The cap for a historical day is the
+// era's kWp × 1050 W/kWp... i.e. ×1000 ×1.05.
+const PV_ERAS = [
+  ["2026-09-26", 1.0], // before: balcony 2×500 W
+  ["2026-10-11", 4.0], // before: +6 panels (4 kWp)
+  // from 2026-10-11 on: PV_PEAK_KWP (12×500 W completed)
+];
 function pvRepairCapW(dateStr) {
-  const kwp = dateStr < PV_EXPANSION_DATE ? 1.0 : Number(process.env.PV_PEAK_KWP ?? 1.0);
+  let kwp = Number(process.env.PV_PEAK_KWP ?? 1.0);
+  for (const [date, eraKwp] of PV_ERAS) {
+    if (dateStr < date) {
+      kwp = eraKwp;
+      break;
+    }
+  }
   return Math.round(kwp * 1000 * 1.05);
 }
 function capAndRedistribute(vals, capW) {

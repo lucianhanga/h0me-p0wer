@@ -489,6 +489,11 @@ export const en = {
     },
     perDay: "/day",
     projectedPerYear: { title: "Projected per year", sub: "baseline annual" },
+    upgrade: {
+      title: "Since the {label} upgrade",
+      sub: "{measured} measured vs {baseline} plan · {days} day(s)",
+      noData: "Tracking since {date} — numbers appear once the first day lands",
+    },
     payback: {
       title: "Payback",
       inMonths: "in {months} months",
