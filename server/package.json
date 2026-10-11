@@ -1,7 +1,7 @@
 {
   "name": "h0me-p0wer-server",
   "private": true,
-  "version": "1.5.245",
+  "version": "1.5.246",
   "type": "module",
   "main": "index.js",
   "engines": {
@@ -12,7 +12,7 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5",
+    "dotenv": "^18.0.6",
     "express": "^4.21.2",
     "modbus-serial": "^8.0.17",
     "mqtt": "^5.15.2",

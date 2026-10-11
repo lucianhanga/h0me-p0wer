@@ -16,6 +16,9 @@ import { fileURLToPath } from "node:url";
 
 dotenv.config({
   path: path.join(path.dirname(fileURLToPath(import.meta.url)), "..", ".env"),
+  // dotenv 17+ logs "injected env (n) from …" on every load — once per boot
+  // is noise in the ops log channel, so opt out.
+  quiet: true,
 });
 
 // Single source of truth for the electricity tariff (architecture-review
