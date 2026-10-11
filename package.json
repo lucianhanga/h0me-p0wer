@@ -11,6 +11,6 @@
     "token:generate": "node server/generate-token.js"
   },
   "devDependencies": {
-    "concurrently": "^9.1.2"
+    "concurrently": "^10.0.5"
   }
 }
