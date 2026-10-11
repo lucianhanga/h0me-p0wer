@@ -510,6 +510,13 @@ section {
   border: 1px dashed #2a3238;
 }
 
+/* Disabled PV port's bar (2026-10-11): the full segment shape stays, the
+   green→red gradient grays out so it reads as a placeholder, not data. */
+.gradient-meter-off {
+  filter: grayscale(1);
+  opacity: 0.6;
+}
+
 /* PV channel tiles (Live tab's expanded Solar PV section) must ALL size
    identically (2026-10-03, user report: the connected cards are wrapped
    in FlipTile — a content-sized wrapper — while the bare "not connected"

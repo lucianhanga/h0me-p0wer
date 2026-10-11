@@ -34,14 +34,17 @@ function PvCard({ label, watts, peakW, weight, total, connected = true }) {
   const w = useTweenedWatts(watts ?? 0);
   const pct = peakW > 0 ? Math.min(100, Math.round(((watts ?? 0) / peakW) * 100)) : null;
   // Configured-but-uninstalled/disconnected port (2026-10-11, user
-  // request): show the slot explicitly — "—" and the not-connected note,
-  // no meter (a 0 W bar against a 0 W capacity would be noise).
+  // request): show the slot explicitly WITH its full bar, grayed out —
+  // "—" for the value, all segments unlit and desaturated.
   if (!connected) {
     return (
       <div className="pv-slot pv-slot-off" style={{ "--pv-weight": weight }}>
         <div className="pv-slot-label">
           <span>{label}</span>
           <span>—</span>
+        </div>
+        <div className="gradient-meter-off">
+          <GradientMeter value={0} max={peakW > 0 ? peakW : DEFAULT_WEIGHT_W} labels={peakW > 0} />
         </div>
       </div>
     );
