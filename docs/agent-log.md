@@ -6546,3 +6546,23 @@ cross-cutting), every finding re-verified by hand before fixing:
   shape intact. A 0-configured port's bar uses the 500 W default weight
   purely as the bar's display scale; labels only when a real peakW
   exists (a "0 W" label would be noise).
+
+## Stack majors upgrade (2026-10-11, user request — "update to the latest versions")
+
+- concurrently 9→10 (PR #407), dotenv 16→18 (PR #406 — v17+ prints an
+  "injected env (n)" line per boot; silenced via quiet: true in env.js),
+  express 4→5.3.0 (PR #409 — path-to-regexp v8 rejects bare "*": the SPA
+  fallback became app.get("/*splat"); async route errors now hit Express's
+  default handler instead of hanging — behavior improvement for free).
+- Web majors combined into ONE branch (chore/web-majors, PR merged as
+  1.5.248) instead of 4 conflicting lockfile PRs: react 19.3, react-dom
+  19.3, vite 8.3.4, @vitejs/plugin-react 6.1.2. Vite 8 is ROLLDOWN-based —
+  first install hit the npm optional-deps bug (npm/cli#4828,
+  @rolldown/binding-darwin-arm64 missing); fixed by regenerating
+  web/package-lock.json from scratch. Builds 7× faster (~0.5 s vs ~3.5 s).
+- Verified with the full CDP rig: both views, all 7 tabs, graph span
+  switch, activity bell, plugs — ZERO console errors/exceptions.
+- Dependabot PRs #408/#410/#411/#412 closed as superseded by the combined
+  branch. Engine reality check: vite 8 needs Node ^20.19/>=22.12 — the
+  Dockerfile's node:22-alpine and CI's node 22 cover it; the h-iot-serv
+  HOST node (v18) never runs the app (Docker), no host changes needed.
