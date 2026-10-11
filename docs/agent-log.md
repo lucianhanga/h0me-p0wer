@@ -6536,3 +6536,13 @@ cross-cutting), every finding re-verified by hand before fixing:
   "of 6000 W" total — the two PV capacity configs are independent by
   design, but if the real layout is 12×500 W the port keys deserve an
   update (user informed).
+
+## Disabled PV ports keep their bar, grayed (2026-10-11, user request)
+
+- Follow-up to the 0-W-port visibility change: the placeholders showed
+  just "—". Now both views render the FULL GradientMeter with value 0
+  (all segments unlit) inside a .gradient-meter-off wrapper
+  (grayscale+fade) — the port reads as an empty placeholder with its
+  shape intact. A 0-configured port's bar uses the 500 W default weight
+  purely as the bar's display scale; labels only when a real peakW
+  exists (a "0 W" label would be noise).

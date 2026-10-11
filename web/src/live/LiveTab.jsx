@@ -378,11 +378,16 @@ export default function LiveTab() {
                 </FlipTile>
               ) : (
                 // Not flippable — an empty back face behind a dead
-                // channel would just be noise.
+                // channel would just be noise. The full bar stays,
+                // grayed out (2026-10-11, user request — same treatment
+                // as the simple view's disabled PV slots).
                 <div key={c.n} className="phase-card off">
                   <span className="phase-name">{c.name}</span>
                   <span className="phase-power">—</span>
                   <span className="phase-detail">{t("live.pvNotConnected")}</span>
+                  <div className="gradient-meter-off">
+                    <GradientMeter value={0} max={c.peakW > 0 ? c.peakW : 500} />
+                  </div>
                 </div>
               ),
             )}
