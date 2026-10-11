@@ -1805,7 +1805,9 @@ battPvSyncStarter.unref();
 // Single-port mode: serve the built frontend (web/dist) and fall back to
 // index.html for non-API GETs (SPA). In dev, Vite on :5173 is used instead.
 app.use(express.static(WEB_DIST));
-app.get("*", (req, res, next) => {
+// Express 5 (path-to-regexp v8, 2026-10-11 upgrade): a bare "*" is rejected
+// ("Missing parameter name") — the wildcard needs a name now.
+app.get("/*splat", (req, res, next) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/ws")) return next();
   res.sendFile(path.join(WEB_DIST, "index.html"), (err) => err && next());
 });
