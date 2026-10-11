@@ -506,6 +506,11 @@ export const de = {
     },
     perDay: "/Tag",
     projectedPerYear: { title: "Prognose pro Jahr", sub: "jährliche Basislinie" },
+    upgrade: {
+      title: "Seit dem {label}-Upgrade",
+      sub: "{measured} gemessen vs. {baseline} Plan · {days} Tag(e)",
+      noData: "Tracking seit {date} — Werte erscheinen mit dem ersten Tag",
+    },
     payback: {
       title: "Amortisation",
       inMonths: "in {months} Monaten",

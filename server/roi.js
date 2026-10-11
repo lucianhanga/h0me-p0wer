@@ -133,6 +133,36 @@ function buildForecast(installDate, baseline, totalInvestedEur) {
   return { forecastSeries, paybackDate, daysToPayback };
 }
 
+// Upgrade tracking (2026-10-11, user request — "the 6.0 kWp is installed,
+// track the difference to the baseline from today"): the 12×500 W array
+// was completed today. Track measured savings vs the baseline's seasonal
+// plan from the upgrade day FORWARD, so the new system's read isn't
+// diluted by the 1/4 kWp eras in the all-time window. Baseline refresh on
+// the same day anchors the plan to the 6 kWp setup.
+const PV_UPGRADE = { date: "2026-10-11", label: "6.0 kWp" };
+
+function buildUpgradeTracking(measured, baseline) {
+  const days = measured.series.filter((r) => r.date >= PV_UPGRADE.date);
+  const measuredEur = r2(days.reduce((a, r) => a + (r.savedEur ?? 0), 0));
+  let baselineEur = 0;
+  if (baseline?.annualSavingsEur > 0) {
+    const dailyAvg = baseline.annualSavingsEur / 365;
+    for (const r of days) {
+      const month = new Date(`${r.date}T00:00:00`).getMonth();
+      baselineEur = r2(baselineEur + dailyAvg * baseline.monthlyDistribution[month] * 12);
+    }
+  }
+  return {
+    date: PV_UPGRADE.date,
+    label: PV_UPGRADE.label,
+    days: days.length,
+    measuredEur,
+    baselineEur,
+    deltaEur: r2(measuredEur - baselineEur),
+    ratioPct: baselineEur > 0 ? Math.round((measuredEur / baselineEur) * 100) : null,
+  };
+}
+
 // "Possible outcome": a rolling forecast (2026-09-16, user request — see
 // AGENTS.md; industry term confirmed via research) that continues from the
 // LAST MEASURED point (not from 0, so the chart line is continuous) using
@@ -361,6 +391,7 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     outlookPaybackDate: outlook.outlookPaybackDate,
     daysToOutlookPayback: outlook.daysToOutlookPayback,
     outlookNote,
+    upgrade: buildUpgradeTracking(measured, baseline),
     projections,
     series: measured.series,
     forecastSeries,
