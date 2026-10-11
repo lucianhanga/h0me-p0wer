@@ -30,9 +30,22 @@ const DEFAULT_WEIGHT_W = 500;
 // Details section can reuse the same control for grid phases and PV
 // channels: "use the same controls for PVs, and similar also for the
 // phases").
-function PvCard({ label, watts, peakW, weight, total }) {
+function PvCard({ label, watts, peakW, weight, total, connected = true }) {
   const w = useTweenedWatts(watts ?? 0);
   const pct = peakW > 0 ? Math.min(100, Math.round(((watts ?? 0) / peakW) * 100)) : null;
+  // Configured-but-uninstalled/disconnected port (2026-10-11, user
+  // request): show the slot explicitly — "—" and the not-connected note,
+  // no meter (a 0 W bar against a 0 W capacity would be noise).
+  if (!connected) {
+    return (
+      <div className="pv-slot pv-slot-off" style={{ "--pv-weight": weight }}>
+        <div className="pv-slot-label">
+          <span>{label}</span>
+          <span>—</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`pv-slot${total ? " pv-slot-total" : ""}`} style={total ? undefined : { "--pv-weight": weight }}>
       <div className="pv-slot-label">
@@ -54,8 +67,11 @@ function PvCard({ label, watts, peakW, weight, total }) {
 export default function PvStrings({ flow }) {
   const t = useT();
   const units = flow?.battery?.pvUnits ?? [];
+  // Show connected ports AND every port with an explicit PV_PORT_W_* config
+  // (2026-10-11, user request) — a slot configured as 0 W means "nothing
+  // installed there" and must still render (disabled), not vanish.
   const groups = units
-    .map((u) => ({ ...u, channels: u.channels.filter((c) => c.connected) }))
+    .map((u) => ({ ...u, channels: u.channels.filter((c) => c.connected || c.peakW != null) }))
     .filter((u) => u.channels.length > 0);
   if (!groups.length) return null;
   // Total: sums every connected port's watts; the percentage only counts
@@ -83,6 +99,7 @@ export default function PvStrings({ flow }) {
                   watts={c.watts}
                   peakW={c.peakW}
                   weight={c.peakW > 0 ? c.peakW : DEFAULT_WEIGHT_W}
+                  connected={c.connected}
                 />
               ))}
             </div>

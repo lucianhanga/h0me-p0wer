@@ -496,10 +496,18 @@ section {
 }
 
 /* PV channel that has never produced (no string wired to it) — dimmed,
-   dashed, not flippable (2026-09-28, "show disconnected PVs as disabled"). */
+   dashed, not flippable (2026-09-28, "show disconnected PVs as disabled").
+   2026-10-11: same treatment for the simple view's PV slot cards
+   (configured-but-uninstalled ports, PV_PORT_W_* slot = 0). .pv-slot has
+   no border by default — the off state adds one so the dashed reads. */
 .phase-card.off {
   opacity: 0.45;
   border-style: dashed;
+}
+
+.pv-slot-off {
+  opacity: 0.45;
+  border: 1px dashed #2a3238;
 }
 
 /* PV channel tiles (Live tab's expanded Solar PV section) must ALL size

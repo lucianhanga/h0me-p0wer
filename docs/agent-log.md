@@ -6519,3 +6519,20 @@ cross-cutting), every finding re-verified by hand before fixing:
   site-less sofa + keller), drift endpoint. (Watch out: the battery
   details route is /api/battery/params — a bare /api/battery 404s, red
   herring during verification.)
+
+## PV ports configured as 0 W now visible (2026-10-11, user request)
+
+- The cloud's pv_power block omits ports that never produced, so a port
+  explicitly configured as 0 W in PV_PORT_W_* (nothing installed there)
+  vanished from every surface. livePvUnits now emits ALL configured slots
+  for units with a PV_PORT_W_* key — missing ones synthesized as disabled
+  placeholders (watts null, connected false). Live tab showed them for
+  free (it already renders unconnected channels); the simple view's
+  PvStrings filtered c.connected — now keeps connected OR configured
+  (peakW != null), rendering the empty slot dimmed/dashed ("—", no meter;
+  GradientMeter renders nothing for max<=0 by design).
+- Config-vs-doc mismatch noticed in passing: the local .env's
+  PV_PORT_W_* sums to 4000 W while PV_PEAK_KWP=6.0 drives the Live tab's
+  "of 6000 W" total — the two PV capacity configs are independent by
+  design, but if the real layout is 12×500 W the port keys deserve an
+  update (user informed).

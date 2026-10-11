@@ -2196,25 +2196,45 @@ function pvSlotPeakWatts(unitName) {
 // watts read null (honest gap) — never the frozen REST number.
 function livePvUnits(b) {
   return (b.members ?? [])
-    .filter((m) => m.pvChannels?.length)
+    .filter((m) => m.pvChannels?.length || pvSlotPeakWatts(m.name))
     .map((m) => {
       const liveM = latestBatteries.get(m.sn);
       const fresh = batteryMqtts.get(m.sn)?.isFresh?.() ?? false;
       const portW = pvSlotPeakWatts(m.name);
+      let channels = (m.pvChannels ?? []).map((c) => {
+        const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
+        return {
+          ...c,
+          watts: w,
+          connected: pvSeenConnected(m.sn, c.n, w ?? c.watts),
+          peakW: portW?.[c.n - 1] ?? null,
+        };
+      });
+      // Configured-but-absent ports (2026-10-11, user request): the cloud
+      // omits ports that never produced, so a PV_PORT_W_* slot configured
+      // as 0 W (nothing installed there) vanished from every UI. For
+      // configured units, emit ALL slots — missing ones as disabled
+      // placeholders (watts null, connected false) so both views can show
+      // the port explicitly instead of pretending the unit has fewer MPPTs.
+      if (portW) {
+        const byN = new Map(channels.map((c) => [c.n, c]));
+        channels = portW.map(
+          (peak, i) =>
+            byN.get(i + 1) ?? {
+              n: i + 1,
+              name: `PV${i + 1}`,
+              watts: null,
+              connected: false,
+              peakW: peak,
+            },
+        );
+      }
       return {
         sn: m.sn,
         // Display-only: pvSlotPeakWatts above uses the RAW m.name for the
         // PV_PORT_W_* env key — never strip before that lookup.
         name: displayDeviceName(m.name),
-        channels: m.pvChannels.map((c) => {
-          const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
-          return {
-            ...c,
-            watts: w,
-            connected: pvSeenConnected(m.sn, c.n, w ?? c.watts),
-            peakW: portW?.[c.n - 1] ?? null,
-          };
-        }),
+        channels,
       };
     });
 }
