@@ -6656,3 +6656,33 @@ cross-cutting), every finding re-verified by hand before fixing:
   faster locally (48→3.4 ms at 295k rows; far more at 1.18M).
 - Lesson: "filter in JS" helpers are fine at 50k rows and fatal at 1M —
   any helper called per-request per-entity needs its predicate in SQL.
+
+## HmIP review batch (2026-10-12, user request: code review + browser caching + Consume slowness)
+
+Findings & fixes (all verified):
+1. Per-device energy anchor: summing counters meant one flaked-out device
+   dropped the total → false "counter reset" re-anchor. Anchor is now per
+   device (kv hmip_energy_anchor {date, per}); a missing device keeps its
+   frozen last-known contribution (lastEnergy map); a backwards counter
+   re-anchors ONLY that device. 7-check harness.
+2. AggregateBack spam: Date.now() in render → new URL every render →
+   usePolledResource refetched constantly; and the back face polled even
+   while hidden (FlipTile keeps both faces mounted). Fixed: snapped 30 s
+   window via useMemo, FlipTile passes `flipped` to back render functions,
+   enabled: visible. (Also: useMemo was missing from the React import —
+   crashed the whole Consume tab render; CDP flow caught it.)
+3. Consume first-load >15 s: every card's /api/plugs/timeseries call
+   full-scanned plug_samples (300k-1.2M rows) for ALL plugs then read one
+   column. New sn= param → (sn, ts) index, per-card reads only its own
+   rows (14× fewer, ms-fast). Rest card stays unfiltered.
+4. house light 1h span rendered NOTHING: 30 s samples in 5 s buckets
+   never give two adjacent non-null points, and the series was line-only
+   (showSymbol: false). Tiny symbols (2.5px) now — sparse series render
+   as dots, dense series visually unchanged.
+5. /api/plugs payload dropped the 30-day `daily` array — nothing in the
+   frontend read it; it rode every 3 s poll.
+6. Browser caching (user request "cache everything, also consume"):
+   usePolledResource gained cacheTtlMs (historyCache with maxAgeMs);
+   hmip/devices 60 s; ConsumersPeriodCard current period 2 min TTL
+   (immutable periods were already forever-cached); graph spans got
+   10-min TTL + URL snapping earlier the same day.

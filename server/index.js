@@ -65,6 +65,7 @@ import {
   getModuleHistory,
   savePlugSamples,
   getPlugSamples,
+  getPlugSamplesForSn,
   prunePlugSamples,
   savePlugDaily,
   getPlugDaily,
@@ -1386,7 +1387,9 @@ app.get("/api/plugs", (req, res) => {
     data: {
       plugs: mergedPlugs().map((p) => ({ ...p, colorIdx: colorIdx.get(p.sn) ?? null })),
       todayKwh,
-      daily,
+      // NOTE: the 30-day `daily` array was removed (2026-10-12 review) —
+      // nothing in the frontend read it, and it rode every 3 s poll.
+      // todayKwh above is the per-plug daily figure every surface uses.
     },
   });
 });
@@ -1434,9 +1437,20 @@ app.get("/api/plugs/timeseries", (req, res) => {
       : Math.max(minBucketMs, Math.ceil(viewMs / points / minBucketMs) * minBucketMs);
 
   const sns = new Set(mergedPlugs().map((p) => p.sn));
+  // Optional sn filter (2026-10-12, user report: Consume's first load took
+  // >15 s): every card used to trigger a FULL-range scan of plug_samples
+  // (300k+ rows/24h) bucketed in JS for ALL plugs, then read only its own
+  // column — 14 cards × ~0.5 s of blocked event loop. With sn= the query
+  // hits the (sn, ts) index and reads only that plug's rows. The Rest card
+  // keeps the unfiltered behavior (it genuinely needs every plug).
+  const onlySn = req.query.sn ? String(req.query.sn) : null;
   const acc = new Map(); // bt -> Map(sn -> {s, c})
-  for (const r of getPlugSamples(from, to)) {
-    sns.add(r.sn);
+  const sampleRows = onlySn
+    ? getPlugSamplesForSn(onlySn, from, to)
+    : getPlugSamples(from, to);
+  for (const r of sampleRows) {
+    const rSn = onlySn ?? r.sn;
+    sns.add(rSn);
     if (r.watts == null) continue;
     const bt = Math.floor(r.ts / bucketMs) * bucketMs;
     let m = acc.get(bt);
@@ -1444,10 +1458,10 @@ app.get("/api/plugs/timeseries", (req, res) => {
       m = new Map();
       acc.set(bt, m);
     }
-    const cell = m.get(r.sn) ?? { s: 0, c: 0 };
+    const cell = m.get(rSn) ?? { s: 0, c: 0 };
     cell.s += r.watts;
     cell.c++;
-    m.set(r.sn, cell);
+    m.set(rSn, cell);
   }
   const rows = [];
   for (let bt = Math.floor(from / bucketMs) * bucketMs; bt < to; bt += bucketMs) {

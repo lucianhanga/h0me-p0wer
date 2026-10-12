@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readCached, writeCached } from "./historyCache.js";
 
 // Poll a JSON endpoint on an interval, exposing {data, error, loading,
 // refresh, setData} — retires the fetch+useEffect+setInterval+error-state
@@ -28,7 +29,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // refresh button).
 export function usePolledResource(
   url,
-  { intervalMs, envelope = true, keepLastGoodOnError = false, enabled = true } = {},
+  { intervalMs, envelope = true, keepLastGoodOnError = false, enabled = true, cacheTtlMs = 0 } = {},
 ) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -36,8 +37,25 @@ export function usePolledResource(
   const mounted = useRef(true);
   const hasData = useRef(false);
 
+  // cacheTtlMs (2026-10-12, user request — "cache everything in the
+  // browser, also the consume values"): serve the localStorage history
+  // cache when a fresh-enough entry exists, and write every successful
+  // fetch back. For data that changes on the server's own cadence
+  // (cloud syncs every 15 min, 30 s hmip polls) — staleness is bounded
+  // by the TTL, network churn drops to zero on re-renders/re-mounts.
   const load = useCallback(() => {
     if (!enabled || !url) return Promise.resolve();
+    if (cacheTtlMs) {
+      const hit = readCached(url, cacheTtlMs);
+      if (hit) {
+        if (!mounted.current) return Promise.resolve();
+        setData(envelope ? hit.data : hit);
+        hasData.current = true;
+        setError(null);
+        setLoading(false);
+        return Promise.resolve();
+      }
+    }
     return fetch(url)
       .then((r) => r.json())
       .then((res) => {
@@ -48,6 +66,7 @@ export function usePolledResource(
         } else {
           setData(res);
         }
+        if (cacheTtlMs) writeCached(url, res);
         hasData.current = true;
         setError(null);
       })
@@ -59,7 +78,7 @@ export function usePolledResource(
       .finally(() => {
         if (mounted.current) setLoading(false);
       });
-  }, [url, envelope, keepLastGoodOnError, enabled]);
+  }, [url, envelope, keepLastGoodOnError, enabled, cacheTtlMs]);
 
   useEffect(() => {
     mounted.current = true;

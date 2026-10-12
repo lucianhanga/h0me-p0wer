@@ -103,18 +103,13 @@ export class HmipPoller {
     const ts = Date.now();
     let watts = 0;
     let anyWatts = false;
-    let energyWh = 0;
-    let anyEnergy = false;
+    const perEnergy = new Map(); // sn -> energy_wh, devices WITH a counter
     const sampleRows = [];
     const seen = new Map();
     for (const d of devices) {
       if (typeof d?.power_w === "number") {
         watts += d.power_w;
         anyWatts = true;
-      }
-      if (typeof d?.energy_wh === "number") {
-        energyWh += d.energy_wh;
-        anyEnergy = true;
       }
       // Per-device registry + samples (2026-10-12, user request): the
       // aggregate card's flip face lists the sub-consumers with their
@@ -123,6 +118,7 @@ export class HmipPoller {
       // untouched, so the devices never become standalone consumers).
       const sn = d?.parent ? `hmip-${d.parent}` : null;
       if (sn) {
+        if (typeof d.energy_wh === "number") perEnergy.set(sn, d.energy_wh);
         seen.set(sn, {
           sn,
           name: d.name ?? sn,
@@ -136,16 +132,17 @@ export class HmipPoller {
       }
     }
     this.devices = seen;
+    const energyWh = perEnergy.size ? [...perEnergy.values()].reduce((a, v) => a + v, 0) : null;
     this.state = {
       ts,
       watts: anyWatts ? Math.round(watts * 10) / 10 : null,
-      energyWh: anyEnergy ? energyWh : null,
+      energyWh,
       deviceCount: devices.length,
     };
     this.lastError = null;
     sampleRows.push({ sn: SN, watts: this.state.watts });
     this.onSample(ts, sampleRows);
-    if (anyEnergy) this.#dailyKwh(ts, energyWh);
+    if (perEnergy.size) this.#dailyKwh(ts, perEnergy);
   }
 
   // The aggregate card's flip face: every device seen in the last poll,
@@ -156,31 +153,59 @@ export class HmipPoller {
   }
 
   // Counter-delta daily kWh with a midnight anchor in kv — robust across
-  // server downtime (samples only cover what we're up to see).
-  #dailyKwh(ts, energyWh) {
+  // server downtime (samples only cover what we're up to see). The anchor
+  // is PER DEVICE (2026-10-12 review): summing counters first meant one
+  // device missing from a single poll dropped the total, looked like a
+  // counter reset, and re-anchored the day — losing the day's energy.
+  // Now a missing device simply doesn't contribute to that poll, and a
+  // reset (backwards counter) re-anchors only that device.
+  #dailyKwh(ts, perEnergy) {
     const date = new Date(ts).toLocaleDateString("sv");
     const anchor = this.kvGet("hmip_energy_anchor")?.value;
     if (anchor?.date !== date) {
       // Day rolled over (or first sighting): finalize the anchored day,
       // then anchor the new one. The first day starts at 0 — the anchor IS
       // the baseline, no history before it exists.
-      if (anchor?.date && typeof anchor.wh === "number" && energyWh >= anchor.wh) {
-        this.onDailyKwh(anchor.date, SN, NAME, Math.round((energyWh - anchor.wh) / 10) / 100);
+      if (anchor?.date && anchor.per) {
+        let deltaWh = 0;
+        for (const [sn, aw] of Object.entries(anchor.per)) {
+          const cw = perEnergy.get(sn);
+          if (typeof cw === "number" && cw >= aw) deltaWh += cw - aw;
+        }
+        if (deltaWh > 0) this.onDailyKwh(anchor.date, SN, NAME, Math.round(deltaWh / 10) / 100);
       }
-      this.kvSet("hmip_energy_anchor", { date, wh: energyWh });
+      this.kvSet("hmip_energy_anchor", { date, per: Object.fromEntries(perEnergy) });
       return;
     }
-    if (energyWh < anchor.wh) {
-      // Counter went backwards — a device was re-taught/reset. Re-anchor;
-      // today's earlier delta is lost, not misreported.
-      console.warn("[hmip] energy counter reset — re-anchoring");
-      this.kvSet("hmip_energy_anchor", { date, wh: energyWh });
-      return;
+    const per = anchor.per ?? {};
+    this.lastEnergy ??= new Map();
+    let dirty = false;
+    for (const [sn, cw] of perEnergy) {
+      const aw = per[sn];
+      if (aw == null || cw < aw) {
+        // New device first seen today, or counter went backwards
+        // (re-taught/reset): anchor it now — today's earlier delta for
+        // THIS device is lost, not misreported; others are unaffected.
+        if (aw != null) console.warn(`[hmip] energy counter reset on ${sn} — re-anchoring`);
+        per[sn] = cw;
+        dirty = true;
+      }
+      this.lastEnergy.set(sn, cw);
+    }
+    if (dirty) this.kvSet("hmip_energy_anchor", { date, per });
+    // Today so far = Σ(last-known counter − midnight anchor) over EVERY
+    // device seen today. A device missing from this poll keeps its frozen
+    // last-known contribution (2026-10-12 review: computing from only the
+    // current poll dipped the daily figure whenever a device flaked out).
+    let todayWh = 0;
+    for (const [sn, cw] of this.lastEnergy) {
+      const aw = per[sn];
+      if (typeof aw === "number" && cw >= aw) todayWh += cw - aw;
     }
     // Live "today so far" write, throttled to 1/min (readers: /api/plugs
     // todayKwh + the Consume tiles).
     if (ts - this.lastDailyWriteAt < 60 * 1000) return;
     this.lastDailyWriteAt = ts;
-    this.onDailyKwh(date, SN, NAME, Math.round((energyWh - anchor.wh) / 10) / 100);
+    this.onDailyKwh(date, SN, NAME, Math.round(todayWh / 10) / 100);
   }
 }
