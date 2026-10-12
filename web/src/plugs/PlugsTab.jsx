@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
+import FlipTile from "../components/FlipTile.jsx";
 import { homeOf } from "../graph/derive.js";
 import { SHORTCUTS } from "../graph/GraphTab.jsx";
 
@@ -111,7 +112,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -263,7 +264,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     };
   }, [cardKey, sn, isRest, color]);
 
-  return (
+  const cardBody = (
     <div className={`card plug-card${offline ? " plug-offline" : ""}`}>
       <div className="plug-card-head">
         <div className="plug-card-title">
@@ -277,7 +278,10 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {t("plugs.today")}</span>}
         </div>
       </div>
-      <div className="controls">
+      {/* Span buttons + chart must not toggle the aggregate flip
+          (2026-10-12): FlipTile flips on any inner click — only the header
+          area is meant to flip. */}
+      <div className="controls" onClick={(e) => e.stopPropagation()}>
         {SHORTCUTS.map((s) => (
           <button
             key={s.labelKey}
@@ -288,7 +292,52 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           </button>
         ))}
       </div>
-      <div className="plug-chart" ref={ref} />
+      <div className="plug-chart" ref={ref} onClick={(e) => aggregate && e.stopPropagation()} />
+    </div>
+  );
+
+  // Aggregate cards (2026-10-12 — "house light" sums many metering
+  // devices): flippable, the back face lists the sub-consumers with their
+  // values for the card's selected span.
+  if (aggregate) {
+    return (
+      <FlipTile back={<AggregateBack activeSpanMs={activeSpan} t={t} />}>
+        {cardBody}
+      </FlipTile>
+    );
+  }
+  return cardBody;
+}
+
+// Back face of an aggregate card (2026-10-12, user request — "house light"
+// is a collection): every sub-consumer with its current watts and its kWh
+// over the card's selected span, biggest first (same ordering rule as the
+// Consume list face).
+function AggregateBack({ activeSpanMs, t }) {
+  const to = Date.now();
+  const from = to - (activeSpanMs ?? 24 * 3600 * 1000);
+  const { data } = usePolledResource(`/api/hmip/devices?from=${from}&to=${to}`, {
+    intervalMs: 30000,
+  });
+  const devices = data?.devices ?? [];
+  if (!devices.length) return <p className="muted">{t("common.loading")}</p>;
+  return (
+    <div className="aggregate-back">
+      <p className="aggregate-back-title muted">{t("plugs.devicesTitle", { n: devices.length })}</p>
+      <div className="src-rows">
+        {devices.map((d) => (
+          <div className="src-row" key={d.sn}>
+            <span className="src-label">
+              {d.name}
+              {d.room && <span className="aggregate-room muted"> · {d.room}</span>}
+            </span>
+            <span className="src-value">
+              <span className="aggregate-watts muted">{d.wattsNow != null ? `${Math.round(d.wattsNow)} W` : "—"}</span>
+              <span className="src-kwh">{d.kwh.toFixed(2)} kWh</span>
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -321,6 +370,7 @@ export default function PlugsTab() {
             watts={p.watts}
             todayKwh={live.todayKwh?.[p.sn]}
             offline={!p.online}
+            aggregate={p.external === true}
             t={t}
           />
         ))}

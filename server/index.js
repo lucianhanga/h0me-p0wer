@@ -1391,6 +1391,28 @@ app.get("/api/plugs", (req, res) => {
   });
 });
 
+// HmIP aggregate flip face (2026-10-12, user request): the sub-consumers
+// behind "house light" with their values for an arbitrary window — current
+// watts from the poller's last poll, period kWh integrated from their
+// per-device plug_samples (same trapezoid as plugDayKwhFromSamples).
+app.get("/api/hmip/devices", (req, res) => {
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) {
+    return res.status(400).json({ ok: false, error: "from must be before to" });
+  }
+  const devices = hmipPoller.getDevices().map((d) => ({
+    sn: d.sn,
+    name: d.name,
+    room: d.room,
+    wattsNow: d.watts,
+    staleS: d.staleS,
+    kwh: plugDayKwhFromSamples(d.sn, from, to),
+  }));
+  devices.sort((a, b) => b.kwh - a.kwh);
+  res.json({ ok: true, data: { from, to, devices } });
+});
+
 // Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
 // nulls where no samples (server off). No interpolation — at the 10 s
 // sample cadence every chart-sized bucket either has samples or the gap is
@@ -2454,9 +2476,9 @@ function mergedPlugs() {
 const hmipPoller = new HmipPoller({
   kvGet,
   kvSet,
-  onSample: (ts, sn, watts) => {
+  onSample: (ts, rows) => {
     try {
-      savePlugSamples(ts, [{ sn, watts }]);
+      savePlugSamples(ts, rows);
     } catch (err) {
       console.warn("[db] failed to persist hmip sample:", err.message);
     }

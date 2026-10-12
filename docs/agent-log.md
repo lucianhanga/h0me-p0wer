@@ -6619,3 +6619,21 @@ cross-cutting), every finding re-verified by hand before fixing:
   BLOCKED for live verification at merge time: the endpoint 404'd on the
   deployed bridge (v0.2.0 — no /api/meters route in its OpenAPI yet) and
   no API key was available.
+
+## Aggregate card flip: sub-consumers of "house light" (2026-10-12, user request)
+
+- The "house light" tile in the Consume tab is a COLLECTION (13 HmIP
+  devices). Aggregate cards (plug.external === true) are now wrapped in
+  FlipTile: front stays the power chart, back lists every sub-consumer
+  with room, current watts, and kWh over the CARD's selected span
+  (biggest first, same rule as the Consume list). Span buttons and chart
+  clicks are stopPropagation'd so only the header flips.
+- Data path: hmip.js keeps a per-device registry (parent SN → name/room/
+  watts/stale) and writes PER-DEVICE samples to plug_samples under
+  hmip-<parent> SNs (they feed nothing else — plug_daily is untouched,
+  so devices never become standalone consumers). New endpoint
+  /api/hmip/devices?from&to serves the back face (period kWh via the
+  same trapezoid integration as plugDayKwhFromSamples).
+- onSample signature changed to (ts, rows) batch — update any future
+  callers. Verified: 9-check mock harness + full e2e (mock 13-device
+  bridge → real server → /api/hmip/devices → CDP flip + screenshot).

@@ -3620,3 +3620,24 @@ pre {
   height: 200px;
   padding: 0.4rem;
 }
+
+/* Aggregate card flip face (2026-10-12, "house light" sub-consumers). */
+.aggregate-back-title {
+  margin: 0 0 0.4rem;
+  font-size: 0.8rem;
+}
+
+.aggregate-back .src-rows {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.aggregate-room,
+.aggregate-watts {
+  font-size: 0.78rem;
+}
+
+.aggregate-watts {
+  min-width: 52px;
+  text-align: right;
+}
