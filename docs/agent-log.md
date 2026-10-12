@@ -6587,3 +6587,16 @@ cross-cutting), every finding re-verified by hand before fixing:
 - Reminder for the user: the 4 new panels belong in server/roi-bom.json
   (invested sum drives payback), and production needs a deploy + its own
   baseline refresh (kv is per-instance).
+
+## BOM thumbnails/PDF 401 on production (2026-10-12, user report: "cannot see the icons in the BOM")
+
+- Root cause: app.use("/api", requireAuth) covers /api/roi/image/:asin and
+  /api/roi/bom.pdf, but the frontend loads them through PLAIN <img>/<a>
+  URLs — the wrapped fetch's Bearer header and the WS query-param pattern
+  don't apply to browser-native loads, so on production (API_TOKEN active)
+  every thumbnail and the PDF download answered 401. Locally auth fails
+  open (no token configured) — invisible in dev, like most auth regressions.
+- Fix: apiUrl() in web/src/auth.js appends ?token= for browser-native
+  resource URLs; RoiTab's <img> and PDF <a> use it.
+- Verified with API_TOKEN forced on a test instance: no-token 401 vs
+  ?token= 200 for both the image and the PDF routes.

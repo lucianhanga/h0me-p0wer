@@ -3,6 +3,7 @@ import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
+import { apiUrl } from "../auth.js";
 
 const DAY_MS = 86400000;
 const fmtEur = (v) =>
@@ -203,7 +204,7 @@ export default function RoiTab() {
       <div className="card">
         <div className="roi-bom-head">
           <h4>{t("roi.bom.title")}</h4>
-          <a className="roi-pdf-btn" href="/api/roi/bom.pdf" download>
+          <a className="roi-pdf-btn" href={apiUrl("/api/roi/bom.pdf")} download>
             {t("roi.bom.downloadPdf")}
           </a>
         </div>
@@ -312,7 +313,7 @@ function BomRow({ r }) {
       rel="noopener noreferrer"
       title={t("roi.bom.viewProduct", { name: r.name })}
     >
-      <img className="roi-bom-thumb" src={`/api/roi/image/${r.asin}`} alt="" loading="lazy" />
+      <img className="roi-bom-thumb" src={apiUrl(`/api/roi/image/${r.asin}`)} alt="" loading="lazy" />
       <span className="roi-bom-name">
         {r.estimated ? <span className="roi-est">~</span> : null}
         {r.name}
