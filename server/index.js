@@ -23,6 +23,7 @@ import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
 import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
+import { HmipPoller } from "./hmip.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -2442,8 +2443,33 @@ const latestAccountPlugs = new Map(); // SN -> live plug object (site-less)
 const plugDailyLastWrite = new Map(); // SN -> last plug_daily upsert time
 
 function mergedPlugs() {
-  return [...latestPlugs, ...latestAccountPlugs.values()];
+  const hmip = hmipPoller.getState();
+  return [...latestPlugs, ...latestAccountPlugs.values(), ...(hmip ? [hmip] : [])];
 }
+
+// HmIP "house light" aggregate (2026-10-12, user request — see hmip.js):
+// the HmIP bridge's metering devices summed into one consumer. Samples and
+// daily kWh land in the same tables the smart plugs use, so every plug
+// surface (cards, Consume tiles, colors) covers it with no frontend change.
+const hmipPoller = new HmipPoller({
+  kvGet,
+  kvSet,
+  onSample: (ts, sn, watts) => {
+    try {
+      savePlugSamples(ts, [{ sn, watts }]);
+    } catch (err) {
+      console.warn("[db] failed to persist hmip sample:", err.message);
+    }
+  },
+  onDailyKwh: (date, sn, name, kwh) => {
+    try {
+      upsertPlugDailyRow(date, sn, name, kwh);
+    } catch (err) {
+      console.warn("[db] failed to persist hmip daily kWh:", err.message);
+    }
+  },
+});
+ensurePlugColors(["hmip-house-light"]);
 
 async function syncAccountPlugs() {
   if (!anker.configured) return;
@@ -2955,6 +2981,7 @@ setInterval(() => {
 }, 10 * 1000).unref();
 
 poller.start();
+hmipPoller.start();
 
 let shuttingDown = false;
 function gracefulShutdown() {
@@ -2963,6 +2990,7 @@ function gracefulShutdown() {
   shuttingDown = true;
 
   poller.stop();
+  hmipPoller.stop();
   for (const client of batteryMqtts.values()) client.stop();
   for (const client of accountPlugMqtts.values()) client.stop();
   // WebSocket clients would keep server.close() waiting forever — kill them.

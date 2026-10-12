@@ -6600,3 +6600,22 @@ cross-cutting), every finding re-verified by hand before fixing:
   resource URLs; RoiTab's <img> and PDF <a> use it.
 - Verified with API_TOKEN forced on a test instance: no-token 401 vs
   ?token= 200 for both the image and the PDF routes.
+
+## HmIP "house light" aggregate consumer (2026-10-12, user request + API contract)
+
+- The Homematic IP bridge (h0me.lucianhanga.stream, FastAPI) meters 13
+  HmIP-BSM devices; h0me-p0wer polls /api/meters (X-Api-Key) every 10 s
+  and treats ALL of them as ONE consumer named "house light"
+  (server/hmip.js, HmipPoller). Null power_w datapoints are skipped;
+  stale_seconds > 180 → offline. Daily kWh prefers the per-device
+  energy_wh counter-delta (midnight anchor in kv hmip_energy_anchor —
+  robust across server downtime; counter reset re-anchors with a log
+  line), written via upsertPlugDailyRow so plug_daily/Consume/todayKwh
+  work unchanged. Samples go to plug_samples like any plug.
+- Config: HMIP_API_URL / HMIP_API_KEY in .env (documented in
+  .env.example); unconfigured → disabled with one log line, zero impact.
+- Verified offline against a mock bridge serving the exact contract
+  (8-check harness: aggregation, nulls, freshness, anchor, daily write).
+  BLOCKED for live verification at merge time: the endpoint 404'd on the
+  deployed bridge (v0.2.0 — no /api/meters route in its OpenAPI yet) and
+  no API key was available.
