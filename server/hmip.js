@@ -6,18 +6,20 @@
 // (samples into plug_samples, daily kWh into plug_daily, colorIdx, Consume
 // tiles) with zero frontend changes.
 //
-// Poll cadence 10 s: the bridge allows 5 s (reads hit its DB, zero radio
-// traffic) but values update at best every ~30 s — 10 s is gentle and
-// plenty. Daily kWh prefers the counter-delta (robust across server
-// downtime); a negative delta means a device was re-taught (counter
-// reset) — re-anchor and log instead of writing garbage.
+// Poll cadence 30 s (2026-10-12, user request): the bridge allows 5 s
+// reads (they hit its DB, zero radio traffic) but its values update at
+// best every ~30 s anyway (≥10 W changes; 2–3 min idle) — polling faster
+// than the data can change buys nothing.
+// Daily kWh prefers the counter-delta (robust across server downtime); a
+// negative delta means a device was re-taught (counter reset) — re-anchor
+// and log instead of writing garbage.
 //
 // Never throws: the consumer simply shows offline/stale when the bridge
 // is unreachable or unconfigured (HMIP_API_URL / HMIP_API_KEY in .env).
 
 const SN = "hmip-house-light";
 const NAME = "house light";
-const POLL_MS = 10 * 1000;
+const POLL_MS = 30 * 1000;
 const TIMEOUT_MS = 6000;
 const FRESH_S = 180; // a device is stale past 3 min (bridge updates ~30 s best case)
 
