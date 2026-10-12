@@ -186,12 +186,36 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
     }
 
-    // Symbols only for sparse series (house light's 30 s cadence), clean
-    // lines for dense ones — see the series comment in chartOption().
+    // Gap-capped forward hold (2026-10-12, user request: house light
+    // should show a continuous line like the other graphs): a null bucket
+    // takes the previous value when the gap to the last real sample is ≤
+    // BRIDGE_MAX_GAP_MS — bridges the sampling cadence (30 s HmIP polls in
+    // 5 s buckets) without ever drawing across a real outage. Honest for
+    // power data (a load holds its state until it changes) and harmless
+    // for dense series, which have no nulls to bridge.
+    const BRIDGE_MAX_GAP_MS = 2 * 60 * 1000;
+    function bridgeGaps(data) {
+      let lastT = null;
+      let lastV = null;
+      return data.map(([t, v]) => {
+        if (v != null) {
+          lastT = t;
+          lastV = v;
+          return [t, v];
+        }
+        if (lastT != null && t - lastT <= BRIDGE_MAX_GAP_MS) return [t, lastV];
+        return [t, null];
+      });
+    }
+
+    // Symbols only where the (bridged) series is still sparse — after the
+    // forward hold, a healthy 30 s-cadence series is continuous and needs
+    // no dots at all, exactly like the other graphs.
     function applySeries() {
-      const nonNull = rows.reduce((a, r) => a + (r[1] != null ? 1 : 0), 0);
-      const sparse = rows.length > 0 && nonNull / rows.length < 0.5;
-      chart.setOption({ series: [{ data: rows, showSymbol: sparse }] });
+      const bridged = bridgeGaps(rows);
+      const nonNull = bridged.reduce((a, r) => a + (r[1] != null ? 1 : 0), 0);
+      const sparse = bridged.length > 0 && nonNull / bridged.length < 0.5;
+      chart.setOption({ series: [{ data: bridged, showSymbol: sparse }] });
     }
 
     async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
