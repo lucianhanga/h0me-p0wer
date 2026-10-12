@@ -100,12 +100,12 @@ function chartOption(color) {
       {
         name: "W",
         type: "line",
-        // showSymbol (2026-10-12, user report: house light's 1h view was
-        // EMPTY): with line-only rendering a sparse series — samples every
-        // 30 s in 5 s buckets, never two adjacent non-null buckets — draws
-        // nothing at all. Tiny symbols make sparse series visible as dots;
-        // dense series (10 s plugs) are unaffected visually.
-        showSymbol: true,
+        // Symbols are enabled DYNAMICALLY (2026-10-12): only when the
+        // loaded series is sparse (< 50% of buckets non-null — e.g. house
+        // light's 30 s samples in 5 s buckets, where a line-only chart
+        // renders nothing). Dense plug series stay clean lines (user
+        // feedback: "the dots look strange").
+        showSymbol: false,
         symbolSize: 2.5,
         connectNulls: false,
         lineStyle: { color, width: 1.5 },
@@ -186,13 +186,21 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       return Number.isFinite(start) && Number.isFinite(end) ? [start, end] : null;
     }
 
+    // Symbols only for sparse series (house light's 30 s cadence), clean
+    // lines for dense ones — see the series comment in chartOption().
+    function applySeries() {
+      const nonNull = rows.reduce((a, r) => a + (r[1] != null ? 1 : 0), 0);
+      const sparse = rows.length > 0 && nonNull / rows.length < 0.5;
+      chart.setOption({ series: [{ data: rows, showSymbol: sparse }] });
+    }
+
     async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
       const seq = ++fetchSeq;
       const payload = await fetchRows(fromMs, toMs, `points=800&view=${Math.round(viewMs)}`);
       if (!payload || seq !== fetchSeq || disposed) return;
       rows = payload.data;
       bucketMs = payload.bucketMs;
-      chart.setOption({ series: [{ data: rows }] });
+      applySeries();
     }
 
     function loadVisible() {
@@ -251,7 +259,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           for (const r of rows) if (r[0] >= cutoff) byT.set(r[0], r);
           for (const r of payload.data) byT.set(r[0], r);
           rows = [...byT.values()].sort((a, b) => a[0] - b[0]);
-          chart.setOption({ series: [{ data: rows }] });
+          applySeries();
         }
         // Only slide the window if the right edge is still at the live edge.
         const win2 = visibleWindow();

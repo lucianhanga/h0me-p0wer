@@ -6686,3 +6686,12 @@ Findings & fixes (all verified):
    hmip/devices 60 s; ConsumersPeriodCard current period 2 min TTL
    (immutable periods were already forever-cached); graph spans got
    10-min TTL + URL snapping earlier the same day.
+
+## Plug chart symbols only when sparse (2026-10-12, user feedback: "the dots look strange")
+
+- The showSymbol fix for the house-light 1h rendering went onto EVERY
+  series — dense 10 s plug charts looked peppered. Now decided per data
+  load (full range AND live appends): < 50% non-null buckets → symbols
+  on (sparse sources like the 30 s HmIP cadence stay visible), dense
+  series back to clean lines. Verified: Consume screenshot shows smooth
+  dense charts.
