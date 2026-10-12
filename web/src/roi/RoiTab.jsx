@@ -149,34 +149,6 @@ export default function RoiTab() {
           <div className="tile-main">{fmtEur(data.projectedAnnualSavingsEur)}</div>
           <div className="tile-sub">{t("roi.projectedPerYear.sub")}</div>
         </div>
-        {/* Upgrade tracking (2026-10-11): measured vs baseline-plan since
-            the 6.0 kWp completion — the new system's own read, undiluted
-            by the 1/4 kWp eras in the all-time window. */}
-        {data.upgrade && (
-          <div className="tile">
-            <div className="tile-title">{t("roi.upgrade.title", { label: data.upgrade.label })}</div>
-            {data.upgrade.days > 0 ? (
-              <>
-                <div className={`tile-main ${data.upgrade.deltaEur >= 0 ? "roi-pos" : "roi-neg"}`}>
-                  {data.upgrade.deltaEur >= 0 ? "+" : ""}
-                  {fmtEur(data.upgrade.deltaEur)}
-                </div>
-                <div className="tile-sub">
-                  {t("roi.upgrade.sub", {
-                    measured: fmtEur(data.upgrade.measuredEur),
-                    baseline: fmtEur(data.upgrade.baselineEur),
-                    days: data.upgrade.days,
-                  })}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="tile-main">—</div>
-                <div className="tile-sub">{t("roi.upgrade.noData", { date: fmtDate(data.upgrade.date) })}</div>
-              </>
-            )}
-          </div>
-        )}
         <div className="tile">
           <div className="tile-title">{t("roi.payback.title")}</div>
           <div className="tile-main">

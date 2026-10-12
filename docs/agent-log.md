@@ -6708,3 +6708,19 @@ Findings & fixes (all verified):
   render as clean continuous lines, no dots, same look as dense charts.
 - Verified headless: house light 1h span shows a continuous line at
   ~89 W across the whole window.
+
+## ROI anchored at full-capacity date (2026-10-12, user decision: "should be from 11 october — everything")
+
+- installDate floor moved from PANELS_INSTALL_DATE (2026-09-13, first
+  panels) to FULL_CAPACITY_DATE (2026-10-11, 12×500 W completed). Saved
+  so far, tracking %, forecast, outlook, payback — the WHOLE ROI page
+  now measures from the 6.0 kWp completion; the separate "Since the
+  upgrade" tile (added 2026-10-11) became redundant and was removed
+  (payload block, tile, i18n keys).
+- Bug found while verifying: the outlook note was cached per lastDate,
+  which did NOT change across the re-anchor — the stale 29-day note was
+  served against the new 1-day window. Cache now keys on forDate +
+  measuredDays.
+- After the change: saved €3.24 (1 day), tracking 94% of seasonal
+  baseline, baseline €3.85/day, payback Aug 2031 (baseline plan) /
+  Nov 2031 (outlook).

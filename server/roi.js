@@ -133,36 +133,6 @@ function buildForecast(installDate, baseline, totalInvestedEur) {
   return { forecastSeries, paybackDate, daysToPayback };
 }
 
-// Upgrade tracking (2026-10-11, user request — "the 6.0 kWp is installed,
-// track the difference to the baseline from today"): the 12×500 W array
-// was completed today. Track measured savings vs the baseline's seasonal
-// plan from the upgrade day FORWARD, so the new system's read isn't
-// diluted by the 1/4 kWp eras in the all-time window. Baseline refresh on
-// the same day anchors the plan to the 6 kWp setup.
-const PV_UPGRADE = { date: "2026-10-11", label: "6.0 kWp" };
-
-function buildUpgradeTracking(measured, baseline) {
-  const days = measured.series.filter((r) => r.date >= PV_UPGRADE.date);
-  const measuredEur = r2(days.reduce((a, r) => a + (r.savedEur ?? 0), 0));
-  let baselineEur = 0;
-  if (baseline?.annualSavingsEur > 0) {
-    const dailyAvg = baseline.annualSavingsEur / 365;
-    for (const r of days) {
-      const month = new Date(`${r.date}T00:00:00`).getMonth();
-      baselineEur = r2(baselineEur + dailyAvg * baseline.monthlyDistribution[month] * 12);
-    }
-  }
-  return {
-    date: PV_UPGRADE.date,
-    label: PV_UPGRADE.label,
-    days: days.length,
-    measuredEur,
-    baselineEur,
-    deltaEur: r2(measuredEur - baselineEur),
-    ratioPct: baselineEur > 0 ? Math.round((measuredEur / baselineEur) * 100) : null,
-  };
-}
-
 // "Possible outcome": a rolling forecast (2026-09-16, user request — see
 // AGENTS.md; industry term confirmed via research) that continues from the
 // LAST MEASURED point (not from 0, so the chart line is continuous) using
@@ -293,7 +263,13 @@ async function computeOutlookNote(config, ctx) {
 
 async function getOutlookNote(lastDate, ctx) {
   const hit = kvGet(OUTLOOK_NOTE_KEY);
-  if (hit?.value?.forDate === lastDate) return hit.value.note;
+  // Key on the measured window's SIGNATURE, not just its end date
+  // (2026-10-12): re-anchoring installDate (Sep 13 → full-capacity Oct 11)
+  // kept the same lastDate, so a note computed for the old 29-day window
+  // was served against the new 1-day one.
+  if (hit?.value?.forDate === lastDate && hit?.value?.measuredDays === ctx.measuredDays) {
+    return hit.value.note;
+  }
   let config = null;
   try {
     config = parseWelcomeConfig();
@@ -301,7 +277,7 @@ async function getOutlookNote(lastDate, ctx) {
     /* misconfigured — fall through to the deterministic note */
   }
   const note = await computeOutlookNote(config, ctx);
-  kvSet(OUTLOOK_NOTE_KEY, { forDate: lastDate, note });
+  kvSet(OUTLOOK_NOTE_KEY, { forDate: lastDate, measuredDays: ctx.measuredDays, note });
   return note;
 }
 
@@ -318,17 +294,18 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const battSns = deps.getBatterySns?.() ?? getBatterySns();
 
   // installDate = first day with savings data (PV rollup or battery trend),
-  // but NEVER before the panels went up: the actual return of THIS
-  // investment starts Sunday 2026-09-13 — earlier battery-only days are not
-  // the PV system's return and drag the measured average down (user
-  // decision 2026-09-15).
-  const PANELS_INSTALL_DATE = "2026-09-13";
+  // but NEVER before the system reached FULL CAPACITY: the user measures
+  // the return of THIS investment from the day the 12×500 W 6.0 kWp array
+  // was completed (2026-10-12 user decision, replacing the 2026-09-15
+  // first-panels anchor — the 1/4 kWp eras diluted every measured number,
+  // and the separate "upgrade window" tile was the wrong fix for that).
+  const FULL_CAPACITY_DATE = "2026-10-11";
   const candidates = [...getPvDailyDates()];
   for (const s of battSns) candidates.push(...getStoredPeriodStarts(s, "day"));
   const derived = candidates.length
     ? candidates.reduce((a, b) => (a < b ? a : b))
     : FALLBACK_INSTALL_DATE;
-  const installDate = derived > PANELS_INSTALL_DATE ? derived : PANELS_INSTALL_DATE;
+  const installDate = derived > FULL_CAPACITY_DATE ? derived : FULL_CAPACITY_DATE;
 
   const measured = measuredSavings(battSns, installDate, tariff);
   const measuredHint = {
@@ -391,7 +368,6 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     outlookPaybackDate: outlook.outlookPaybackDate,
     daysToOutlookPayback: outlook.daysToOutlookPayback,
     outlookNote,
-    upgrade: buildUpgradeTracking(measured, baseline),
     projections,
     series: measured.series,
     forecastSeries,
