@@ -30,6 +30,7 @@ export class HmipPoller {
     this.onSample = onSample ?? (() => {});
     this.onDailyKwh = onDailyKwh ?? (() => {});
     this.state = null; // last good aggregate
+    this.devices = new Map(); // per-device registry (flip face)
     this.lastError = null;
     this.wasUp = null;
     this.timer = null;
@@ -104,6 +105,8 @@ export class HmipPoller {
     let anyWatts = false;
     let energyWh = 0;
     let anyEnergy = false;
+    const sampleRows = [];
+    const seen = new Map();
     for (const d of devices) {
       if (typeof d?.power_w === "number") {
         watts += d.power_w;
@@ -113,7 +116,26 @@ export class HmipPoller {
         energyWh += d.energy_wh;
         anyEnergy = true;
       }
+      // Per-device registry + samples (2026-10-12, user request): the
+      // aggregate card's flip face lists the sub-consumers with their
+      // per-period values — those rows read plug_samples under per-device
+      // SNs, which feed nothing else (names for tiles come from plug_daily,
+      // untouched, so the devices never become standalone consumers).
+      const sn = d?.parent ? `hmip-${d.parent}` : null;
+      if (sn) {
+        seen.set(sn, {
+          sn,
+          name: d.name ?? sn,
+          room: d.room ?? "",
+          watts: typeof d.power_w === "number" ? d.power_w : null,
+          energyWh: typeof d.energy_wh === "number" ? d.energy_wh : null,
+          staleS: typeof d.stale_seconds === "number" ? d.stale_seconds : null,
+          ts,
+        });
+        sampleRows.push({ sn, watts: typeof d.power_w === "number" ? d.power_w : null });
+      }
     }
+    this.devices = seen;
     this.state = {
       ts,
       watts: anyWatts ? Math.round(watts * 10) / 10 : null,
@@ -121,8 +143,16 @@ export class HmipPoller {
       deviceCount: devices.length,
     };
     this.lastError = null;
-    this.onSample(ts, SN, this.state.watts);
+    sampleRows.push({ sn: SN, watts: this.state.watts });
+    this.onSample(ts, sampleRows);
     if (anyEnergy) this.#dailyKwh(ts, energyWh);
+  }
+
+  // The aggregate card's flip face: every device seen in the last poll,
+  // freshest data the bridge has (independent of the aggregate's own
+  // freshness gate).
+  getDevices() {
+    return this.devices ? [...this.devices.values()] : [];
   }
 
   // Counter-delta daily kWh with a midnight anchor in kv — robust across
