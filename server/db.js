@@ -1100,6 +1100,11 @@ db.exec(`
   )
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_plug_samples_ts ON plug_samples(ts)`);
+// Per-sn reads (plugDayKwhFromSamples) filter by sn FIRST — without this
+// index they scanned the whole (1M+ row) table per call, and /api/plugs
+// calls it per site-less plug every 3 s per client (2026-10-12 incident:
+// production event loop wedged at 117% CPU, UI unreachable).
+db.exec(`CREATE INDEX IF NOT EXISTS idx_plug_samples_sn_ts ON plug_samples(sn, ts)`);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS plug_daily (
@@ -1132,6 +1137,14 @@ const selectPlugSamples = db.prepare(
   `SELECT ts, sn, watts FROM plug_samples WHERE ts >= ? AND ts <= ? ORDER BY ts ASC`,
 );
 
+// sn-filtered variant: plugDayKwhFromSamples runs once per site-less plug
+// per /api/plugs call (and 13× per /api/hmip/devices call) — reading the
+// WHOLE table per call wedged production's event loop at 1.1M rows
+// (2026-10-12). The (sn, ts) index above makes this a direct range scan.
+const selectPlugSamplesForSn = db.prepare(
+  `SELECT ts, watts FROM plug_samples WHERE sn = ? AND ts >= ? AND ts <= ? ORDER BY ts ASC`,
+);
+
 // Trapezoid-integrated kWh for ONE plug over [fromMs, toMs] from local
 // samples — the daily-kWh source for SITE-LESS plugs (2026-10-10): the
 // cloud's per-plug daily kWh only exists for site members, so account-level
@@ -1140,8 +1153,8 @@ const selectPlugSamples = db.prepare(
 export function plugDayKwhFromSamples(sn, fromMs, toMs) {
   let wh = 0;
   let prev = null;
-  for (const r of selectPlugSamples.all(fromMs, toMs)) {
-    if (r.sn !== sn || r.watts == null) continue;
+  for (const r of selectPlugSamplesForSn.all(sn, fromMs, toMs)) {
+    if (r.watts == null) continue;
     if (prev != null) {
       // Clamp long gaps to 15 min of credit — a stale value shouldn't
       // integrate over hours of server downtime as if it ran constantly.

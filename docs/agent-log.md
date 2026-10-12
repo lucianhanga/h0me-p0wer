@@ -6637,3 +6637,22 @@ cross-cutting), every finding re-verified by hand before fixing:
 - onSample signature changed to (ts, rows) batch — update any future
   callers. Verified: 9-check mock harness + full e2e (mock 13-device
   bridge → real server → /api/hmip/devices → CDP flip + screenshot).
+
+## PRODUCTION INCIDENT: UI unreachable/very slow (2026-10-12, user report)
+
+- Symptoms: tunnel up, requests arrived at the origin but never answered
+  ("context canceled" in cloudflared); container at 117% CPU; even a
+  tokenless /api/health 401 took >15 s.
+- Root cause: plugDayKwhFromSamples read the ENTIRE plug_samples range
+  into JS and filtered by sn there. plug_samples had grown to 1.18M rows
+  (~450 ms per full read), and the function ran once per site-less plug
+  per /api/plugs call (3 s poll × 2 clients) plus 13× per
+  /api/hmip/devices call (aggregate flip face, 30 s poll) — the event
+  loop never caught up. Introduced by the site-less plugs (2026-10-10)
+  + HmIP aggregate (2026-10-12) features, deployed to production the
+  same day.
+- Fix: sn filtering moved INTO SQL (SELECT ... WHERE sn = ? AND ts
+  range) + a (sn, ts) index on plug_samples. Identical results, 14×
+  faster locally (48→3.4 ms at 295k rows; far more at 1.18M).
+- Lesson: "filter in JS" helpers are fine at 50k rows and fatal at 1M —
+  any helper called per-request per-entity needs its predicate in SQL.
