@@ -43,6 +43,18 @@ export function getToken() {
   return localStorage.getItem(TOKEN_KEY) || "";
 }
 
+// Token-bearing URL for resources the wrapped fetch CAN'T reach — <img>,
+// <a download>, anything the browser loads natively (2026-10-12, user
+// report: BOM thumbnails + BOM PDF 401'd on production, where API_TOKEN is
+// active; locally auth fails open so it never showed). Without the query
+// param those URLs 401 just like a headerless fetch would.
+export function apiUrl(path) {
+  const token = getToken();
+  if (!token) return path;
+  const sep = path.includes("?") ? "&" : "?";
+  return `${path}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export function setToken(token) {
   if (token) localStorage.setItem(TOKEN_KEY, token);
   else localStorage.removeItem(TOKEN_KEY);
