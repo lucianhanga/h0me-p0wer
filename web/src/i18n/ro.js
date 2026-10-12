@@ -503,11 +503,6 @@ export const ro = {
     },
     perDay: "/zi",
     projectedPerYear: { title: "Proiectat pe an", sub: "anual, linie de bază" },
-    upgrade: {
-      title: "De la upgrade-ul {label}",
-      sub: "{measured} măsurat vs {baseline} plan · {days} zi(le)",
-      noData: "Urmărire de la {date} — valorile apar după prima zi",
-    },
     payback: {
       title: "Recuperare investiție",
       inMonths: "în {months} luni",
