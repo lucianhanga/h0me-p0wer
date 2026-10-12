@@ -6695,3 +6695,16 @@ Findings & fixes (all verified):
   on (sparse sources like the 30 s HmIP cadence stay visible), dense
   series back to clean lines. Verified: Consume screenshot shows smooth
   dense charts.
+
+## Plug charts: gap-capped forward hold (2026-10-12, user request — "house light should be a continuous line like the others")
+
+- bridgeGaps() in PlugCard: a null bucket takes the previous value when
+  the gap to the last real sample is ≤ 2 min — bridges the SAMPLING
+  cadence (30 s HmIP polls in 5 s buckets at 1h span) without ever
+  drawing across a real outage (> 2 min gaps stay null). Step/hold
+  semantics, honest for power (a load holds its state until it changes).
+  Applies to ALL plug charts; dense series have no nulls to bridge.
+  Symbols now keyed off the BRIDGED coverage: healthy sparse sources
+  render as clean continuous lines, no dots, same look as dense charts.
+- Verified headless: house light 1h span shows a continuous line at
+  ~89 W across the whole window.
