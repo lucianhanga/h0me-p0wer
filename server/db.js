@@ -1145,6 +1145,11 @@ const selectPlugSamplesForSn = db.prepare(
   `SELECT ts, watts FROM plug_samples WHERE sn = ? AND ts >= ? AND ts <= ? ORDER BY ts ASC`,
 );
 
+// sn-filtered sample rows for the timeseries endpoint's per-card queries.
+export function getPlugSamplesForSn(sn, fromMs, toMs) {
+  return selectPlugSamplesForSn.all(sn, fromMs, toMs);
+}
+
 // Trapezoid-integrated kWh for ONE plug over [fromMs, toMs] from local
 // samples — the daily-kWh source for SITE-LESS plugs (2026-10-10): the
 // cloud's per-plug daily kWh only exists for site members, so account-level

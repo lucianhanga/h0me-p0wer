@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
@@ -100,7 +100,13 @@ function chartOption(color) {
       {
         name: "W",
         type: "line",
-        showSymbol: false,
+        // showSymbol (2026-10-12, user report: house light's 1h view was
+        // EMPTY): with line-only rendering a sparse series — samples every
+        // 30 s in 5 s buckets, never two adjacent non-null buckets — draws
+        // nothing at all. Tiny symbols make sparse series visible as dots;
+        // dense series (10 s plugs) are unaffected visually.
+        showSymbol: true,
+        symbolSize: 2.5,
         connectNulls: false,
         lineStyle: { color, width: 1.5 },
         itemStyle: { color },
@@ -132,8 +138,13 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     // Fetch this card's series over [fromMs, toMs]. `extra` carries either
     // points+view (full loads) or bucket (live-edge appends).
     async function fetchRows(fromMs, toMs, extra) {
+      // sn= (2026-10-12 Consume-slowness fix): the server then reads only
+      // this plug's rows via the (sn, ts) index instead of full-scanning
+      // plug_samples for every card. The Rest card stays unfiltered — it
+      // genuinely needs every plug.
+      const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
       const pr = await fetch(
-        `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}`,
+        `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`,
       )
         .then((r) => r.json())
         .catch(() => null);
@@ -301,7 +312,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
   // values for the card's selected span.
   if (aggregate) {
     return (
-      <FlipTile back={<AggregateBack activeSpanMs={activeSpan} t={t} />}>
+      <FlipTile back={(flipped) => <AggregateBack activeSpanMs={activeSpan} visible={flipped} t={t} />}>
         {cardBody}
       </FlipTile>
     );
@@ -313,11 +324,19 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
 // is a collection): every sub-consumer with its current watts and its kWh
 // over the card's selected span, biggest first (same ordering rule as the
 // Consume list face).
-function AggregateBack({ activeSpanMs, t }) {
-  const to = Date.now();
-  const from = to - (activeSpanMs ?? 24 * 3600 * 1000);
+function AggregateBack({ activeSpanMs, visible, t }) {
+  // Snapped 30 s window (2026-10-12 review): Date.now() in render made a
+  // NEW url on every render — usePolledResource treated each as a fresh
+  // resource and refetched constantly. The snap also lets the 60 s TTL
+  // cache actually hit on re-flip.
+  const [from, to] = useMemo(() => {
+    const end = Math.ceil(Date.now() / 30000) * 30000;
+    return [end - (activeSpanMs ?? 24 * 3600 * 1000), end];
+  }, [activeSpanMs]);
   const { data } = usePolledResource(`/api/hmip/devices?from=${from}&to=${to}`, {
     intervalMs: 30000,
+    enabled: visible, // both flip faces stay mounted — poll only when seen
+    cacheTtlMs: 60000,
   });
   const devices = data?.devices ?? [];
   if (!devices.length) return <p className="muted">{t("common.loading")}</p>;

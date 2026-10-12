@@ -205,10 +205,18 @@ export default function ConsumersPeriodCard({ type, title }) {
       if (periodImmutable(type, off)) {
         const hit = readCached(url);
         if (hit?.ok) return hit.data;
+      } else {
+        // Current period (2026-10-12, user request — "cache the consume
+        // values"): today's/yesterday's rows still get rewritten by the
+        // 15-min cloud sync, so a forever-cache would go stale — but a
+        // 2-min TTL kills the refetch storm when flipping faces,
+        // re-mounting tiles, or tab-hopping.
+        const hit = readCached(url, 2 * 60 * 1000);
+        if (hit?.ok) return hit.data;
       }
       const j = await fetch(url).then((r) => r.json());
       if (!j.ok) return null;
-      if (periodImmutable(type, off)) writeCached(url, j);
+      writeCached(url, j);
       return j.data;
     } catch {
       return null;
