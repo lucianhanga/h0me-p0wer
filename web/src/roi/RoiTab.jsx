@@ -332,6 +332,13 @@ function AmortizationChart({ data }) {
       new Date(`${f.date}T00:00:00`).getTime(),
       f.cumulativeEur,
     ]);
+    // Baseline plan curve + its own break-even marker (2026-10-13, user
+    // request): the flat seasonal plan was only visible as a date in the
+    // Payback tile's sub-line — now drawn alongside the tracked outlook.
+    const baseline = (data.forecastSeries ?? []).map((f) => [
+      new Date(`${f.date}T00:00:00`).getTime(),
+      f.cumulativeEur,
+    ]);
 
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption({
@@ -370,6 +377,35 @@ function AmortizationChart({ data }) {
           lineStyle: { color: "#5fce80", width: 2 },
           itemStyle: { color: "#5fce80" },
           data: measured,
+        },
+        {
+          name: t("roi.chart.baseline"),
+          type: "line",
+          showSymbol: false,
+          lineStyle: { color: "#8b98a5", width: 1.5, type: "dashed", opacity: 0.7 },
+          itemStyle: { color: "#8b98a5" },
+          data: baseline,
+          markPoint: data.paybackDate
+            ? {
+                symbol: "circle",
+                symbolSize: 9,
+                itemStyle: { color: "#8b98a5" },
+                label: {
+                  formatter: t("roi.chart.breakEvenPlan", { date: fmtDate(data.paybackDate) }),
+                  color: "#8b98a5",
+                  fontSize: 10,
+                  position: "bottom",
+                },
+                data: [
+                  {
+                    coord: [
+                      new Date(`${data.paybackDate}T00:00:00`).getTime(),
+                      data.totalInvestedEur,
+                    ],
+                  },
+                ],
+              }
+            : undefined,
         },
         {
           name: t("roi.chart.outlook"),

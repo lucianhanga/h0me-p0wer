@@ -525,8 +525,10 @@ export const en = {
     chart: {
       measured: "Saved (measured)",
       outlook: "Possible outcome",
+      baseline: "Baseline plan",
       invested: "invested {eur}",
       breakEven: "break-even\n{date}",
+      breakEvenPlan: "plan break-even\n{date}",
     },
   },
   ask: {

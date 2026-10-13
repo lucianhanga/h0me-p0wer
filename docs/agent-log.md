@@ -6736,3 +6736,12 @@ Findings & fixes (all verified):
 - First live read (2 days in): tracked €2,161.56/yr vs baseline
   €1,403.61/yr at 154% of plan — the 6 kWp array is beating the baseline
   hard early (expect regression toward 100% as the window grows).
+
+## Amortization chart: baseline break-even alongside tracked (2026-10-13, user request)
+
+- The flat seasonal baseline plan was only visible as a date in the
+  Payback tile's sub-line. It's now a third series on the chart (muted
+  dashed gray) with its own "plan break-even" marker on the invested
+  line — tracked outlook (green dotted, orange marker) vs baseline plan
+  (gray dashed, gray marker) read side by side. i18n: roi.chart.baseline
+  + roi.chart.breakEvenPlan (en/de/ro).
