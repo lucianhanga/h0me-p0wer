@@ -542,8 +542,10 @@ export const de = {
     chart: {
       measured: "Gespart (gemessen)",
       outlook: "Mögliches Ergebnis",
+      baseline: "Basisplan",
       invested: "investiert {eur}",
       breakEven: "Break-even\n{date}",
+      breakEvenPlan: "Plan-Break-even\n{date}",
     },
   },
 };

@@ -538,8 +538,10 @@ export const ro = {
     chart: {
       measured: "Economisit (măsurat)",
       outlook: "Rezultat posibil",
+      baseline: "Plan de bază",
       invested: "investit {eur}",
       breakEven: "punct de echilibru\n{date}",
+      breakEvenPlan: "echilibru plan\n{date}",
     },
   },
   ask: {
