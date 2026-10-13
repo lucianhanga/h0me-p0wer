@@ -380,13 +380,27 @@ export default function LiveTab() {
                 // Not flippable — an empty back face behind a dead
                 // channel would just be noise. The full bar stays,
                 // grayed out (2026-10-11, user request — same treatment
-                // as the simple view's disabled PV slots).
+                // as the simple view's disabled PV slots). 2026-10-12
+                // sizing fix (user report: PV4 rendered a different size
+                // than PV1-3): the off card must mirror the connected
+                // card's structure EXACTLY — name, power line ("not
+                // connected" lives inline in the power span), and the
+                // meter's label row (rendered manually so a 0-configured
+                // port shows "—" instead of a fake "500 W" limit).
                 <div key={c.n} className="phase-card off">
                   <span className="phase-name">{c.name}</span>
-                  <span className="phase-power">—</span>
-                  <span className="phase-detail">{t("live.pvNotConnected")}</span>
+                  <span className="phase-power">
+                    — <span className="phase-power-pct muted">{t("live.pvNotConnected")}</span>
+                  </span>
                   <div className="gradient-meter-off">
-                    <GradientMeter value={0} max={c.peakW > 0 ? c.peakW : 500} />
+                    <div className="gradient-meter-row">
+                      <div className="gradient-meter-labels right-only">
+                        <span className="gradient-meter-limit">
+                          {c.peakW > 0 ? `${c.peakW} W` : "—"}
+                        </span>
+                      </div>
+                      <GradientMeter value={0} max={c.peakW > 0 ? c.peakW : 500} />
+                    </div>
                   </div>
                 </div>
               ),
