@@ -6745,3 +6745,13 @@ Findings & fixes (all verified):
   line — tracked outlook (green dotted, orange marker) vs baseline plan
   (gray dashed, gray marker) read side by side. i18n: roi.chart.baseline
   + roi.chart.breakEvenPlan (en/de/ro).
+
+## Disabled PV cards sized like connected ones (2026-10-12, user report: PV4 a different size than PV1-3)
+
+- The bare .phase-card.off lacked the FlipTile wrapper's box metrics
+  (border-box, min-width: 0) and had a 4th element (the separate
+  "not connected" line) — it stretched wider/taller than its row
+  siblings. Fixed both: CSS box metrics for bare off cards, and the off
+  card now mirrors the connected structure exactly (name / power line
+  with the note inline / meter label row rendered manually so a
+  0-configured port shows "—" instead of a fake "500 W" limit).

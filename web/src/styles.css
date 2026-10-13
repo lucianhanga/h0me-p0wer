@@ -533,6 +533,13 @@ section {
   width: 100%;
   box-sizing: border-box;
 }
+/* Bare disabled card: same box metrics as the FlipTile-wrapped ones
+   (2026-10-12, user report: PV4 rendered wider/taller than PV1-3 — the
+   bare card lacked border-box + min-width and grew to fill the row). */
+.phase-cards > .phase-card.off {
+  box-sizing: border-box;
+  min-width: 0;
+}
 
 .pv-unit-label {
   margin: 0.5rem 0 -0.25rem;
