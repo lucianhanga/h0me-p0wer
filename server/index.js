@@ -2478,6 +2478,51 @@ const accountPlugMqtts = new Map(); // SN -> AnkerMqtt (site-less plugs only)
 const latestAccountPlugs = new Map(); // SN -> live plug object (site-less)
 const plugDailyLastWrite = new Map(); // SN -> last plug_daily upsert time
 
+// SITE plugs over MQTT too (2026-10-13, user report: phantom "rest of home"
+// spikes — the washing machine drew 1.9 kW for minutes while its plug still
+// reported 47 W through the scene poll's plug→cloud→REST path). The A17X8
+// streams the same 0405 telemetry as the site-less plugs regardless of site
+// membership, so every plug gets a client; MQTT-fresh watts win over the
+// scene value everywhere (same cross-source rule as the batteries, whose
+// MQTT/REST oscillation taught it 2026-09-29) — and the scene's own sample
+// write for that plug is suppressed while MQTT is fresh, or the charts
+// flicker between a seconds-old and a minutes-old value.
+const sitePlugMqtts = new Map(); // SN -> AnkerMqtt (site plugs)
+const latestSitePlugWatts = new Map(); // SN -> {watts, ts} (MQTT-sourced)
+
+function startSitePlugMqtts() {
+  for (const p of latestPlugs) {
+    if (sitePlugMqtts.has(p.sn)) continue;
+    const client = new AnkerMqtt(anker, p.sn, "A17X8");
+    client.onData = (d) => {
+      latestSitePlugWatts.set(p.sn, { watts: d.watts ?? null, ts: d.ts });
+      try {
+        savePlugSamples(d.ts, [{ sn: p.sn, watts: d.watts ?? null }]);
+      } catch (err) {
+        console.warn("[db] failed to persist plug MQTT sample:", err.message);
+      }
+    };
+    client.start(); // never rejects — retries internally with backoff
+    sitePlugMqtts.set(p.sn, client);
+  }
+  // Plugs that left the site: stop their clients (a site-less path will
+  // re-own them via the account discovery if they stay on the account).
+  for (const [sn, client] of sitePlugMqtts) {
+    if (!latestPlugs.some((p) => p.sn === sn)) {
+      client.stop();
+      sitePlugMqtts.delete(sn);
+      latestSitePlugWatts.delete(sn);
+    }
+  }
+}
+
+// MQTT-fresh watts win over the scene value (see above).
+function withFreshPlugWatts(p, ts) {
+  const mw = latestSitePlugWatts.get(p.sn);
+  if (mw && sitePlugMqtts.get(p.sn)?.isFresh?.()) return { ...p, watts: mw.watts, ts };
+  return { ...p, ts };
+}
+
 function mergedPlugs() {
   const hmip = hmipPoller.getState();
   return [...latestPlugs, ...latestAccountPlugs.values(), ...(hmip ? [hmip] : [])];
@@ -2680,15 +2725,22 @@ async function syncBatteryInner() {
       // per plug (the only intraday plug history that exists; the cloud
       // offers daily kWh only).
       if (info.plugs?.length) {
-        latestPlugs = info.plugs.map((p) => ({ ...p, ts: info.ts }));
+        latestPlugs = info.plugs.map((p) => withFreshPlugWatts(p, info.ts));
         // Stable color assignment for the consumer charts — first-seen
         // order, never reshuffled by later plug additions.
         ensurePlugColors(info.plugs.map((p) => p.sn));
         try {
-          savePlugSamples(info.ts, info.plugs);
+          // Skip plugs whose MQTT is fresh — writing the minutes-older
+          // scene watts on top of seconds-old MQTT ones would make the
+          // charts oscillate between the two sources.
+          savePlugSamples(
+            info.ts,
+            info.plugs.filter((p) => !sitePlugMqtts.get(p.sn)?.isFresh?.()),
+          );
         } catch (err) {
           console.warn("[db] failed to persist plug samples:", err.message);
         }
+        startSitePlugMqtts();
       }
       // Config-drift watchdog: plug membership rides this poll (zero extra
       // cloud calls); the schedule is checked separately on a 5-min cadence.
@@ -3029,6 +3081,7 @@ function gracefulShutdown() {
   hmipPoller.stop();
   for (const client of batteryMqtts.values()) client.stop();
   for (const client of accountPlugMqtts.values()) client.stop();
+  for (const client of sitePlugMqtts.values()) client.stop();
   // WebSocket clients would keep server.close() waiting forever — kill them.
   for (const ws of wss.clients) ws.terminate();
   wss.close();
