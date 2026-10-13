@@ -6724,3 +6724,15 @@ Findings & fixes (all verified):
 - After the change: saved €3.24 (1 day), tracking 94% of seasonal
   baseline, baseline €3.85/day, payback Aug 2031 (baseline plan) /
   Nov 2031 (outlook).
+
+## ROI tracked-performance annual projection (2026-10-13, user request)
+
+- The "Projected per year" tile now shows a second figure: baseline
+  annual × performance ratio (the same ratio the outlook curve applies).
+  Chosen over measured€/day × 365 deliberately — the seasonal SHAPE
+  survives and only its amplitude adjusts, so a few sunny autumn days
+  don't get linearly extrapolated into winter months. The sub-line
+  carries the measured-days count as the weak-signal caveat.
+- First live read (2 days in): tracked €2,161.56/yr vs baseline
+  €1,403.61/yr at 154% of plan — the 6 kWp array is beating the baseline
+  hard early (expect regression toward 100% as the window grows).

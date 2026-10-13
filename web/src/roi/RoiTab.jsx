@@ -148,6 +148,17 @@ export default function RoiTab() {
           <div className="tile-title">{t("roi.projectedPerYear.title")}</div>
           <div className="tile-main">{fmtEur(data.projectedAnnualSavingsEur)}</div>
           <div className="tile-sub">{t("roi.projectedPerYear.sub")}</div>
+          {/* Tracked-performance projection (2026-10-13, user request):
+              baseline annual × performance ratio — seasonal shape kept,
+              amplitude adjusted to how the system actually performs. */}
+          {data.projectedTrackedAnnualSavingsEur != null && (
+            <div className="tile-sub muted">
+              {t("roi.projectedPerYear.tracked", {
+                eur: fmtEur(data.projectedTrackedAnnualSavingsEur),
+                days: data.measuredDays,
+              })}
+            </div>
+          )}
         </div>
         <div className="tile">
           <div className="tile-title">{t("roi.payback.title")}</div>

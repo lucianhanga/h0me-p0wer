@@ -506,7 +506,11 @@ export const de = {
       measured: "gemessen {eur}/Tag über {days} Tage",
     },
     perDay: "/Tag",
-    projectedPerYear: { title: "Prognose pro Jahr", sub: "jährliche Basislinie" },
+    projectedPerYear: {
+      title: "Prognose pro Jahr",
+      sub: "jährliche Basislinie",
+      tracked: "gemessen: {eur} · {days} Tag(e)",
+    },
     payback: {
       title: "Amortisation",
       inMonths: "in {months} Monaten",

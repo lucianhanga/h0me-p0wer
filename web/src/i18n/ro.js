@@ -502,7 +502,11 @@ export const ro = {
       measured: "măsurat {eur}/zi pe {days} zile",
     },
     perDay: "/zi",
-    projectedPerYear: { title: "Proiectat pe an", sub: "anual, linie de bază" },
+    projectedPerYear: {
+      title: "Proiectat pe an",
+      sub: "anual, linie de bază",
+      tracked: "măsurat: {eur} · {days} zi(le)",
+    },
     payback: {
       title: "Recuperare investiție",
       inMonths: "în {months} luni",

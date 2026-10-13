@@ -330,6 +330,13 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
   const outlook = buildOutlook(installDate, baseline, measured, totalInvestedEur);
   const performanceRatioPct =
     outlook.performanceRatio != null ? Math.round(outlook.performanceRatio * 100) : null;
+  // Tracked-performance annual projection (2026-10-13, user request): the
+  // baseline's seasonal annual scaled by the performance ratio — the same
+  // ratio the outlook curve applies. Preferred over measured€/day × 365,
+  // which a short autumn window would skew (the seasonal shape survives;
+  // only its amplitude adjusts).
+  const projectedTrackedAnnualSavingsEur =
+    outlook.performanceRatio != null ? r2(baseline.annualSavingsEur * outlook.performanceRatio) : null;
   const lastMeasuredDate = measured.series.length
     ? measured.series[measured.series.length - 1].date
     : installDate;
@@ -362,6 +369,7 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     measuredDays: measured.measuredDays,
     measuredAvgDailySavingsEur: measured.avgDailySavingsEur,
     projectedAnnualSavingsEur: baseline.annualSavingsEur,
+    projectedTrackedAnnualSavingsEur,
     paybackDate,
     daysToPayback,
     performanceRatioPct,
