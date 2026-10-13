@@ -489,7 +489,11 @@ export const en = {
       measured: "measured {eur}/day over {days} days",
     },
     perDay: "/day",
-    projectedPerYear: { title: "Projected per year", sub: "baseline annual" },
+    projectedPerYear: {
+      title: "Projected per year",
+      sub: "baseline annual",
+      tracked: "tracked: {eur} · {days} day(s)",
+    },
     payback: {
       title: "Payback",
       inMonths: "in {months} months",
