@@ -6755,3 +6755,24 @@ Findings & fixes (all verified):
   card now mirrors the connected structure exactly (name / power line
   with the note inline / meter label row rendered manually so a
   0-configured port shows "—" instead of a fake "500 W" limit).
+
+## Site plugs on MQTT (2026-10-13, user report: phantom "rest of home" spike minutes before the washing machine's watts appeared)
+
+- Forensics on production data: the washer drew real power from ~13:13
+  (program start) and ~1.9 kW from ~13:18 (heater) while its plug reported
+  47 W until ~13:22 — plug→cloud→scene lag. "Rest of home" (home − Σplugs)
+  showed the load as unexplained house consumption for ~4 minutes.
+- Fix: SITE plugs get the same A17X8 MQTT ingestion the site-less plugs
+  got on 2026-10-10 (the device streams 0405 regardless of site
+  membership). MQTT-fresh watts win over the scene value everywhere, and
+  the scene's sample write is suppressed for MQTT-fresh plugs — the exact
+  cross-source oscillation lesson from the batteries (2026-09-29).
+  startSitePlugMqtts() runs from the scene poll's plugs block; clients
+  stop when a plug leaves the site.
+- Side confirmation from the first live reads: the A17X8 ab energy field
+  is a LIFETIME counter (tv 10.288 kWh since teach-in, 0 at pairing) —
+  the open question from the site-less plugs feature. The site-less daily
+  kWh could later switch from sample-integration to counter-delta (more
+  robust across downtime) — not done here.
+- Verified live: all 12 plugs streaming within seconds of boot; /api/plugs
+  watts visibly update at MQTT cadence (68.6 → 73 W in 6 s).
