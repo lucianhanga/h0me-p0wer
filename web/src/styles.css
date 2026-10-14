@@ -1010,15 +1010,6 @@ h4 {
   background: transparent;
 }
 
-/* Ghost segment (2026-10-13, PV curtailment potential): between the lit
-   value and the unlit rest — a lighter wash over the gradient, so the
-   "could produce up to here" range reads as a dim extension of the bar.
-   0.45 → 0.65 → 0.55 (user feedback rounds: 0.45 too strong, 0.65
-   indistinguishable from the unlit placeholder segments). */
-.gradient-meter-seg.ghost {
-  background: rgba(13, 17, 20, 0.55);
-}
-
 /* Diverging meter (2026-10-04, grid phases only — "consider a center
    which is 0 in the middle... negative values fill in... from the middle
    to the left... positive values fill in... from the middle to the
@@ -3656,4 +3647,21 @@ pre {
 .aggregate-watts {
   min-width: 52px;
   text-align: right;
+}
+
+/* PV curtailment badge (2026-10-13, user request — replaces the ghost-bar
+   experiment): a compact warning pill on the PV tiles when the solarbank
+   holds production back (battery full). */
+.pv-limited-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #f7a44f;
+  border: 1px solid #f7a44f66;
+  background: #f7a44f14;
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  white-space: nowrap;
 }
