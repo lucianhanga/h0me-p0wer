@@ -59,7 +59,7 @@ function scalePct(magnitude, max, log) {
 //
 // `log` (2026-10-04 follow-up, grid phases only — see LOG_KNEE_FRACTION
 // above): scales magnitude through the log curve instead of linearly.
-export default function GradientMeter({ value, max, bidirectional = false, labels = false, log = false, ghost = null }) {
+export default function GradientMeter({ value, max, bidirectional = false, labels = false, log = false }) {
   if (value == null || !(max > 0)) return null;
 
   if (bidirectional) {
@@ -101,21 +101,10 @@ export default function GradientMeter({ value, max, bidirectional = false, label
   const negative = value < 0;
   const pct = Math.min(100, Math.round((Math.abs(value) / max) * 100));
   const lit = Math.round((pct / 100) * SEGMENTS);
-  // Ghost range (2026-10-13, PV curtailment): segments from the actual
-  // value up to `ghost` (the estimated potential) render in a lighter wash
-  // — "the panels could produce up to here right now, but the system is
-  // holding them back".
-  const ghostLit =
-    ghost != null && ghost > value
-      ? Math.min(SEGMENTS, Math.round((Math.min(ghost, max) / max) * SEGMENTS))
-      : 0;
   const bar = (
     <div className={`gradient-meter${negative ? " negative" : ""}`}>
       {Array.from({ length: SEGMENTS }, (_, i) => (
-        <div
-          key={i}
-          className={`gradient-meter-seg${i < lit ? " on" : i < ghostLit ? " ghost" : ""}`}
-        />
+        <div key={i} className={`gradient-meter-seg${i < lit ? " on" : ""}`} />
       ))}
     </div>
   );

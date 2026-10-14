@@ -6810,3 +6810,17 @@ Findings & fixes (all verified):
   full)" on the Live PV total card (i18n en/de/ro).
 - First live read was CORRECT: battery 93% idle (ceiling 90%), 233 W
   actual vs ≈1992 W potential.
+
+## Curtailment: badge instead of ghost bars (2026-10-13, user decision — "remove this, I don't like it; just put a badge")
+
+- The ghost-segment experiment (potential as a bar extension) was removed
+  after 3 tint rounds — user verdict: didn't like the look. GradientMeter
+  reverted to the plain two-state bar; all ghost plumbing removed from
+  both views.
+- Instead: a compact amber badge "⚠ limited by solarbank ≈N W" on the
+  PV total card in BOTH views (simple view: inside the Total card's
+  label row; Live tab: on the PV total card), shown only while
+  pv.curtailed (battery at ceiling + production held back). The
+  estimation math (server/pv-potential.js, GHI-based) stays — it feeds
+  the badge's ≈W figure and the title tooltip. i18n live.pvLimitedBadge
+  en/de/ro; live.pvCurtailed text kept for the tooltip.
