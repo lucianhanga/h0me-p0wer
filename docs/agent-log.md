@@ -6861,3 +6861,22 @@ per span switch (~670k rows × 5 at 7d on the small host).
   CAST(? AS INTEGER) divisor — the CAST avoids the REAL-division bucket
   drift documented in AGENTS.md): rest card 7d went from seconds to
   ~0.2 s. Emission contract unchanged (dense rows, nulls, rounded means).
+
+## Cache LRU thrash on tab switch (2026-10-15, user: "the data should be there!")
+
+- Root cause of the LAST tab-switch slowness: the working sets of the two
+  heavy tabs don't fit in one LRU. Consume's mount writes ~17 entries
+  (14 plug cards + rest + tiles); the 24-slot cap then evicted HALF the
+  oldest — the just-viewed Graph entries — so every Graph → Consume →
+  Graph roundtrip refetched the graphs. My earlier size estimate (16-24)
+  was made BEFORE the SWR change cached every span load and before the
+  plug-card entries existed.
+- Fix: MAX_ENTRIES 24 → 64. With keys+rows compression the whole working
+  set is ~2-3 MB, far under the 5 MB quota; 64 also covers 2-3 span
+  variants per chart. Verified: graph entries survive the Consume visit,
+  charts render 400 ms after switching back.
+- Inline audit (subagents failed on OAuth timeout): no other unbounded
+  DB reads, no other per-entity N+1 loops, no other duplicate-fetch
+  paths, no render-time cache-busting URLs left. Maintenance item noted:
+  plug_samples grows ~250k/day (MQTT era) — reads are indexed/SQL now,
+  but consider 1-min thinning past 48 h if the host ever struggles.
