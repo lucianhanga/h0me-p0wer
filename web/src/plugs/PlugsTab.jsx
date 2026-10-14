@@ -3,6 +3,7 @@ import echarts from "../echarts.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import FlipTile from "../components/FlipTile.jsx";
+import { readCached, writeCached } from "../historyCache.js";
 import { homeOf } from "../graph/derive.js";
 import { SHORTCUTS } from "../graph/GraphTab.jsx";
 
@@ -137,40 +138,54 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
 
     // Fetch this card's series over [fromMs, toMs]. `extra` carries either
     // points+view (full loads) or bucket (live-edge appends).
-    async function fetchRows(fromMs, toMs, extra) {
+    // Span loads are cached (2026-10-13, user report: a page refresh on the
+    // phone refetched all 14 cards — these fetches had NO cache at all):
+    // same contract as GraphTab — 5-min snapped URLs, 10-min TTL, the 3 s
+    // live appender heals the stale right edge. Zoom/pan and live deltas
+    // stay uncached (unique URLs would just pollute the LRU).
+    const SPAN_CACHE_TTL_MS = 10 * 60 * 1000;
+    const SPAN_SNAP_MS = 5 * 60 * 1000;
+    async function fetchRows(fromMs, toMs, extra, { spanCache = false } = {}) {
       // sn= (2026-10-12 Consume-slowness fix): the server then reads only
       // this plug's rows via the (sn, ts) index instead of full-scanning
       // plug_samples for every card. The Rest card stays unfiltered — it
       // genuinely needs every plug.
       const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
-      const pr = await fetch(
-        `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`,
-      )
+      const url = `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`;
+      if (spanCache) {
+        const hit = readCached(url, SPAN_CACHE_TTL_MS);
+        if (hit) return hit;
+      }
+      const pr = await fetch(url)
         .then((r) => r.json())
         .catch(() => null);
       if (!pr?.ok) return null;
+      let result;
       if (!isRest) {
-        return { bucketMs: pr.bucketMs, data: pr.data.map((r) => [r.t, r[`plug__${sn}`] ?? null]) };
+        result = { bucketMs: pr.bucketMs, data: pr.data.map((r) => [r.t, r[`plug__${sn}`] ?? null]) };
+      } else {
+        const hr = await fetch(
+          `/api/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&bucket=${pr.bucketMs}`,
+        )
+          .then((r) => r.json())
+          .catch(() => null);
+        const homeByT = new Map();
+        if (hr?.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
+        result = {
+          bucketMs: pr.bucketMs,
+          data: pr.data.map((r) => {
+            let sum = 0;
+            for (const s of pr.plugs) {
+              const v = r[`plug__${s}`];
+              if (v != null) sum += v;
+            }
+            const home = homeByT.get(r.t);
+            return [r.t, home == null ? null : Math.max(0, Math.round(home - sum))];
+          }),
+        };
       }
-      const hr = await fetch(
-        `/api/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&bucket=${pr.bucketMs}`,
-      )
-        .then((r) => r.json())
-        .catch(() => null);
-      const homeByT = new Map();
-      if (hr?.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
-      return {
-        bucketMs: pr.bucketMs,
-        data: pr.data.map((r) => {
-          let sum = 0;
-          for (const s of pr.plugs) {
-            const v = r[`plug__${s}`];
-            if (v != null) sum += v;
-          }
-          const home = homeByT.get(r.t);
-          return [r.t, home == null ? null : Math.max(0, Math.round(home - sum))];
-        }),
-      };
+      if (spanCache) writeCached(url, result);
+      return result;
     }
 
     function setWindow(fromMs, toMs) {
@@ -218,9 +233,9 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       chart.setOption({ series: [{ data: bridged, showSymbol: sparse }] });
     }
 
-    async function loadRange(fromMs, toMs, viewMs = toMs - fromMs) {
+    async function loadRange(fromMs, toMs, viewMs = toMs - fromMs, opts = {}) {
       const seq = ++fetchSeq;
-      const payload = await fetchRows(fromMs, toMs, `points=800&view=${Math.round(viewMs)}`);
+      const payload = await fetchRows(fromMs, toMs, `points=800&view=${Math.round(viewMs)}`, opts);
       if (!payload || seq !== fetchSeq || disposed) return;
       rows = payload.data;
       bucketMs = payload.bucketMs;
@@ -254,9 +269,12 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     async function setSpan(ms) {
       savedSpanMs[cardKey] = ms;
       setActiveSpan(ms);
-      const to = Date.now();
+      // Snap the right edge UP to a 5-min boundary so repeated span loads
+      // (and full page reloads) share one cache URL (see fetchRows); the
+      // 3 s live timer re-anchors the window to now within seconds.
+      const to = Math.ceil(Date.now() / SPAN_SNAP_MS) * SPAN_SNAP_MS;
       const from = to - ms;
-      await loadRange(from, to);
+      await loadRange(from, to, ms, { spanCache: true });
       setWindow(from, to);
     }
     apiRef.current = { setSpan };
@@ -264,17 +282,31 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     // Initial view: the span this card was last showing, else 24h.
     setSpan(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
 
-    // Keep the view fresh while watching the live edge. 3 s: the server's
-    // scene poll runs at ~2.5 s whenever a WS client is connected (someone
-    // watching the UI), so a 3 s tick picks up every new plug sample.
+    // Keep the view fresh while watching the live edge. 3 s baseline (the
+    // server's scene poll runs at ~2.5 s while watched) — but at ≥6 h spans
+    // the live tick is capped at 30 s (2026-10-13, user request): a delta
+    // of two buckets is invisible at that width, and 14 cards × 3 s is
+    // real churn on a phone. The window slide stays at 3 s (visual only,
+    // no fetch).
+    const LIVE_DELTA_MIN_MS = 5.9 * 3600 * 1000; // 6h span MINUS clamp slack — ECharts clamps the
+    // window to the data extent (observed: 6h span → 5.96h visible), so a
+    // 6h-exact threshold would never fire (tick-log verified 2026-10-13).
+    const LIVE_DELTA_SLOW_MS = 30 * 1000;
+    let lastLiveFetchAt = 0;
     const liveTimer = setInterval(async () => {
       if (liveBusy) return;
       const win = visibleWindow();
       if (!win) return;
       if (win[1] < Date.now() - LIVE_EDGE_MS) return;
+      const width = win[1] - win[0];
+      if (width >= LIVE_DELTA_MIN_MS && Date.now() - lastLiveFetchAt < LIVE_DELTA_SLOW_MS) {
+        // Slow tick: still slide the window, skip the fetch.
+        setWindow(Date.now() - width, Date.now());
+        return;
+      }
       liveBusy = true;
+      lastLiveFetchAt = Date.now();
       try {
-        const width = win[1] - win[0];
         const lastT = rows.length ? rows[rows.length - 1][0] : win[0];
         const payload = await fetchRows(lastT + 1, Date.now(), `bucket=${bucketMs}`);
         if (payload?.data.length) {

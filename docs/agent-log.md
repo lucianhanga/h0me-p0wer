@@ -6776,3 +6776,19 @@ Findings & fixes (all verified):
   robust across downtime) — not done here.
 - Verified live: all 12 plugs streaming within seconds of boot; /api/plugs
   watts visibly update at MQTT cadence (68.6 → 73 W in 6 s).
+
+## Consume card span cache + slow live tick at wide spans (2026-10-13, user phone report)
+
+- User noticed on the phone: (1) refreshing the Consume tab refetched
+  EVERYTHING — the plug cards' timeseries loads had no cache at all;
+  (2) unclear live-pull cadence at wide spans. Answer to (2) for the
+  record: live deltas every 3 s at ANY span while watching the live edge,
+  plus the 3 s /api/plugs header poll.
+- PlugCard span loads now cached like GraphTab's (5-min snapped URLs,
+  10-min TTL, live appender heals the edge; zoom/pan + deltas uncached).
+  Verified with a CDP network tap: reload = 13 → 2 full fetches.
+- Live deltas at ≥6h spans capped at 30 s (user request). FIRST threshold
+  attempt (>= 6h exactly) never fired — ECharts CLAMPS the zoom window to
+  the data extent (a "6h" span reads 5.96h wide), caught via a temporary
+  window.__tickLog probe. Threshold is 5.9h. Verified: 2 fetches/70 s at
+  6h (was ~23).
