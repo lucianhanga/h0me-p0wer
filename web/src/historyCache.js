@@ -13,11 +13,14 @@
 // - Bounded: max 12 entries, LRU eviction; on quota errors, clear all
 //   history entries and retry once.
 const PREFIX = `h0mep0wer.hist.${__APP_VERSION__}.`;
-// Raised 12 → 24 (2026-10-14): the stale-while-revalidate working set is
-// ~20 entries (5 graphs + 13 plug cards + rest + tiles) — 16 thrashed the
-// LRU and tab switches refetched everything. Bounded by the row
-// compression below + the quota-error clear-and-retry.
-const MAX_ENTRIES = 24;
+// 12 → 24 → 64 (2026-10-14/15 eviction post-mortems): the working set is
+// per-tab — 5 graph spans + 14 plug cards + rest + tiles — and a 24-slot
+// global LRU THRASHED on every tab switch (Consume filled it, eviction
+// halved the oldest = the just-viewed Graph entries, so switching back to
+// Graph always refetched: "the data should be there!" — it was, minutes
+// earlier). With the keys+rows compression below the whole set is ~2-3 MB,
+// far under the 5 MB quota; 64 also covers 2-3 span variants per chart.
+const MAX_ENTRIES = 64;
 
 // Timeseries rows repeat the same ~20 keys 800 times per payload — store
 // each entry as keys + row arrays instead (≈60-70% smaller). Plug-card
