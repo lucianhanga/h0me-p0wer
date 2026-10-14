@@ -6792,3 +6792,21 @@ Findings & fixes (all verified):
   the data extent (a "6h" span reads 5.96h wide), caught via a temporary
   window.__tickLog probe. Threshold is 5.9h. Verified: 2 fetches/70 s at
   6h (was ~23).
+
+## PV curtailment potential — ghost bars (2026-10-13, user request)
+
+- Answers "how much WOULD the array produce without the battery-full
+  limit": server/pv-potential.js estimates current potential from
+  Open-Meteo hourly shortwave_radiation (GHI, already in the weather
+  pipeline): potential ≈ GHI/1000 × nameplate × PR(0.8), cached 30 min.
+  Per-port potentials scale by each port's PV_PORT_W_* nameplate.
+  Deliberately a VISUAL estimate, not a billing number (GHI ignores
+  per-port orientation/tilt) — shown as a "ghost" wash on the bars.
+- GradientMeter gained a `ghost` prop (third segment state: lighter wash
+  between lit and unlit). Both views show it (simple PvCard + total, Live
+  phase-cards + PV total), gated on potential > actual × 1.2 + 20 W.
+- pv.curtailed flag (soc ≥ ceiling−1 AND production < potential × 0.85)
+  drives the note "held back — the array could make ≈ N W now (battery
+  full)" on the Live PV total card (i18n en/de/ro).
+- First live read was CORRECT: battery 93% idle (ceiling 90%), 233 W
+  actual vs ≈1992 W potential.

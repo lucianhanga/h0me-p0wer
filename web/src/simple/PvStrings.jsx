@@ -30,9 +30,14 @@ const DEFAULT_WEIGHT_W = 500;
 // Details section can reuse the same control for grid phases and PV
 // channels: "use the same controls for PVs, and similar also for the
 // phases").
-function PvCard({ label, watts, peakW, weight, total, connected = true }) {
+function PvCard({ label, watts, peakW, weight, total, connected = true, potentialW = null }) {
   const w = useTweenedWatts(watts ?? 0);
   const pct = peakW > 0 ? Math.min(100, Math.round(((watts ?? 0) / peakW) * 100)) : null;
+  // Curtailment ghost (2026-10-13): the estimated potential as a lighter
+  // segment range past the actual bar — only when it's meaningfully
+  // higher (hysteresis keeps quiet days flicker-free).
+  const ghost =
+    potentialW != null && potentialW > (watts ?? 0) * 1.2 + 20 ? potentialW : null;
   // Configured-but-uninstalled/disconnected port (2026-10-11, user
   // request): show the slot explicitly WITH its full bar, grayed out —
   // "—" for the value, all segments unlit and desaturated.
@@ -62,7 +67,7 @@ function PvCard({ label, watts, peakW, weight, total, connected = true }) {
           the live tab from the advanced view") — labels shows the max W
           in small type above the bar instead of repeating it in the text
           line above. */}
-      <GradientMeter value={watts} max={peakW} labels />
+      <GradientMeter value={watts} max={peakW} labels ghost={ghost} />
     </div>
   );
 }
@@ -86,10 +91,14 @@ export default function PvStrings({ flow }) {
   const totalWatts = allChannels.reduce((sum, c) => sum + (c.watts ?? 0), 0);
   const configured = allChannels.filter((c) => c.peakW > 0);
   const totalPeakW = configured.length ? configured.reduce((sum, c) => sum + c.peakW, 0) : null;
+  const totalPotentialW =
+    configured.length && allChannels.some((c) => c.potentialW != null)
+      ? allChannels.reduce((sum, c) => sum + (c.potentialW ?? 0), 0)
+      : null;
   return (
     <>
       <SectionTitle>{t("simple.pvStrings")}</SectionTitle>
-      <PvCard label={t("simple.pvTotal")} watts={totalWatts} peakW={totalPeakW} total />
+      <PvCard label={t("simple.pvTotal")} watts={totalWatts} peakW={totalPeakW} potentialW={totalPotentialW} total />
       <div className="pv-slot-groups">
         {groups.map((u) => (
           <div key={u.sn} className="pv-unit-tile">
@@ -103,6 +112,7 @@ export default function PvStrings({ flow }) {
                   peakW={c.peakW}
                   weight={c.peakW > 0 ? c.peakW : DEFAULT_WEIGHT_W}
                   connected={c.connected}
+                  potentialW={c.potentialW}
                 />
               ))}
             </div>
