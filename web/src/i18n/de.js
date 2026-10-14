@@ -423,6 +423,7 @@ export const de = {
     },
     span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d" },
     tempLimit: { cold: "Kältegrenze {t} °C", hot: "Hitzegrenze {t} °C" },
+    socLimit: { max: "Ladegrenze {pct}%", min: "Entladegrenze {pct}%" },
     phases: "L1·L2·L3",
     phasesTip: "Phasenansicht — die drei Phasenlinien statt der Quellenaufteilung",
     reset: "Zurücksetzen",

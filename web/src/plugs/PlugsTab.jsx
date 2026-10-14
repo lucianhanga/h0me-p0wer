@@ -138,13 +138,10 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
 
     // Fetch this card's series over [fromMs, toMs]. `extra` carries either
     // points+view (full loads) or bucket (live-edge appends).
-    // Span loads are cached (2026-10-13, user report: a page refresh on the
-    // phone refetched all 14 cards — these fetches had NO cache at all):
-    // same contract as GraphTab — 5-min snapped URLs, 10-min TTL, the 3 s
-    // live appender heals the stale right edge. Zoom/pan and live deltas
-    // stay uncached (unique URLs would just pollute the LRU).
-    const SPAN_CACHE_TTL_MS = 10 * 60 * 1000;
-    const SPAN_SNAP_MS = 5 * 60 * 1000;
+    // Span loads are STALE-WHILE-REVALIDATE (2026-10-14, user report:
+    // switching tabs showed empty cards while refetching): loadRange serves
+    // any cached copy instantly and this always fetches fresh to replace
+    // it. Zoom/pan and live deltas stay uncached.
     async function fetchRows(fromMs, toMs, extra, { spanCache = false } = {}) {
       // sn= (2026-10-12 Consume-slowness fix): the server then reads only
       // this plug's rows via the (sn, ts) index instead of full-scanning
@@ -152,10 +149,6 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       // genuinely needs every plug.
       const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
       const url = `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`;
-      if (spanCache) {
-        const hit = readCached(url, SPAN_CACHE_TTL_MS);
-        if (hit) return hit;
-      }
       const pr = await fetch(url)
         .then((r) => r.json())
         .catch(() => null);
@@ -233,9 +226,26 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       chart.setOption({ series: [{ data: bridged, showSymbol: sparse }] });
     }
 
+    const SPAN_SNAP_MS = 5 * 60 * 1000; // snapped window for cache-shared span loads
+
     async function loadRange(fromMs, toMs, viewMs = toMs - fromMs, opts = {}) {
       const seq = ++fetchSeq;
-      const payload = await fetchRows(fromMs, toMs, `points=800&view=${Math.round(viewMs)}`, opts);
+      const extra = `points=800&view=${Math.round(viewMs)}`;
+      // Populate from cache instantly, then let the fresh fetch replace it
+      // (stale-while-revalidate — the live appender covers the gap between
+      // the cached window's end and now within seconds).
+      if (opts.spanCache) {
+        const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
+        const hit = readCached(
+          `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`,
+        );
+        if (hit) {
+          rows = hit.data;
+          bucketMs = hit.bucketMs;
+          applySeries();
+        }
+      }
+      const payload = await fetchRows(fromMs, toMs, extra, opts);
       if (!payload || seq !== fetchSeq || disposed) return;
       rows = payload.data;
       bucketMs = payload.bucketMs;
