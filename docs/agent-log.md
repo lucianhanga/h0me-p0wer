@@ -6824,3 +6824,23 @@ Findings & fixes (all verified):
   estimation math (server/pv-potential.js, GHI-based) stays — it feeds
   the badge's ≈W figure and the title tooltip. i18n live.pvLimitedBadge
   en/de/ro; live.pvCurtailed text kept for the tooltip.
+
+## SOC limit lines + stars, and REAL tab caching (2026-10-14, two user requests)
+
+1. "Battery charge by module" chart: charge-ceiling (BLUE) and
+   discharge-floor (RED) dashed lines from the account config
+   (/api/battery/params config.chargeUpperLimitPct/dischargeLowerLimitPct —
+   the real values, 93/11, not assumed), plus a star at every ceiling/floor
+   crossing per module (custom star path — ECharts has no star symbol).
+   socLimits state feeds applyRows; the chart effect re-runs on its arrival.
+
+2. "Graph and Consume take forever on tab switch": implemented
+   STALE-WHILE-REVALIDATE — span loads serve ANY cached window instantly
+   (no more 10-min TTL hard-miss) and always revalidate in the background;
+   the live appender fills the tail. Verified: charts fully rendered 400 ms
+   after tab click while "updating…" runs. Two real bugs fixed along the
+   way: (a) the historyV purge compared null-vs-server version and PURGED
+   the whole cache on every plug-card read (plug payloads carry no
+   historyV) — purge now only when BOTH sides versioned; (b) the working
+   set (~20 entries) thrashed the 16-slot LRU — raised to 24 and added
+   keys+rows compression for timeseries payloads (~60-70% smaller).

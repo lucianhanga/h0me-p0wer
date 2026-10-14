@@ -13,7 +13,37 @@
 // - Bounded: max 12 entries, LRU eviction; on quota errors, clear all
 //   history entries and retry once.
 const PREFIX = `h0mep0wer.hist.${__APP_VERSION__}.`;
-const MAX_ENTRIES = 12;
+// Raised 12 → 24 (2026-10-14): the stale-while-revalidate working set is
+// ~20 entries (5 graphs + 13 plug cards + rest + tiles) — 16 thrashed the
+// LRU and tab switches refetched everything. Bounded by the row
+// compression below + the quota-error clear-and-retry.
+const MAX_ENTRIES = 24;
+
+// Timeseries rows repeat the same ~20 keys 800 times per payload — store
+// each entry as keys + row arrays instead (≈60-70% smaller). Plug-card
+// rows are already [t, v] arrays and pass through untouched.
+function pack(payload) {
+  const d = payload?.data;
+  if (
+    Array.isArray(d) &&
+    d.length &&
+    typeof d[0] === "object" &&
+    d[0] !== null &&
+    !Array.isArray(d[0])
+  ) {
+    const k = Object.keys(d[0]);
+    return { ...payload, data: { z: 1, k, r: d.map((row) => k.map((key) => row[key] ?? null)) } };
+  }
+  return payload;
+}
+
+function unpack(payload) {
+  const d = payload?.data;
+  if (d && d.z === 1 && Array.isArray(d.r)) {
+    return { ...payload, data: d.r.map((r) => Object.fromEntries(d.k.map((k, i) => [k, r[i]]))) };
+  }
+  return payload;
+}
 
 let knownHistoryV = null; // learned from any fresh response this session
 
@@ -53,17 +83,21 @@ function evictOldestIfFull() {
 // current server marker purges and misses (a repair rewrote history).
 // maxAgeMs (default Infinity): live-edge entries expire — the immutable
 // history windows never do.
+// The historyV purge only applies when BOTH sides carry a version
+// (2026-10-14 bug: plug-card timeseries payloads have NO historyV field —
+// null hv !== server's historyV, so every plug-card read purged the WHOLE
+// cache and tab switches refetched everything).
 export function readCached(url, maxAgeMs = Infinity) {
   try {
     const raw = localStorage.getItem(PREFIX + url);
     if (!raw) return null;
     const { at, hv, v } = JSON.parse(raw);
     if (Date.now() - at > maxAgeMs) return null;
-    if (knownHistoryV != null && hv !== knownHistoryV) {
+    if (knownHistoryV != null && hv != null && hv !== knownHistoryV) {
       purgeAll();
       return null;
     }
-    return v;
+    return unpack(v);
   } catch {
     return null;
   }
@@ -75,11 +109,11 @@ export function writeCached(url, payload) {
     if (hv != null && knownHistoryV == null) knownHistoryV = hv;
     if (hv != null && knownHistoryV !== hv) purgeAll(); // server repaired history
     evictOldestIfFull();
-    localStorage.setItem(PREFIX + url, JSON.stringify({ at: Date.now(), hv, v: payload }));
+    localStorage.setItem(PREFIX + url, JSON.stringify({ at: Date.now(), hv, v: pack(payload) }));
   } catch {
     try {
       purgeAll();
-      localStorage.setItem(PREFIX + url, JSON.stringify({ at: Date.now(), hv: payload?.historyV ?? null, v: payload }));
+      localStorage.setItem(PREFIX + url, JSON.stringify({ at: Date.now(), hv: payload?.historyV ?? null, v: pack(payload) }));
     } catch {
       /* storage unavailable — caching is best-effort */
     }

@@ -104,6 +104,11 @@ const MODULE_COLORS = ["#5fce80", "#c084fc", "#6bb8f5", "#f7a44f", "#e5544b", "#
 // resets only on a full page reload.
 const savedSpanMs = GRAPHS.map(() => null);
 
+// 5-point star for the SOC reach markers (ceiling/floor crossings) —
+// ECharts' built-in symbols have no star, so bring a path.
+const STAR_PATH =
+  "path://M0,-7 L2,-2.2 L7,-2.2 L3,1 L4.5,6.5 L0,3.4 L-4.5,6.5 L-3,1 L-7,-2.2 L-2,-2.2 Z";
+
 // robustCap() lives in derive.js (shared with the simple view's
 // charts since 2026-10-03) — the comment history moved with it.
 
@@ -112,7 +117,10 @@ export default function GraphTab() {
   // The physical module list (every solarbank + expansion pack, keyed by
   // physical SN) for the two dynamic per-module charts — fetched once from
   // /api/battery/params (the same place the Strategy tab's cards read).
+  // The same payload's config carries the SOC charge ceiling / discharge
+  // floor for the SOC chart's limit lines (2026-10-13, user request).
   const [modules, setModules] = useState([]);
+  const [socLimits, setSocLimits] = useState(null);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/battery/params")
@@ -128,6 +136,11 @@ export default function GraphTab() {
               .map((e, i) => ({ sn: e.sn, name: `${b.live.name ?? b.live.sn} ext ${i + 1}` })),
           ]);
         setModules(list);
+        const cfg = res.data.config ?? {};
+        setSocLimits({
+          ceil: cfg.chargeUpperLimitPct ?? 90,
+          floor: cfg.dischargeLowerLimitPct ?? 10,
+        });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -464,10 +477,65 @@ export default function GraphTab() {
             max: isModuleChart ? (def.unit === "°C" ? 50 : 100) : (tight?.max ?? null),
             min: isModuleChart ? (def.unit === "°C" ? -10 : 0) : (tight?.min ?? null),
           },
-          series: def.series.map((s, si) => ({
-            name: s.name,
-            data: seriesData[si],
-          })),
+          series: def.series.map((s, si) => {
+            const entry = { name: s.name, data: seriesData[si] };
+            // SOC limit lines + reach stars (2026-10-13, user request):
+            // charge ceiling BLUE, discharge floor RED, and a star at each
+            // crossing event per module.
+            if (def.dynamicSeries === "soc" && socLimits) {
+              const { ceil, floor } = socLimits;
+              const d = seriesData[si];
+              const stars = [];
+              for (let i = 1; i < d.length; i++) {
+                const vPrev = d[i - 1][1];
+                const [t, v] = d[i];
+                if (v == null || vPrev == null) continue;
+                if (vPrev < ceil && v >= ceil) {
+                  stars.push({ coord: [t, ceil], itemStyle: { color: "#6bb8f5" } });
+                } else if (vPrev > floor && v <= floor) {
+                  stars.push({ coord: [t, floor], itemStyle: { color: "#e5544b" } });
+                }
+              }
+              if (stars.length) {
+                entry.markPoint = {
+                  symbol: STAR_PATH,
+                  symbolSize: 11,
+                  label: { show: false },
+                  data: stars.slice(-100),
+                };
+              }
+              if (si === 0) {
+                entry.markLine = {
+                  silent: true,
+                  symbol: "none",
+                  animation: false,
+                  data: [
+                    {
+                      yAxis: ceil,
+                      lineStyle: { color: "#6bb8f5", type: "dashed", width: 1.5 },
+                      label: {
+                        color: "#6bb8f5",
+                        fontSize: 10,
+                        position: "insideEndBottom",
+                        formatter: t("graph.socLimit.max", { pct: ceil }),
+                      },
+                    },
+                    {
+                      yAxis: floor,
+                      lineStyle: { color: "#e5544b", type: "dashed", width: 1.5 },
+                      label: {
+                        color: "#e5544b",
+                        fontSize: 10,
+                        position: "insideEndTop",
+                        formatter: t("graph.socLimit.min", { pct: floor }),
+                      },
+                    },
+                  ],
+                };
+              }
+            }
+            return entry;
+          }),
         });
       }
 
@@ -494,26 +562,24 @@ export default function GraphTab() {
       // Browser cache for history windows:
       // - immutable (end before yesterday 00:00 local): cached forever
       //   (2026-10-01) — the cloud sync still rewrites today/yesterday.
-      // - live-edge SPAN loads (2026-10-10, user report — switching
-      //   7d→30d→7d refetched everything): cached for SPAN_CACHE_TTL_MS.
-      //   setSpan snaps the window to SPAN_SNAP_MS boundaries so repeat
-      //   clicks within a bucket share one URL (unsnapped, Date.now() made
-      //   every click a unique URL — the cache could never hit); the 5 s
-      //   live appender heals the slightly-stale right edge within seconds.
+      // - live-edge SPAN loads: STALE-WHILE-REVALIDATE (2026-10-14, user
+      //   report: switching tabs showed empty charts while refetching).
+      //   loadRange serves ANY cached copy instantly (see there) and this
+      //   always fetches fresh to replace it — there is no TTL miss
+      //   anymore, the cache is only ever a speedup, never the data
+      //   itself. setSpan snaps the window to SPAN_SNAP_MS boundaries so
+      //   repeat clicks within a bucket share one URL.
       // Zoom/pan refetches and the 5 s live deltas are never cached —
       // unique URLs every time, they'd just evict the useful LRU entries.
       const SPAN_SNAP_MS = 5 * 60 * 1000;
-      const SPAN_CACHE_TTL_MS = 10 * 60 * 1000;
       async function fetchTimeseries(params, { spanCache = false } = {}) {
         const url = `/api/timeseries?${params}`;
         const toMs = Number(new URLSearchParams(params).get("to"));
         const immutable = Number.isFinite(toMs) && toMs < immutableBeforeMs();
-        const hit = immutable
-          ? readCached(url)
-          : spanCache
-            ? readCached(url, SPAN_CACHE_TTL_MS)
-            : null;
-        if (hit) return hit;
+        if (immutable) {
+          const hit = readCached(url);
+          if (hit) return hit;
+        }
         try {
           const payload = await fetch(url).then((r) => r.json());
           if (payload.ok && (immutable || spanCache)) writeCached(url, payload);
@@ -525,10 +591,20 @@ export default function GraphTab() {
 
       async function loadRange(fromMs, toMs, viewMs = toMs - fromMs, opts = {}) {
         const seq = ++fetchSeq;
-        const payload = await fetchTimeseries(
-          `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`,
-          opts,
-        );
+        const params = `from=${Math.round(fromMs)}&to=${Math.round(toMs)}&points=800&view=${Math.round(viewMs)}`;
+        // Populate from cache instantly, then let the fresh fetch replace
+        // it (stale-while-revalidate — the live appender covers the gap
+        // between the cached window's end and now within seconds).
+        if (opts.spanCache) {
+          const hit = readCached(`/api/timeseries?${params}`);
+          if (hit) {
+            rowsRef.rows = hit.data;
+            rowsRef.bucketMs = hit.bucketMs;
+            applyRows(hit.data);
+            updateStats(hit.data, hit.bucketMs);
+          }
+        }
+        const payload = await fetchTimeseries(params, opts);
         if (!payload || seq !== fetchSeq) return;
         rowsRef.rows = payload.data;
         rowsRef.bucketMs = payload.bucketMs;
@@ -639,7 +715,7 @@ export default function GraphTab() {
       apiRefs.current = graphs.map(() => null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphs]);
+  }, [graphs, socLimits]);
 
   return (
     <div>
