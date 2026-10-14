@@ -1177,6 +1177,37 @@ export function getPlugSamplesBucketedForSn(sn, fromMs, toMs, bucketMs) {
   return selectPlugSamplesBucketedForSn.all(bucketMs, sn, fromMs, toMs);
 }
 
+// Same treatment for the two /api/timeseries raw sources (2026-10-15, user
+// report: the Battery-charge-per-module chart lags — module_snapshots was
+// 365k rows per 7d merge, battery_snapshots 160k, both bucketed in JS on
+// every request). COALESCE matches the old JS semantics exactly: battery
+// channels counted nulls as 0 (output_w ?? 0), while module soc/temp rows
+// with nulls were SKIPPED (AVG ignores them).
+const selectBatteryBuckets = db.prepare(`
+  SELECT (ts - (ts % CAST(? AS INTEGER))) AS bt,
+         AVG(COALESCE(output_w, 0)) AS out_w,
+         AVG(COALESCE(charge_w, 0)) AS chg_w,
+         AVG(COALESCE(pv_w, 0)) AS pv_w
+  FROM battery_snapshots
+  WHERE ts >= ? AND ts <= ?
+  GROUP BY bt
+`);
+const selectModuleBuckets = db.prepare(`
+  SELECT (ts - (ts % CAST(? AS INTEGER))) AS bt, module,
+         AVG(soc) AS soc, AVG(temperature_c) AS temp
+  FROM module_snapshots
+  WHERE ts >= ? AND ts <= ?
+  GROUP BY bt, module
+`);
+
+export function getBatteryBuckets(fromMs, toMs, bucketMs) {
+  return selectBatteryBuckets.all(bucketMs, fromMs, toMs);
+}
+
+export function getModuleBuckets(fromMs, toMs, bucketMs) {
+  return selectModuleBuckets.all(bucketMs, fromMs, toMs);
+}
+
 // Trapezoid-integrated kWh for ONE plug over [fromMs, toMs] from local
 // samples — the daily-kWh source for SITE-LESS plugs (2026-10-10): the
 // cloud's per-plug daily kWh only exists for site members, so account-level

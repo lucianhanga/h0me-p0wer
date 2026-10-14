@@ -6880,3 +6880,14 @@ per span switch (~670k rows × 5 at 7d on the small host).
   paths, no render-time cache-busting URLs left. Maintenance item noted:
   plug_samples grows ~250k/day (MQTT era) — reads are indexed/SQL now,
   but consider 1-min thinning past 48 h if the host ever struggles.
+
+## /api/timeseries: SQL-bucketed battery + module sources (2026-10-15, user report: Battery-charge-per-module chart still delayed)
+
+The merge's two raw sources were the last big JS-bucketing loops: per
+7d request it read 365k module_snapshots rows (609 ms read alone on
+production, plus the JS merge) and 160k battery_snapshots rows. Both are
+now SQL GROUP BYs with the same CAST(? AS INTEGER) divisor pattern (COALESCE
+preserves the old null semantics: battery nulls counted as 0, module
+nulls skipped). Production bench: module 609 → 289 ms (2716 rows),
+battery → 78 ms (231 rows). Anchor-fill semantics unchanged (anchors
+still only fill empty buckets; pre-aggregated buckets count as covered).
