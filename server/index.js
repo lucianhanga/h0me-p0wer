@@ -24,6 +24,7 @@ import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-
 import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
+import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
 import {
   saveSnapshot,
   pruneOld,
@@ -666,6 +667,18 @@ async function computeFlowPayload() {
       // current production as a percentage of it (2026-10-03, user
       // request: "how much of maximum capacity is produced").
       peakW: Math.round(Number(process.env.PV_PEAK_KWP ?? 1) * 1000),
+      // Curtailment (2026-10-13, user request): GHI-based potential (what
+      // the array COULD make now) + a curtailed flag when the battery sits
+      // at its ceiling and production is clearly held back.
+      potentialW:
+        pvPotentialWPerKwp() != null
+          ? Math.round(pvPotentialWPerKwp() * Number(process.env.PV_PEAK_KWP ?? 1))
+          : null,
+      curtailed:
+        pvPotentialWPerKwp() != null &&
+        b?.soc != null &&
+        b.soc >= chargeCeilingPct - 1 &&
+        pvW < pvPotentialWPerKwp() * Number(process.env.PV_PEAK_KWP ?? 1) * 0.85,
       toBattery: pvToBattery,
       // Same app-channel value as the diagram's PV→Home arc (2026-09-29).
       toHome: diagram.pvToHomeW,
@@ -2252,13 +2265,23 @@ function livePvUnits(b) {
       const liveM = latestBatteries.get(m.sn);
       const fresh = batteryMqtts.get(m.sn)?.isFresh?.() ?? false;
       const portW = pvSlotPeakWatts(m.name);
+      // Curtailment potential (2026-10-13, user request): GHI-based
+      // estimate of what the port COULD produce right now — the UI draws
+      // it as a ghost segment past the actual bar when it's meaningfully
+      // higher (i.e. the system is holding the panels back).
+      const wPerKwp = pvPotentialWPerKwp();
       let channels = (m.pvChannels ?? []).map((c) => {
         const w = fresh ? (liveM?.[`pv${c.n}W`] ?? null) : null;
+        const peak = portW?.[c.n - 1] ?? null;
         return {
           ...c,
           watts: w,
           connected: pvSeenConnected(m.sn, c.n, w ?? c.watts),
-          peakW: portW?.[c.n - 1] ?? null,
+          peakW: peak,
+          potentialW:
+            wPerKwp != null && peak > 0
+              ? Math.round((wPerKwp * peak) / 1000)
+              : null,
         };
       });
       // Configured-but-absent ports (2026-10-11, user request): the cloud
@@ -3070,6 +3093,10 @@ setInterval(() => {
 
 poller.start();
 hmipPoller.start();
+// PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
+// weather data, refreshed on a relaxed cadence; first call right away.
+refreshPvPotential();
+setInterval(() => refreshPvPotential(), 15 * 60 * 1000).unref();
 
 let shuttingDown = false;
 function gracefulShutdown() {

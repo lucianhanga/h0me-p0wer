@@ -173,6 +173,7 @@ export const de = {
     details: "Details",
     pvTotal: "PV gesamt",
     pvNotConnected: "nicht angeschlossen",
+    pvCurtailed: "gedrosselt — die Anlage könnte jetzt ≈ {w} W (Akku voll)",
     kwhToday: "{kwh} kWh heute",
     meterInfo: "{model} · {type} · SW {sw} · letztes Update {time}",
     noDataToday: "heute noch keine Daten",

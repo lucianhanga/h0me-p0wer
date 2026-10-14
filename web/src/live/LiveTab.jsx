@@ -346,7 +346,19 @@ export default function LiveTab() {
                 <span className="phase-power-pct"> {Math.round((pv.production / pv.peakW) * 100)}%</span>
               )}
             </span>
-            {pv && <GradientMeter value={pv.production} max={pv.peakW} labels />}
+            {/* Curtailment (2026-10-13): ghost = GHI-based potential; when
+                the battery is full and production is held back, say so. */}
+            {pv && (
+              <GradientMeter
+                value={pv.production}
+                max={pv.peakW}
+                labels
+                ghost={pv.potentialW != null && pv.potentialW > pv.production * 1.2 + 20 ? pv.potentialW : null}
+              />
+            )}
+            {pv?.curtailed && (
+              <span className="phase-detail">{t("live.pvCurtailed", { w: pv.potentialW })}</span>
+            )}
           </div>
         </FlipTile>
       </div>
@@ -373,7 +385,12 @@ export default function LiveTab() {
                         <span className="phase-power-pct"> {Math.round((c.watts / c.peakW) * 100)}%</span>
                       )}
                     </span>
-                    <GradientMeter value={c.watts} max={c.peakW} labels />
+                    <GradientMeter
+                      value={c.watts}
+                      max={c.peakW}
+                      labels
+                      ghost={c.potentialW != null && c.potentialW > (c.watts ?? 0) * 1.2 + 20 ? c.potentialW : null}
+                    />
                   </div>
                 </FlipTile>
               ) : (

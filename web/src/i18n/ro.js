@@ -169,6 +169,7 @@ export const ro = {
     details: "Detalii",
     pvTotal: "PV total",
     pvNotConnected: "neconectat",
+    pvCurtailed: "limitat — instalația ar putea produce ≈ {w} W acum (baterie plină)",
     kwhToday: "{kwh} kWh azi",
     meterInfo: "{model} · {type} · SW {sw} · ultima actualizare {time}",
     noDataToday: "încă nu sunt date azi",

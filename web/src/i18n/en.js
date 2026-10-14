@@ -158,6 +158,7 @@ export const en = {
     details: "Details",
     pvTotal: "PV total",
     pvNotConnected: "not connected",
+    pvCurtailed: "held back — the array could make ≈ {w} W now (battery full)",
     kwhToday: "{kwh} kWh today",
     meterInfo: "{model} · {type} · SW {sw} · last update {time}",
     noDataToday: "no data yet today",
