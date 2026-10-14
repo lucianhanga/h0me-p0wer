@@ -67,6 +67,8 @@ import {
   savePlugSamples,
   getPlugSamples,
   getPlugSamplesForSn,
+  getPlugSamplesBucketed,
+  getPlugSamplesBucketedForSn,
   prunePlugSamples,
   savePlugDaily,
   getPlugDaily,
@@ -1456,33 +1458,25 @@ app.get("/api/plugs/timeseries", (req, res) => {
   // column — 14 cards × ~0.5 s of blocked event loop. With sn= the query
   // hits the (sn, ts) index and reads only that plug's rows. The Rest card
   // keeps the unfiltered behavior (it genuinely needs every plug).
+  // 2026-10-14: bucketing itself moved INTO SQLite (getPlugSamplesBucketed)
+  // — the full 1.76 M-row range became a C-level GROUP BY (3.8 s → ms).
   const onlySn = req.query.sn ? String(req.query.sn) : null;
-  const acc = new Map(); // bt -> Map(sn -> {s, c})
-  const sampleRows = onlySn
-    ? getPlugSamplesForSn(onlySn, from, to)
-    : getPlugSamples(from, to);
-  for (const r of sampleRows) {
+  const acc = new Map(); // bt -> Map(sn -> w)
+  const bucketed = onlySn
+    ? getPlugSamplesBucketedForSn(onlySn, from, to, bucketMs)
+    : getPlugSamplesBucketed(from, to, bucketMs);
+  for (const r of bucketed) {
     const rSn = onlySn ?? r.sn;
     sns.add(rSn);
-    if (r.watts == null) continue;
-    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-    let m = acc.get(bt);
-    if (!m) {
-      m = new Map();
-      acc.set(bt, m);
-    }
-    const cell = m.get(rSn) ?? { s: 0, c: 0 };
-    cell.s += r.watts;
-    cell.c++;
-    m.set(rSn, cell);
+    if (!acc.has(r.bt)) acc.set(r.bt, new Map());
+    acc.get(r.bt).set(rSn, Math.round(r.w));
   }
   const rows = [];
   for (let bt = Math.floor(from / bucketMs) * bucketMs; bt < to; bt += bucketMs) {
     const row = { t: bt };
     const m = acc.get(bt);
     for (const sn of sns) {
-      const cell = m?.get(sn);
-      row[`plug__${sn}`] = cell ? Math.round(cell.s / cell.c) : null;
+      row[`plug__${sn}`] = m?.get(sn) ?? null;
     }
     rows.push(row);
   }

@@ -4,6 +4,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { robustCap, rowValue, tightAxisBounds } from "./derive.js";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
+import { fetchOnce } from "../fetchDedupe.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
@@ -581,7 +582,7 @@ export default function GraphTab() {
           if (hit) return hit;
         }
         try {
-          const payload = await fetch(url).then((r) => r.json());
+          const payload = await fetchOnce(url); // 5 charts, 1 request (fetchDedupe)
           if (payload.ok && (immutable || spanCache)) writeCached(url, payload);
           return payload.ok ? payload : null;
         } catch {

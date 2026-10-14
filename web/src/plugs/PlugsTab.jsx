@@ -4,6 +4,7 @@ import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import { readCached, writeCached } from "../historyCache.js";
+import { fetchOnce } from "../fetchDedupe.js";
 import { homeOf } from "../graph/derive.js";
 import { SHORTCUTS } from "../graph/GraphTab.jsx";
 
@@ -149,19 +150,15 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       // genuinely needs every plug.
       const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
       const url = `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`;
-      const pr = await fetch(url)
-        .then((r) => r.json())
-        .catch(() => null);
+      const pr = await fetchOnce(url).catch(() => null);
       if (!pr?.ok) return null;
       let result;
       if (!isRest) {
         result = { bucketMs: pr.bucketMs, data: pr.data.map((r) => [r.t, r[`plug__${sn}`] ?? null]) };
       } else {
-        const hr = await fetch(
+        const hr = await fetchOnce(
           `/api/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&bucket=${pr.bucketMs}`,
-        )
-          .then((r) => r.json())
-          .catch(() => null);
+        ).catch(() => null);
         const homeByT = new Map();
         if (hr?.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
         result = {

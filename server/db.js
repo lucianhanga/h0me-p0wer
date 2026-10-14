@@ -1150,6 +1150,33 @@ export function getPlugSamplesForSn(sn, fromMs, toMs) {
   return selectPlugSamplesForSn.all(sn, fromMs, toMs);
 }
 
+// Bucketed averages, aggregated IN SQLITE (2026-10-14, production slowness:
+// the Rest-of-home card's full-range read had grown to 1.76 M rows → 3.8 s
+// of JS bucketing per 7d load on the small host, wedging the event loop).
+// CAST makes the bucket divisor an INTEGER — binding a JS number as REAL
+// turns ts % bucketMs into float math (the bucket-drift trap documented in
+// AGENTS.md); with an integer divisor SQLite does exact integer modulo.
+const selectPlugSamplesBucketed = db.prepare(`
+  SELECT (ts - (ts % CAST(? AS INTEGER))) AS bt, sn, AVG(watts) AS w
+  FROM plug_samples
+  WHERE ts >= ? AND ts <= ? AND watts IS NOT NULL
+  GROUP BY bt, sn
+`);
+const selectPlugSamplesBucketedForSn = db.prepare(`
+  SELECT (ts - (ts % CAST(? AS INTEGER))) AS bt, AVG(watts) AS w
+  FROM plug_samples
+  WHERE sn = ? AND ts >= ? AND ts <= ? AND watts IS NOT NULL
+  GROUP BY bt
+`);
+
+export function getPlugSamplesBucketed(fromMs, toMs, bucketMs) {
+  return selectPlugSamplesBucketed.all(bucketMs, fromMs, toMs);
+}
+
+export function getPlugSamplesBucketedForSn(sn, fromMs, toMs, bucketMs) {
+  return selectPlugSamplesBucketedForSn.all(bucketMs, sn, fromMs, toMs);
+}
+
 // Trapezoid-integrated kWh for ONE plug over [fromMs, toMs] from local
 // samples — the daily-kWh source for SITE-LESS plugs (2026-10-10): the
 // cloud's per-plug daily kWh only exists for site members, so account-level

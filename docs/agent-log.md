@@ -6844,3 +6844,20 @@ Findings & fixes (all verified):
    historyV) — purge now only when BOTH sides versioned; (b) the working
    set (~20 entries) thrashed the 16-slot LRU — raised to 24 and added
    keys+rows compression for timeseries payloads (~60-70% smaller).
+
+## Timeseries perf batch (2026-10-14, user report: span switching slow against PRODUCTION on laptop Chrome)
+
+Production measurements (docker-exec SQL bench): plug_samples had grown to
+1.76 M rows (MQTT samples × 12 plugs); the Rest-of-home card's full-range
+read cost 3.8 s of event loop per 7d load. And GraphTab's five
+"self-contained" charts each fired the IDENTICAL /api/timeseries request
+per span switch (~670k rows × 5 at 7d on the small host).
+
+- web/src/fetchDedupe.js (fetchOnce): identical in-flight GETs share one
+  promise — GraphTab 24h→7d→24h→7d now makes 3 requests total (was up to
+  15). Used by GraphTab's fetchTimeseries and PlugCard's fetchRows
+  (incl. the rest card's companion fetch). Coalescing only, not a cache.
+- /api/plugs/timeseries bucketing moved INTO SQLite (GROUP BY bt, sn with
+  CAST(? AS INTEGER) divisor — the CAST avoids the REAL-division bucket
+  drift documented in AGENTS.md): rest card 7d went from seconds to
+  ~0.2 s. Emission contract unchanged (dense rows, nulls, rounded means).
