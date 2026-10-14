@@ -40,6 +40,8 @@ import {
   saveBatterySnapshot,
   getLatestBattery,
   getBatteryHistory,
+  getBatteryBuckets,
+  getModuleBuckets,
   getPvStringKwhForDay,
   saveCloudPvTrend,
   getStoredPvPeriodStarts,
@@ -799,12 +801,12 @@ async function timeseriesInner(req, res) {
   // Source 1b: battery (Solarbank) snapshots every 30 s — signed power:
   // discharge positive, charge negative; plus PV input watts. battOut is the
   // unsigned inverter output (home = grid + battOut; PV is inside it).
-  for (const r of getBatteryHistory(from - CLOUD_INTERVAL_MS, to)) {
-    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-    add(bt, "batt", (r.output_w ?? 0) - (r.charge_w ?? 0));
-    add(bt, "battOut", r.output_w ?? 0);
-    add(bt, "battChg", r.charge_w ?? 0);
-    add(bt, "pv", r.pv_w ?? 0);
+  // SQL-bucketed (2026-10-15): was 160k raw rows per 7d merged in JS.
+  for (const r of getBatteryBuckets(from - CLOUD_INTERVAL_MS, to, bucketMs)) {
+    add(r.bt, "batt", r.out_w - r.chg_w);
+    add(r.bt, "battOut", r.out_w);
+    add(r.bt, "battChg", r.chg_w);
+    add(r.bt, "pv", r.pv_w);
   }
 
   // Source 1c: cloud-live grid samples (scen_info grid_info, ~10 s) — the
@@ -819,12 +821,13 @@ async function timeseriesInner(req, res) {
   // per physical module, 2026-09-27) for the Graph tab's module charts. No
   // cloud fallback exists for these (040a is realtime-only) — retention is
   // 93 days with a 60 s write throttle (raised from the 48 h live-sample
-  // default that capped these charts at 2 days, 2026-10-10).
+  // default that capped these charts at 2 days, 2026-10-10). SQL-bucketed
+  // (2026-10-15, user report: this exact chart lagged — 365k raw rows per
+  // 7d were merged in JS on every request).
   const seenModules = new Set();
-  for (const r of getModuleHistory(from - CLOUD_INTERVAL_MS, to)) {
-    const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-    if (r.soc != null) add(bt, `soc__${r.module}`, r.soc);
-    if (r.temperature_c != null) add(bt, `temp__${r.module}`, r.temperature_c);
+  for (const r of getModuleBuckets(from - CLOUD_INTERVAL_MS, to, bucketMs)) {
+    if (r.soc != null) add(r.bt, `soc__${r.module}`, r.soc);
+    if (r.temp != null) add(r.bt, `temp__${r.module}`, r.temp);
     seenModules.add(r.module);
   }
 
