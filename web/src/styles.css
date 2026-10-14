@@ -1013,9 +1013,10 @@ h4 {
 /* Ghost segment (2026-10-13, PV curtailment potential): between the lit
    value and the unlit rest — a lighter wash over the gradient, so the
    "could produce up to here" range reads as a dim extension of the bar.
-   0.45 → 0.65 (2026-10-13, user request: "make the estimation more faded"). */
+   0.45 → 0.65 → 0.55 (user feedback rounds: 0.45 too strong, 0.65
+   indistinguishable from the unlit placeholder segments). */
 .gradient-meter-seg.ghost {
-  background: rgba(13, 17, 20, 0.65);
+  background: rgba(13, 17, 20, 0.55);
 }
 
 /* Diverging meter (2026-10-04, grid phases only — "consider a center
