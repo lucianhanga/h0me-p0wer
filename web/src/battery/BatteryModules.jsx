@@ -18,6 +18,26 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // module's own SOC. While the unit charges/discharges, a soft light streak
 // flows upward/downward through the fills (the reference's lightning arcs,
 // extrapolated into an animation our flat style can carry).
+// The fill paints the GRADIENT clipped at the fill level (2026-10-15,
+// user request — "paint the battery with the gradient up to the level it
+// is filled"): a red→orange→yellow→green→blue sweep over the usable
+// window (min→max SOC), anchored to the SEGMENT — background-size is
+// scaled by 100/soc with position:bottom, so a 45% fill shows red→yellow
+// and a full one the whole sweep to blue. Below the min SOC the sweep
+// stays red; above the max, blue.
+const sweepGradient = (minPct, maxPct) => {
+  const span = Math.max(1, maxPct - minPct);
+  const hueAt = (t) => Math.round(4 + Math.min(1, Math.max(0, t)) * 206);
+  const at = (socPct) => `hsl(${hueAt((socPct - minPct) / span)} 75% 45%)`;
+  return (
+    `linear-gradient(to top, ${at(0)} 0%, ${at(0)} ${minPct}%, ` +
+    `${at(minPct + span * 0.25)} ${Math.round(minPct + span * 0.25)}%, ` +
+    `${at(minPct + span * 0.5)} ${Math.round(minPct + span * 0.5)}%, ` +
+    `${at(minPct + span * 0.75)} ${Math.round(minPct + span * 0.75)}%, ` +
+    `${at(100)} 100%)`
+  );
+};
+
 // Progressive fill color: a CONTINUOUS hue sweep with SOC (2026-09-29) —
 // 2026-10-15, user request: extended to red → orange → yellow → green →
 // BLUE, mapped over the USABLE window (empty = min SOC, full = max SOC —
@@ -30,6 +50,8 @@ const socHue = (soc, minPct = 0, maxPct = 100) => {
 };
 export const fillColor = (soc, lightness, minPct = 0, maxPct = 100) =>
   `hsl(${socHue(soc, minPct, maxPct)} 75% ${lightness}%)`;
+
+export { sweepGradient };
 
 export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null, pxPerKwh = null, hueDomain = null }) {
   const t = useT();
@@ -83,6 +105,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
   // 6.6 kWh one); the slot reserves the tallest stack and bottom-aligns.
   const cylHeightPx = pxPerKwh ? Math.round(totalKwh * pxPerKwh) : heightPx;
   const [hueMin, hueMax] = hueDomain ? [hueDomain.minPct ?? 0, hueDomain.maxPct ?? 100] : [0, 100];
+  const sweep = sweepGradient(hueMin, hueMax);
   return (
     <div className={`batt-modules${stacked ? " stacked" : ""}`}>
       {/* The slot reserves the TALLEST stack's height and bottom-aligns the
@@ -109,7 +132,15 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
               style={{
                 height: `${m.soc ?? 0}%`,
                 ...(m.soc != null
-                  ? { background: `linear-gradient(180deg, ${fillColor(m.soc, 55, hueMin, hueMax)}, ${fillColor(m.soc, 40, hueMin, hueMax)})` }
+                  ? {
+                      background: sweep,
+                      // Anchor the sweep to the SEGMENT: the fill box is
+                      // soc% of it, so scale the background by 100/soc and
+                      // pin it to the bottom — the visible fill always shows
+                      // the gradient's lower portion.
+                      backgroundSize: `100% ${(100 / Math.max(m.soc ?? 0, 2)) * 100}%`,
+                      backgroundPosition: "bottom",
+                    }
                   : {}),
               }}
             />
