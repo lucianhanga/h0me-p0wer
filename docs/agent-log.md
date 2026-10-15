@@ -7011,3 +7011,10 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
 - PV curtailment badge: margin-left 0.45rem when inline in .pv-slot-label
   (user screenshot: badge touched the "1%" on the simple view's Total
   card).
+
+## Battery gradient dimmed a second time (2026-10-15, user request — "make the colors not so bright, reduce the brightness with 20%")
+
+- sweepGradient lightness 36% → 29% (the earlier 45→36% step wasn't
+  enough); the same −20% applied to the two fillColor surfaces that were
+  still at 55%: the charge/discharge energy animation (--energy-color) and
+  the simple view's system-total big % — both now 44%.
