@@ -6939,3 +6939,14 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   profile across runs (view mode/localStorage persist!) — pass a fresh
   --user-data-dir per run or you'll chase ghosts like "card not found"
   while the DOM is actually fine.
+
+## Battery fills: gradient clipped at fill level (2026-10-15, user request — "paint the battery with the gradient up to the level it is filled")
+
+- sweepGradient(minPct, maxPct) builds the red→orange→yellow→green→blue
+  linear-gradient over the usable window ONCE per card; each fill applies
+  it with background-size scaled by 100/soc + position:bottom, anchoring
+  the sweep to the SEGMENT — a half-full module shows red→yellow, a full
+  one the whole sweep to blue. Same trick horizontally for the simple
+  view's system bar (to right, position left).
+- Verified headless (fresh profile per run — headless Chrome reuses the
+  default profile otherwise): cylinders + total bar show the sweep.

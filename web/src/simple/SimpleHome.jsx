@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
-import BatteryModules, { fillColor } from "../battery/BatteryModules.jsx";
+import BatteryModules, { fillColor, sweepGradient } from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
@@ -170,7 +170,16 @@ export default function SimpleHome() {
                       {accountMin != null && <div className="batt-sys-reserve" style={{ width: `${accountMin}%` }} />}
                       <div
                         className="batt-sys-fill"
-                        style={{ width: `${soc}%`, background: fillColor(soc, 50, accountMin ?? 0, sysMax ?? 100) }}
+                        style={{
+                          width: `${soc}%`,
+                          // Same gradient-anchored-to-the-track trick as the
+                          // cylinders (sweepGradient in BatteryModules),
+                          // horizontal: the fill shows the sweep up to the
+                          // current level.
+                          background: sweepGradient(accountMin ?? 0, sysMax ?? 100).replace("to top", "to right"),
+                          backgroundSize: `${(100 / Math.max(soc, 2)) * 100}% 100%`,
+                          backgroundPosition: "left",
+                        }}
                       />
                       {[
                         { pct: accountMin, cls: "min" },
