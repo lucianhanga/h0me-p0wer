@@ -113,6 +113,27 @@ const STAR_PATH =
 // robustCap() lives in derive.js (shared with the simple view's
 // charts since 2026-10-03) — the comment history moved with it.
 
+// Module series bridging (2026-10-15, user report: SOC/temp module charts
+// EMPTY at 6h spans): the 60 s module write throttle means 27 s buckets
+// (6h span) hold data only every ~2nd bucket — connectNulls:false then
+// draws nothing at all. Forward-hold null buckets for up to 150 s (covers
+// the 60 s cadence plus throttle jitter, never paints across a real
+// outage). Dense buckets (≥ 108 s spans) have no nulls to bridge.
+const MODULE_BRIDGE_MS = 150 * 1000;
+function bridgeModuleSeries(data) {
+  let lastT = null;
+  let lastV = null;
+  return data.map(([t, v]) => {
+    if (v != null) {
+      lastT = t;
+      lastV = v;
+      return [t, v];
+    }
+    if (lastT != null && t - lastT <= MODULE_BRIDGE_MS) return [t, lastV];
+    return [t, null];
+  });
+}
+
 export default function GraphTab() {
   const t = useT();
   // The physical module list (every solarbank + expansion pack, keyed by
@@ -403,11 +424,17 @@ export default function GraphTab() {
         // real transients it was eating. Exact sum = consistent by
         // construction.
         const homeSeries = rows.map((r) => rowValue("home", r));
-        const seriesData = def.series.map((s) =>
-          s.key === "home"
-            ? rows.map((r, i) => [r.t, homeSeries[i]])
-            : rows.map((r) => [r.t, rowValue(s.key, r)]),
-        );
+        const seriesData = def.series.map((s) => {
+          const data =
+            s.key === "home"
+              ? rows.map((r, i) => [r.t, homeSeries[i]])
+              : rows.map((r) => [r.t, rowValue(s.key, r)]);
+          // Module series (soc__/temp__ per physical module) get the
+          // forward-hold bridge — see bridgeModuleSeries. outsideTempC is
+          // hourly context and stays unbridged.
+          const isModuleSeries = !!def.dynamicSeries && s.key !== "outsideTempC";
+          return isModuleSeries ? bridgeModuleSeries(data) : data;
+        });
 
         // Robust axis scaling (see robustCap()) — per-graph "envelope": the
         // per-row max/min across the graph's series (for the stacked charts
