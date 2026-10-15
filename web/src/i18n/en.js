@@ -518,10 +518,11 @@ export const en = {
       note: "Optional add-ons under consideration — kept here for reference, excluded from \"Total invested\" until actually bought.",
     },
     projection: {
-      title: "Projection (baseline estimate)",
+      title: "Projection",
       year: "year",
       years: "years",
       profit: "{sign}{eur} profit",
+      tracked: "tracked: {eur}",
       breakEven: "Break-even",
     },
     assumptions: "Assumptions: {source} baseline set {date} — {daily}/day ({kwh} kWh/yr at {pct}% self-consumption), seasonally shaped per month, constant tariff €{tariff}/kWh, no panel degradation. {reasoning} Measured comparison: {measured}/day over {days} days (today excluded, unfinished). Savings = avoided grid import (PV direct-to-home + battery cells discharge). The \"Possible outcome\" (dotted line, Payback tile) is a rolling forecast: the baseline's seasonal shape scaled by how the system has tracked against it so far — it moves as new days are measured, unlike the fixed baseline plan.",

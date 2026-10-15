@@ -134,6 +134,13 @@ export default function SimpleHome() {
   const baseH = window.matchMedia("(max-width: 600px)").matches ? 325 : 425;
   const maxCap = Math.max(...stacks.map((u) => u.constants?.capacityKwh ?? 0), 0) || 1;
   const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
+  // .batt-seg renders its explicit height as CONTENT box (+ 6px padding +
+  // 4px border = 10px chrome), so the tallest cylinder is baseH+10 tall.
+  // The slot must reserve exactly that or the tallest column's slot
+  // overflows the reservation and its text rows drop ~10px below the
+  // other column's (2026-10-15, second alignment report — measured
+  // headless: slot h335 vs h325 with the 325 reservation).
+  const slotH = baseH + 10;
 
   return (
     <div className="simple-home">
@@ -287,7 +294,7 @@ export default function SimpleHome() {
                   stacked
                   legend={false}
                   pxPerKwh={pxPerKwh}
-                  slotHeightPx={baseH}
+                  slotHeightPx={slotH}
                   hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                 />
                 {/* State + ETA until full/empty, same as the Strategy cards

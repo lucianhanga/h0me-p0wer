@@ -108,6 +108,15 @@
     "priceSnapshotDate": "2026-09-19"
   },
   {
+    "asin": "BP5000B",
+    "name": "Anker Solix BP5000 – 5 kWh Erweiterungsakku für Anker SOLIX 4 Pro",
+    "desc": "Third BP5000 expansion module (5 kWh LiFePO4), installed 2026-10-15 on the Solarbank 4 — bringing it to 15 kWh (E5000 Pro + 2× BP5000) and the system total to 21.6 kWh. Seller: BM Distribution.",
+    "qty": 1,
+    "unitPriceEur": 943.95,
+    "url": "https://bm-distribution.shop/products/anker-solix-bp5000-erweiterungsakku",
+    "priceSnapshotDate": "2026-10-15"
+  },
+  {
     "asin": "SOLIXPOWERDOCK",
     "name": "Anker SOLIX Power Dock",
     "desc": "Distribution box for the Anker SOLIX \"Multisystem\" lineup, letting up to four Solarbank units (2 Pro/Plus/AC, 3 Pro) run in parallel to pool storage capacity and AC output — the hub of the h-power system.",
