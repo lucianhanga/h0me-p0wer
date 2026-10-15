@@ -3676,3 +3676,15 @@ pre {
   padding: 0.1rem 0.55rem;
   white-space: nowrap;
 }
+
+/* Simple view's system battery total (2026-10-15, user request — the
+   Strategy tile's bar, slimmed): centered, calm, above the unit stacks. */
+.simple-batt-total {
+  width: 100%;
+  max-width: 620px;
+  margin: 0 auto 1.2rem;
+}
+
+.simple-batt-total .batt-sys-hero {
+  justify-content: center;
+}

@@ -18,14 +18,20 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 // module's own SOC. While the unit charges/discharges, a soft light streak
 // flows upward/downward through the fills (the reference's lightning arcs,
 // extrapolated into an animation our flat style can carry).
-// Progressive fill color (2026-09-29, user request): a CONTINUOUS hue
-// sweep with SOC — hsl hue 4 (red, empty) → 140 (green, full) — replacing
-// the 5-step class ramp (SEG_LEVELS). Applies to the module fills AND the
-// charge/discharge pulse+bubble animation (via --energy-color).
-const socHue = (soc) => 4 + Math.min(100, Math.max(0, soc ?? 0)) * 1.36;
-const fillColor = (soc, lightness) => `hsl(${socHue(soc)} 75% ${lightness}%)`;
+// Progressive fill color: a CONTINUOUS hue sweep with SOC (2026-09-29) —
+// 2026-10-15, user request: extended to red → orange → yellow → green →
+// BLUE, mapped over the USABLE window (empty = min SOC, full = max SOC —
+// the account's 11/93 limits), not 0–100. hueDomain defaults to 0..100
+// for callers without the account limits.
+const socHue = (soc, minPct = 0, maxPct = 100) => {
+  const span = Math.max(1, maxPct - minPct);
+  const tt = Math.min(1, Math.max(0, ((soc ?? 0) - minPct) / span));
+  return 4 + tt * 206; // hue 4 (red) → 210 (blue)
+};
+export const fillColor = (soc, lightness, minPct = 0, maxPct = 100) =>
+  `hsl(${socHue(soc, minPct, maxPct)} 75% ${lightness}%)`;
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null, pxPerKwh = null }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null, pxPerKwh = null, hueDomain = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
   // name, hero %, kWh, per-module legend) centered underneath — units sit
@@ -76,6 +82,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
   // height then IS the unit's capacity (a 15 kWh stack is taller than a
   // 6.6 kWh one); the slot reserves the tallest stack and bottom-aligns.
   const cylHeightPx = pxPerKwh ? Math.round(totalKwh * pxPerKwh) : heightPx;
+  const [hueMin, hueMax] = hueDomain ? [hueDomain.minPct ?? 0, hueDomain.maxPct ?? 100] : [0, 100];
   return (
     <div className={`batt-modules${stacked ? " stacked" : ""}`}>
       {/* The slot reserves the TALLEST stack's height and bottom-aligns the
@@ -102,7 +109,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
               style={{
                 height: `${m.soc ?? 0}%`,
                 ...(m.soc != null
-                  ? { background: `linear-gradient(180deg, ${fillColor(m.soc, 55)}, ${fillColor(m.soc, 40)})` }
+                  ? { background: `linear-gradient(180deg, ${fillColor(m.soc, 55, hueMin, hueMax)}, ${fillColor(m.soc, 40, hueMin, hueMax)})` }
                   : {}),
               }}
             />
@@ -127,7 +134,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         {mode !== "idle" && (
           <div
             className={`batt-energy ${mode === "charging" ? "charging" : "discharging"}`}
-            style={{ "--energy-color": fillColor(live.soc ?? 50, 55) }}
+            style={{ "--energy-color": fillColor(live.soc ?? 50, 55, hueMin, hueMax) }}
           >
             <span className="batt-pulse" />
             <span className="batt-pulse slow" />

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
-import BatteryModules from "../battery/BatteryModules.jsx";
+import BatteryModules, { fillColor } from "../battery/BatteryModules.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
@@ -118,6 +118,10 @@ export default function SimpleHome() {
   // floor here was a third, drifting basis (2026-09-29 review).
   const sysMin = flow?.battery?.floorPct ?? primary?.config?.dischargeLowerLimitPct ?? null;
   const sysMax = primary?.config?.chargeUpperLimitPct ?? null;
+  // The ACCOUNT's own floor (11 %), not the controller-padded effective
+  // floor — the reserve band, min tick and the hue domain must read the
+  // device's limit (2026-10-15: the total bar's min label read "14").
+  const accountMin = primary?.config?.dischargeLowerLimitPct ?? null;
   // Cylinder height ∝ the unit's total capacity (2026-09-28, user request:
   // "display the batteries with different sizes near each other... so the
   // proportions are observed" — the Pro's main unit is only 1.6 kWh).
@@ -139,6 +143,65 @@ export default function SimpleHome() {
       {stacks.length > 0 && (
         <>
           <SectionTitle>{t("simple.batteries")}</SectionTitle>
+          {/* System total above the unit stacks (2026-10-15, user request
+              — "something like the Strategy tab's tile, but appropriate
+              for the simplified view"): the aggregate %, stored/total kWh,
+              and the 0–100 % bar with min/floor/max ticks + dimmed
+              reserve, in the same red→blue hue sweep as the cylinders. */}
+          {primary?.live?.soc != null && (
+            <div className="card simple-batt-total">
+              {(() => {
+                const agg = primary.live;
+                const cap = primary.constants?.capacityKwh ?? null;
+                const soc = agg.soc ?? 0;
+                const stored = cap != null ? Math.round(((soc / 100) * cap) * 100) / 100 : null;
+                const effFloor = flow?.battery?.floorPct ?? null;
+                return (
+                  <>
+                    <div className="batt-sys-hero">
+                      <span className="batt-sys-pct" style={{ color: fillColor(soc, 55, accountMin ?? 0, sysMax ?? 100) }}>
+                        {soc}&nbsp;%
+                      </span>
+                      <span className="batt-sys-stored">
+                        {stored != null && cap != null ? `${stored} / ${cap} kWh` : "—"}
+                      </span>
+                    </div>
+                    <div className="batt-sys-bar" role="img" aria-label={`SOC ${soc} %`}>
+                      {accountMin != null && <div className="batt-sys-reserve" style={{ width: `${accountMin}%` }} />}
+                      <div
+                        className="batt-sys-fill"
+                        style={{ width: `${soc}%`, background: fillColor(soc, 50, accountMin ?? 0, sysMax ?? 100) }}
+                      />
+                      {[
+                        { pct: accountMin, cls: "min" },
+                        { pct: effFloor !== accountMin ? effFloor : null, cls: "floor" },
+                        { pct: sysMax, cls: "max" },
+                      ]
+                        .filter((tk) => tk.pct != null)
+                        .map((tk) => (
+                          <div key={tk.cls} className={`batt-sys-tick ${tk.cls}`} style={{ left: `${tk.pct}%` }} />
+                        ))}
+                    </div>
+                    <div className="batt-sys-bar-labels">
+                      {(accountMin == null || accountMin > 10) && <span>0</span>}
+                      {accountMin != null && <span style={{ left: `${accountMin}%` }}>{t("battery.system.minShort", { pct: accountMin })}</span>}
+                      {sysMax != null && (
+                        <span
+                          style={{
+                            left: `${sysMax}%`,
+                            transform: sysMax >= 90 ? "translateX(-100%)" : undefined,
+                          }}
+                        >
+                          {t("battery.system.maxShort", { pct: sysMax })}
+                        </span>
+                      )}
+                      {(sysMax == null || sysMax < 90) && <span>100</span>}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
           <div className="simple-batt-row">
           {stacks.map((u) => {
             const uSoc = u.live?.soc ?? null;
@@ -193,6 +256,7 @@ export default function SimpleHome() {
                   legend={false}
                   pxPerKwh={pxPerKwh}
                   slotHeightPx={baseH}
+                  hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                 />
                 {/* State + ETA until full/empty, same as the Strategy cards
                     (2026-09-28, user request) — replaces the per-module legend

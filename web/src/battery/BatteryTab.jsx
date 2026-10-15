@@ -85,7 +85,7 @@ export function StatusBadge({ mode }) {
 // applying that same research): the near-full/low SOC zones already had
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
-function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, pxPerKwh = null, slotHeightPx = null, avgUseKwhPerDay = null }) {
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, pxPerKwh = null, slotHeightPx = null, avgUseKwhPerDay = null, hueDomain = null }) {
   const t = useT();
 
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
@@ -184,6 +184,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           mode={mode}
           pxPerKwh={pxPerKwh}
           slotHeightPx={slotHeightPx}
+          hueDomain={hueDomain}
         />
         <div className={`batt-status ${mode}${mode === "charging" && chargeStatus.gridDominant ? " grid-dom" : ""}`}>
           <StatusBadge mode={mode} />
@@ -652,6 +653,13 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   const baseH = window.matchMedia("(max-width: 600px)").matches ? 240 : 340;
   const maxCap = Math.max(...batteries.filter((b) => b.member).map((b) => b.constants?.capacityKwh ?? 0), 0) || 1;
   const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
+  // Fill hue domain = the ACCOUNT's usable window (min/max SOC) — the
+  // aggregate's config carries it; members have no config of their own.
+  const aggConfig = batteries.find((b) => b.aggregate)?.config;
+  const hueDomain = {
+    minPct: aggConfig?.dischargeLowerLimitPct ?? null,
+    maxPct: aggConfig?.chargeUpperLimitPct ?? null,
+  };
 
   return (
     <div>
@@ -688,6 +696,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
               pxPerKwh={pxPerKwh}
               slotHeightPx={baseH}
+              hueDomain={hueDomain}
               onRefresh={forceRefresh}
               avgUseKwhPerDay={data.avgUseKwhPerDay}
             />
