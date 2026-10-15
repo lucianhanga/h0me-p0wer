@@ -6950,3 +6950,27 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   view's system bar (to right, position left).
 - Verified headless (fresh profile per run — headless Chrome reuses the
   default profile otherwise): cylinders + total bar show the sweep.
+
+## Simple view: battery column alignment + borderless total bar (2026-10-15, user report — "discharging vs idle not on the same line")
+
+- Root cause measured headless (/tmp/measure-align.mjs): columns bottom-
+  anchor via flex; the 3-module unit's temp chips wrap to TWO lines while
+  the 2-module unit fits one, and the extra line's slack landed in the
+  other column's slot — status/cover rows off by ~17px. Reserving two
+  lines in .batt-temps didn't fully close it at min-height 2.1em
+  (~25px vs the real 32px); final fix 2.7em + flex:1 on .batt-seg-slot.
+  Verified: status.top/cover.top/temps.top identical across columns.
+- Total bar reworked per user: NOT a card anymore (no border/background,
+  width 100% max 620px), slim 8px bar (.batt-sys-bar-slim), and a meta
+  line: "Usable now (to 14 %) 17.06 kWh" + "covers ≈ 41h 6m at average
+  use" from battery.coverAvg. Usable-now floor is the padded effective
+  floor (14 %); the min tick stays the raw account min (11 %).
+- BatteryModules slot uses minHeight (not height) so wrapped temps don't
+  clip.
+- Later same day: simple-view cylinders +25 % in both dimensions (user
+  request — "25% taller, keep the proportions"): SimpleHome baseH
+  340→425 / 260→325, scoped width override .simple-batt-row .batt-seg
+  104→130 / 88→110 (Strategy cards untouched). Verified headless: SB4
+  (15 kWh after the day's pack install) 435 px, SB2 (6.6 kWh) 197 px —
+  exact 6.6/15 ratio on the shared 28.33 px/kWh scale; status tops still
+  identical across columns.

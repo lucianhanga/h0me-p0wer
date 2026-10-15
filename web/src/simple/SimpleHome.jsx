@@ -128,7 +128,10 @@ export default function SimpleHome() {
   // 2026-10-15: SHARED px-per-kWh scale (user request — extensions the same
   // pixel size in both units) replacing the per-card 0.55 floor; slightly
   // taller overall ("make the batteries a bit bigger").
-  const baseH = window.matchMedia("(max-width: 600px)").matches ? 260 : 340;
+  // 2026-10-15: +25 % (340→425 / 260→325, user request — "25% taller,
+  // keep the proportions"; the width grows 25 % too via
+  // .simple-batt-row .batt-seg in styles.css).
+  const baseH = window.matchMedia("(max-width: 600px)").matches ? 325 : 425;
   const maxCap = Math.max(...stacks.map((u) => u.constants?.capacityKwh ?? 0), 0) || 1;
   const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
 
@@ -149,13 +152,20 @@ export default function SimpleHome() {
               and the 0–100 % bar with min/floor/max ticks + dimmed
               reserve, in the same red→blue hue sweep as the cylinders. */}
           {primary?.live?.soc != null && (
-            <div className="card simple-batt-total">
+            /* NOT a card (2026-10-15, user request — "don't put the united
+               battery on a tile"): borderless + a thinner bar, with the
+               usable-now kWh and the average-use coverage underneath. */
+            <div className="simple-batt-total">
               {(() => {
                 const agg = primary.live;
                 const cap = primary.constants?.capacityKwh ?? null;
                 const soc = agg.soc ?? 0;
                 const stored = cap != null ? Math.round(((soc / 100) * cap) * 100) / 100 : null;
                 const effFloor = flow?.battery?.floorPct ?? null;
+                const usableNowKwh =
+                  cap != null && effFloor != null
+                    ? Math.round(Math.max(0, ((soc - effFloor) / 100) * cap) * 100) / 100
+                    : null;
                 return (
                   <>
                     <div className="batt-sys-hero">
@@ -166,7 +176,7 @@ export default function SimpleHome() {
                         {stored != null && cap != null ? `${stored} / ${cap} kWh` : "—"}
                       </span>
                     </div>
-                    <div className="batt-sys-bar" role="img" aria-label={`SOC ${soc} %`}>
+                    <div className="batt-sys-bar batt-sys-bar-slim" role="img" aria-label={`SOC ${soc} %`}>
                       {accountMin != null && <div className="batt-sys-reserve" style={{ width: `${accountMin}%` }} />}
                       <div
                         className="batt-sys-fill"
@@ -205,6 +215,19 @@ export default function SimpleHome() {
                         </span>
                       )}
                       {(sysMax == null || sysMax < 90) && <span>100</span>}
+                    </div>
+                    <div className="simple-batt-total-meta muted">
+                      {usableNowKwh != null && (
+                        <span>{t("battery.system.usableNow", { pct: effFloor })} <b>{usableNowKwh} kWh</b></span>
+                      )}
+                      {agg.coverH != null && (
+                        <span>
+                          {t("battery.coverAvg", {
+                            eta: formatEta(agg.coverH),
+                            avg: params?.avgUseKwhPerDay != null ? Math.round(params.avgUseKwhPerDay * 10) / 10 : "?",
+                          })}
+                        </span>
+                      )}
                     </div>
                   </>
                 );
