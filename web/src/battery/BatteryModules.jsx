@@ -28,7 +28,9 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 const sweepGradient = (minPct, maxPct) => {
   const span = Math.max(1, maxPct - minPct);
   const hueAt = (t) => Math.round(4 + Math.min(1, Math.max(0, t)) * 206);
-  const at = (socPct) => `hsl(${hueAt((socPct - minPct) / span)} 75% 45%)`;
+  // Lightness 45% → 36% (2026-10-15, user request: "reduce the brightness
+  // by 20%" — the fills read too vivid at 45).
+  const at = (socPct) => `hsl(${hueAt((socPct - minPct) / span)} 75% 36%)`;
   return (
     `linear-gradient(to top, ${at(0)} 0%, ${at(0)} ${minPct}%, ` +
     `${at(minPct + span * 0.25)} ${Math.round(minPct + span * 0.25)}%, ` +
