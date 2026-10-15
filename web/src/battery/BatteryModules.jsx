@@ -25,7 +25,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 const socHue = (soc) => 4 + Math.min(100, Math.max(0, soc ?? 0)) * 1.36;
 const fillColor = (soc, lightness) => `hsl(${socHue(soc)} 75% ${lightness}%)`;
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null, pxPerKwh = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
   // name, hero %, kWh, per-module legend) centered underneath — units sit
@@ -68,6 +68,14 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
   const totalKwh = modules.reduce((a, m) => a + m.kwh, 0) || 1;
   const storedOf = (m) => (m.soc != null ? Math.round(((m.soc / 100) * m.kwh) * 100) / 100 : null);
   const anyUnknown = modules.some((m) => m.soc == null);
+  // Shared capacity scale (2026-10-15, user request — "the extension has to
+  // be the same size for solarbank-4 and solarbank-2; I want symmetry"):
+  // when the parent passes pxPerKwh (the tallest stack's height ÷ the
+  // largest capacity), EVERY kWh renders at the same pixel height across
+  // all cards — a 5 kWh pack reads identically in both. The cylinder's own
+  // height then IS the unit's capacity (a 15 kWh stack is taller than a
+  // 6.6 kWh one); the slot reserves the tallest stack and bottom-aligns.
+  const cylHeightPx = pxPerKwh ? Math.round(totalKwh * pxPerKwh) : heightPx;
   return (
     <div className={`batt-modules${stacked ? " stacked" : ""}`}>
       {/* The slot reserves the TALLEST stack's height and bottom-aligns the
@@ -80,11 +88,15 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
       >
         <div
           className="batt-seg"
-          style={heightPx ? { height: `${heightPx}px` } : undefined}
+          style={cylHeightPx ? { height: `${cylHeightPx}px` } : undefined}
           title={t("battery.modules.tip")}
         >
         {modules.map((m) => (
-          <div key={m.key} className="batt-seg-mod" style={{ height: `${(m.kwh / totalKwh) * 100}%` }}>
+          <div
+            key={m.key}
+            className="batt-seg-mod"
+            style={{ height: pxPerKwh ? `${Math.round(m.kwh * pxPerKwh)}px` : `${(m.kwh / totalKwh) * 100}%` }}
+          >
             <div
               className="batt-seg-fill"
               style={{

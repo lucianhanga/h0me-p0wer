@@ -2205,12 +2205,20 @@ pre {
   flex-direction: row;
   flex-wrap: wrap;
   gap: 1rem;
-  align-items: flex-start;
+  /* Equal card heights in a row (2026-10-15, user request — "I want
+     symmetry"): stretch the wrappers, let the gauge card fill its own. */
+  align-items: stretch;
 }
 
 .battery-list > * {
   flex: 1 1 300px;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.battery-list > * > .batt-gauge-card {
+  flex: 1;
 }
 
 .batt-gauge-card {
@@ -2231,6 +2239,9 @@ pre {
   flex-wrap: wrap; /* wraps as whole groups, never mid-item (2026-09-27:
                      the name broke "h-solarbank-/2" and the +ext badge in
                      two on phones) */
+  /* Reserve two lines so a wrapped name+SN never shifts the hero block
+     below it (2026-10-15, user report: card texts misaligned). */
+  min-height: 2.4em;
 }
 
 .batt-card-head > * {

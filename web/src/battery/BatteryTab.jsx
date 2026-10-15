@@ -85,7 +85,7 @@ export function StatusBadge({ mode }) {
 // applying that same research): the near-full/low SOC zones already had
 // distinct gauge colors, but nothing NAMED the zone — you had to read the
 // number and know the thresholds yourself. `zoneLabel` below adds that.
-function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, heightPx = null, slotHeightPx = null, avgUseKwhPerDay = null }) {
+function BatteryCard({ live, config, features, constants, dischargeTolerancePct, onRefresh, aggregate = false, member = false, pxPerKwh = null, slotHeightPx = null, avgUseKwhPerDay = null }) {
   const t = useT();
 
   if (!live) return <p className="muted">{t("battery.noData")}</p>;
@@ -182,7 +182,7 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           heroZoneLabel={zoneLabel}
           single={aggregate}
           mode={mode}
-          heightPx={heightPx}
+          pxPerKwh={pxPerKwh}
           slotHeightPx={slotHeightPx}
         />
         <div className={`batt-status ${mode}${mode === "charging" && chargeStatus.gridDominant ? " grid-dom" : ""}`}>
@@ -644,10 +644,14 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
   // slotHeightPx mechanism as the simple view — the slot reserves the
   // tallest stack's height and bottom-aligns the cylinder inside it, so
   // cards and text rows stay identical/aligned.
-  const baseH = window.matchMedia("(max-width: 600px)").matches ? 200 : 260;
+  // 2026-10-15 (user request): SHARED px-per-kWh scale instead of a
+  // per-card 0.55 floor — a 5 kWh expansion pack now renders at the same
+  // pixel height in every card, and the cylinder height IS the capacity.
+  // Bigger cylinders overall (260/200 → 340/240) — "make the batteries a
+  // bit bigger so you better can see the load".
+  const baseH = window.matchMedia("(max-width: 600px)").matches ? 240 : 340;
   const maxCap = Math.max(...batteries.filter((b) => b.member).map((b) => b.constants?.capacityKwh ?? 0), 0) || 1;
-  const heightOf = (b) =>
-    Math.round(baseH * Math.max(0.55, (b.constants?.capacityKwh ?? maxCap) / maxCap));
+  const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
 
   return (
     <div>
@@ -682,7 +686,7 @@ export default function BatteryTab({ dischargeTolerancePct } = {}) {
               // only to the primary (controlled) battery, never to a
               // monitored-only secondary one.
               dischargeTolerancePct={i === 0 ? dischargeTolerancePct : null}
-              heightPx={heightOf(b)}
+              pxPerKwh={pxPerKwh}
               slotHeightPx={baseH}
               onRefresh={forceRefresh}
               avgUseKwhPerDay={data.avgUseKwhPerDay}
