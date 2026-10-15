@@ -6922,3 +6922,20 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   reserve two lines (wrapped name+SN no longer shifts the hero block).
   Verified headless: cards 496 = 496 px, heads 38.4 = 38.4 px, cylinders
   350/160 px, shared 23.3 px/kWh.
+
+## Simple view: system battery total + red→blue usable-window gradient (2026-10-15, user request)
+
+- New compact system bar above the unit stacks (simple view): big %
+  (hue-swept), stored/total kWh, and the 0–100% bar with min/floor/max
+  ticks + dimmed reserve — the Strategy tile's language, slimmed down.
+  Width 100%/620px max (first render hugged content at 222px).
+- Fill gradient changed per user request: red → orange → yellow → green
+  → BLUE, mapped over the USABLE window (account min→max SOC = 11→93),
+  not 0–100: socHue domains (minPct, maxPct) via a hueDomain prop;
+  BatteryTab passes the aggregate's config, SimpleHome the account min
+  (NOT the controller-padded effective floor — the first version showed
+  "min 14"). fillColor is exported for the system bar's fill + % color.
+- Verify footnote for future me: headless Chrome REUSES the default
+  profile across runs (view mode/localStorage persist!) — pass a fresh
+  --user-data-dir per run or you'll chase ghosts like "card not found"
+  while the DOM is actually fine.
