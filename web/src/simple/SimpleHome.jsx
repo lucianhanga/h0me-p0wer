@@ -176,7 +176,7 @@ export default function SimpleHome() {
                 return (
                   <>
                     <div className="batt-sys-hero">
-                      <span className="batt-sys-pct" style={{ color: fillColor(soc, 55, accountMin ?? 0, sysMax ?? 100) }}>
+                      <span className="batt-sys-pct" style={{ color: fillColor(soc, 44, accountMin ?? 0, sysMax ?? 100) }}>
                         {soc}&nbsp;%
                       </span>
                       <span className="batt-sys-stored">

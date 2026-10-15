@@ -28,9 +28,9 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 const sweepGradient = (minPct, maxPct) => {
   const span = Math.max(1, maxPct - minPct);
   const hueAt = (t) => Math.round(4 + Math.min(1, Math.max(0, t)) * 206);
-  // Lightness 45% → 36% (2026-10-15, user request: "reduce the brightness
-  // by 20%" — the fills read too vivid at 45).
-  const at = (socPct) => `hsl(${hueAt((socPct - minPct) / span)} 75% 36%)`;
+  // Lightness 45% → 36% → 29% (2026-10-15, two user requests: "reduce the
+  // brightness by 20%" — the fills read too vivid at 45, then still at 36).
+  const at = (socPct) => `hsl(${hueAt((socPct - minPct) / span)} 75% 29%)`;
   return (
     `linear-gradient(to top, ${at(0)} 0%, ${at(0)} ${minPct}%, ` +
     `${at(minPct + span * 0.25)} ${Math.round(minPct + span * 0.25)}%, ` +
@@ -167,7 +167,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         {mode !== "idle" && (
           <div
             className={`batt-energy ${mode === "charging" ? "charging" : "discharging"}`}
-            style={{ "--energy-color": fillColor(live.soc ?? 50, 55, hueMin, hueMax) }}
+            style={{ "--energy-color": fillColor(live.soc ?? 50, 44, hueMin, hueMax) }}
           >
             <span className="batt-pulse" />
             <span className="batt-pulse slow" />
