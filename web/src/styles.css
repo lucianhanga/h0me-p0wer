@@ -2177,6 +2177,12 @@ pre {
   color: #e05c5c;
 }
 
+/* Keep the "(+€X)" profit parens on one line in the year tiles' tracked
+   sub-line — it used to wrap mid-number on the narrow 10/15-year tiles. */
+.roi-nowrap {
+  white-space: nowrap;
+}
+
 /* AI-narrated tracking note under the amortization chart — see roi.js
    getOutlookNote. Numbers are always server-computed; this is prose only. */
 .roi-outlook-note {
@@ -2992,6 +2998,14 @@ pre {
   flex-wrap: wrap;
   justify-content: center;
   width: 100%;
+  /* Top-align the columns (2026-10-15, second alignment report): with the
+     default stretch, the taller column (more wrapped temp lines) forces
+     the shorter one to grow — and wherever that slack lands above the
+     status row, the texts misalign. With equal slot reservations both
+     modules blocks are naturally the same height, so top-aligned columns
+     line up EVERY shared row; only the last row (temps) may extend lower
+     in one column, which is invisible (nothing below it). */
+  align-items: flex-start;
 }
 
 .simple-batt-row .simple-batt {
@@ -3006,10 +3020,6 @@ pre {
   flex-direction: column;
 }
 
-.simple-batt-row .batt-modules.stacked {
-  flex: 1;
-}
-
 /* Cylinder slot (stacked/simple view): reserves the tallest stack's height
    and bottom-aligns each cylinder inside it — cylinders "stand" on the
    same line like the physical stack regardless of capacity-proportional
@@ -3021,14 +3031,27 @@ pre {
   align-self: center;
 }
 
-/* Simple view columns: the SLOT absorbs the height slack (2026-10-15,
-   user report — "discharging" and "idle" sat on different lines): the
-   shorter unit's slack used to grow the batt-modules block BELOW the
-   cylinder, pushing its status/cover/temps rows down by exactly the
-   temps-wrap difference. The slot grows instead (min-height reserves the
-   tallest stack), cylinders bottom-align, every text row lines up. */
-.simple-batt-row .batt-seg-slot {
+/* Simple view columns: the slack goes ABOVE the slot (2026-10-15, second
+   user report — "discharging"/"idle" still off on the phone): stretch
+   equalizes the column heights, but the extra height was absorbed by
+   .batt-modules-side (flex:1) BELOW the hero, pushing status/cover/temps
+   down by exactly the temps-wrap difference (the 3-module unit's temp
+   chips wrap to more lines on narrow screens — min-height reserves can
+   never match every width). Now nothing inside batt-modules grows;
+   justify-content:flex-end pushes the free space above the cylinder
+   slot, so cylinders bottom-align and every text row lines up at any
+   wrap width. */
+.simple-batt-row .batt-modules.stacked {
   flex: 1;
+  justify-content: flex-end;
+}
+
+.simple-batt-row .batt-seg-slot {
+  flex: 0 0 auto;
+}
+
+.simple-batt-row .batt-modules-side {
+  flex: 0 0 auto;
 }
 
 /* Simple view cylinders +25 % in BOTH dimensions (2026-10-15, user
@@ -3712,6 +3735,13 @@ pre {
   border-radius: 999px;
   padding: 0.1rem 0.55rem;
   white-space: nowrap;
+}
+
+/* Inline placement next to the watts/percent text (simple view's PV total
+   card): without the gap the badge touched the "1%" (2026-10-15, user
+   screenshot). Scoped — the Live tab renders the badge on its own row. */
+.pv-slot-label .pv-limited-badge {
+  margin-left: 0.45rem;
 }
 
 /* Simple view's system battery total (2026-10-15, user request — the

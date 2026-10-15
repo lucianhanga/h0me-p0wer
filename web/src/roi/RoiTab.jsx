@@ -241,6 +241,20 @@ export default function RoiTab() {
                     eur: fmtEur(Math.abs(entry.proj.profitEur)),
                   })}
                 </div>
+                {/* Tracked-performance variant of the same year mark
+                    (2026-10-15, user request — "show also besides the
+                    baseline also on our tracking"). */}
+                {entry.proj.trackedCumulativeSavingsEur != null && (
+                  <div className="tile-sub muted">
+                    {t("roi.projection.tracked", {
+                      eur: fmtEur(entry.proj.trackedCumulativeSavingsEur),
+                    })}{" "}
+                    <span className="roi-nowrap">
+                      ({entry.proj.trackedProfitEur >= 0 ? "+" : "−"}
+                      {fmtEur(Math.abs(entry.proj.trackedProfitEur))})
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="tile roi-be" key={entry.key}>

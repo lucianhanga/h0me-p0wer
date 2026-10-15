@@ -6974,3 +6974,40 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   (15 kWh after the day's pack install) 435 px, SB2 (6.6 kWh) 197 px —
   exact 6.6/15 ratio on the shared 28.33 px/kWh scale; status tops still
   identical across columns.
+
+## Simple view battery alignment, round 2 (2026-10-15, user phone screenshot — "still not aligned")
+
+- PR #447's fix (reserve 2 temp lines + slot flex:1) worked on desktop but
+  NOT on the phone, and the reasoning was wrong anyway: with stretch-
+  equalized columns the slack lands wherever a flex:1 child sits — the
+  side block (flex:1) absorbed it BELOW the hero, pushing status/cover/
+  temps down by the temps-wrap difference (3-module unit's chips wrap to
+  more lines on narrow screens; no min-height reserve matches every width).
+- Root cause #2 found by headless measurement: .batt-seg renders its
+  explicit height as CONTENT box (+6px padding +4px border), so the
+  tallest cylinder is baseH+10 tall and overflowed the slot reservation
+  by 10px, dropping that column's texts.
+- Final design: slotHeightPx = baseH + 10 (SimpleHome); nothing inside
+  batt-modules grows (slot/side flex:0 0 auto, modules justify-content:
+  flex-end so any slack sits ABOVE the slot); .simple-batt-row
+  align-items:flex-start — with equal slot reservations both modules
+  blocks are naturally identical height, so top-aligned columns line up
+  EVERY shared row; only the last row (temps) may extend lower in the
+  taller column, invisible. Verified headless at 390px AND 1400px:
+  status/cover/temps tops identical across columns.
+
+## ROI: BOM BP5000 #3 + tracked per-year projections (2026-10-15, user requests)
+
+- roi-bom.json: third BP5000 (the day's solarbank-4 install, 15 kWh unit /
+  21.6 kWh system) — €943.95 at bm-distribution.shop, asin BP5000B,
+  thumbnail = copy of BP5000.jpg (same product). Total invested €7,689.16.
+- Projection row: each year tile (1/3/5/10/15) gains a muted "tracked:
+  €X (+€Y)" line = baseline cumulative × performance ratio (the outlook
+  curve's scaling). Server: projections[] gains trackedCumulativeSavingsEur
+  / trackedProfitEur (null without a ratio). Section retitled from
+  "Projection (baseline estimate)" to just "Projection" (en/de/ro).
+  "(+€Y)" wrapped in .roi-nowrap so it never splits mid-number on the
+  narrow tiles.
+- PV curtailment badge: margin-left 0.45rem when inline in .pv-slot-label
+  (user screenshot: badge touched the "1%" on the simple view's Total
+  card).

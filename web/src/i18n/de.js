@@ -535,10 +535,11 @@ export const de = {
       note: "Optionale Ergänzungen in Erwägung — hier zur Referenz aufbewahrt, bis zum tatsächlichen Kauf nicht in „Gesamt investiert“ enthalten.",
     },
     projection: {
-      title: "Prognose (Basislinien-Schätzung)",
+      title: "Prognose",
       year: "Jahr",
       years: "Jahre",
       profit: "{sign}{eur} Gewinn",
+      tracked: "gemessen: {eur}",
       breakEven: "Break-even",
     },
     assumptions: "Annahmen: {source}-Basislinie festgelegt am {date} — {daily}/Tag ({kwh} kWh/Jahr bei {pct}% Eigenverbrauch), saisonal pro Monat gewichtet, konstanter Tarif €{tariff}/kWh, keine Moduldegradation. {reasoning} Gemessener Vergleich: {measured}/Tag über {days} Tage (heute ausgenommen, unvollständig). Ersparnis = vermiedener Netzbezug (PV direkt ins Haus + Entladung der Akkuzellen). Das „Mögliche Ergebnis“ (gestrichelte Linie, Amortisations-Kachel) ist eine rollierende Prognose: die saisonale Form der Basislinie, skaliert danach, wie das System bisher dagegen abgeschnitten hat — sie bewegt sich mit jedem neu gemessenen Tag, anders als der feste Basisplan.",

@@ -349,13 +349,21 @@ async function buildRoiPayload(deps, { recomputeBaseline = false } = {}) {
     outlookPaybackDate: outlook.outlookPaybackDate,
   });
   // Year marks shown in the Projection row (2026-10-03, user request:
-  // "1, 3, 5, break even, 10, 15 would be enough").
+  // "1, 3, 5, break even, 10, 15 would be enough"). 2026-10-15: each year
+  // tile ALSO shows the tracked-performance variant (user request — "show
+  // also besides the baseline also on our tracking") — baseline cumulative
+  // × performance ratio, the same scaling the outlook curve applies.
   const projections = [1, 3, 5, 10, 15].map((years) => {
     const cumulativeSavingsEur = r2(baseline.annualSavingsEur * years);
+    const trackedCumulativeSavingsEur =
+      outlook.performanceRatio != null ? r2(cumulativeSavingsEur * outlook.performanceRatio) : null;
     return {
       years,
       cumulativeSavingsEur,
       profitEur: r2(cumulativeSavingsEur - totalInvestedEur),
+      trackedCumulativeSavingsEur,
+      trackedProfitEur:
+        trackedCumulativeSavingsEur != null ? r2(trackedCumulativeSavingsEur - totalInvestedEur) : null,
     };
   });
 
