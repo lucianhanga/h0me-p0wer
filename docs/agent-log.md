@@ -6891,3 +6891,18 @@ preserves the old null semantics: battery nulls counted as 0, module
 nulls skipped). Production bench: module 609 → 289 ms (2716 rows),
 battery → 78 ms (231 rows). Anchor-fill semantics unchanged (anchors
 still only fill empty buckets; pre-aggregated buckets count as covered).
+
+## Module charts empty at ≤6h spans (2026-10-15, user report: "6h and I don't see anything anymore")
+
+- Root cause chain: the 60 s module write throttle (2026-10-10) made
+  module SOC/temp series sparse at fine spans — at 6h the 27 s buckets
+  hold data every ~2nd bucket and connectNulls:false draws nothing. The
+  24h default (108 s buckets) masked it; the user hit it on first 6h use
+  after the throttle reached production.
+- Fix: bridgeModuleSeries() in GraphTab's applyRows — forward-hold null
+  buckets ≤150 s (covers the 60 s cadence + jitter; real outages stay
+  gaps) for soc__/temp__ series only (outsideTempC's hourly reference
+  stays unbridged). Same class as the house-light/plug bridging.
+- Verified headless: 6h module charts render all 5 series; the visible
+  13:41 SOC dip-to-55% is the exp1/exp2 positional swap at the pack
+  install (real data quirk, documented), not a rendering bug.
