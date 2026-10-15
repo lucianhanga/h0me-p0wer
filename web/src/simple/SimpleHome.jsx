@@ -120,12 +120,13 @@ export default function SimpleHome() {
   const sysMax = primary?.config?.chargeUpperLimitPct ?? null;
   // Cylinder height ∝ the unit's total capacity (2026-09-28, user request:
   // "display the batteries with different sizes near each other... so the
-  // proportions are observed" — the Pro's main unit is only 1.6 kWh). A
-  // floor keeps a small unit's cylinder readable (55% of the largest).
-  const baseH = window.matchMedia("(max-width: 600px)").matches ? 230 : 300;
+  // proportions are observed" — the Pro's main unit is only 1.6 kWh).
+  // 2026-10-15: SHARED px-per-kWh scale (user request — extensions the same
+  // pixel size in both units) replacing the per-card 0.55 floor; slightly
+  // taller overall ("make the batteries a bit bigger").
+  const baseH = window.matchMedia("(max-width: 600px)").matches ? 260 : 340;
   const maxCap = Math.max(...stacks.map((u) => u.constants?.capacityKwh ?? 0), 0) || 1;
-  const heightOf = (u) =>
-    Math.round(baseH * Math.max(0.55, (u.constants?.capacityKwh ?? maxCap) / maxCap));
+  const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
 
   return (
     <div className="simple-home">
@@ -190,7 +191,7 @@ export default function SimpleHome() {
                   mode={uMode}
                   stacked
                   legend={false}
-                  heightPx={heightOf(u)}
+                  pxPerKwh={pxPerKwh}
                   slotHeightPx={baseH}
                 />
                 {/* State + ETA until full/empty, same as the Strategy cards

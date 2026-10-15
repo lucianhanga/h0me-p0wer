@@ -6906,3 +6906,19 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
 - Verified headless: 6h module charts render all 5 series; the visible
   13:41 SOC dip-to-55% is the exp1/exp2 positional swap at the pack
   install (real data quirk, documented), not a rendering bug.
+
+## Battery visuals: shared capacity scale + symmetric cards (2026-10-15, user request — "I want symmetry")
+
+- Segment heights were PERCENTAGES of each card's own total — a 5 kWh
+  pack rendered 117 px in the SB4 card but ~150 px in the SB2 card. Now
+  both parents compute pxPerKwh = baseH ÷ maxCapacity and BatteryModules
+  sizes segments in absolute px: a BP5000 reads identically everywhere,
+  and the cylinder height IS the unit's capacity (SB4 350 px vs SB2 160 px
+  — proportionality restored by removing the 0.55 readability floor).
+- BatteryTab + SimpleHome: bigger cylinders (260→340 / 230→260 desktop,
+  200→240 phone) — "make the batteries a bit bigger so you better can
+  see the load".
+- Symmetry: .battery-list stretches (equal card heights), header rows
+  reserve two lines (wrapped name+SN no longer shifts the hero block).
+  Verified headless: cards 496 = 496 px, heads 38.4 = 38.4 px, cylinders
+  350/160 px, shared 23.3 px/kWh.
