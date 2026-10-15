@@ -116,7 +116,7 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
           the flex column had no free main-axis space. */}
       <div
         className="batt-seg-slot"
-        style={slotHeightPx ? { height: `${slotHeightPx}px` } : undefined}
+        style={slotHeightPx ? { minHeight: `${slotHeightPx}px` } : undefined}
       >
         <div
           className="batt-seg"

@@ -3021,6 +3021,35 @@ pre {
   align-self: center;
 }
 
+/* Simple view columns: the SLOT absorbs the height slack (2026-10-15,
+   user report — "discharging" and "idle" sat on different lines): the
+   shorter unit's slack used to grow the batt-modules block BELOW the
+   cylinder, pushing its status/cover/temps rows down by exactly the
+   temps-wrap difference. The slot grows instead (min-height reserves the
+   tallest stack), cylinders bottom-align, every text row lines up. */
+.simple-batt-row .batt-seg-slot {
+  flex: 1;
+}
+
+/* Simple view cylinders +25 % in BOTH dimensions (2026-10-15, user
+   request — "25% taller and keep the proportions"): height comes from
+   SimpleHome's baseH (425/325), width grows 104→130 / 88→110 here so the
+   aspect ratio stays; the nub scales with it. Scoped to the simple view —
+   the Strategy cards keep their own size. */
+.simple-batt-row .batt-seg {
+  width: 130px;
+}
+
+.simple-batt-row .batt-seg::before {
+  width: 45px;
+}
+
+@media (max-width: 600px) {
+  .simple-batt-row .batt-seg {
+    width: 110px;
+  }
+}
+
 .batt-modules.stacked {
   flex-direction: column;
   align-items: center;
@@ -3084,6 +3113,14 @@ pre {
   gap: 0.15rem 0.6rem;
   font-size: 0.75rem;
   margin-top: 0.1rem;
+  /* Reserve two lines in BOTH columns (2026-10-15, user report: the
+     "discharging"/"idle" status lines sat at different heights): a unit
+     with three modules wraps to two temp lines while a two-module unit
+     fits one — that height difference used to push the whole column's
+     status/cover rows down. Reserving the second line keeps every row
+     aligned regardless of module count. */
+  min-height: 2.7em; /* two wrapped lines measured 32px ≈ 2.67em at 0.75rem */
+  align-content: flex-start;
 }
 
 .batt-temp {
@@ -3678,7 +3715,9 @@ pre {
 }
 
 /* Simple view's system battery total (2026-10-15, user request — the
-   Strategy tile's bar, slimmed): centered, calm, above the unit stacks. */
+   Strategy tile's bar, slimmed): centered, calm, above the unit stacks.
+   Borderless ("don't put the united battery on a tile") with a thinner
+   bar and a meta line (usable kWh + coverage). */
 .simple-batt-total {
   width: 100%;
   max-width: 620px;
@@ -3687,4 +3726,17 @@ pre {
 
 .simple-batt-total .batt-sys-hero {
   justify-content: center;
+}
+
+.batt-sys-bar-slim {
+  height: 8px;
+}
+
+.simple-batt-total-meta {
+  display: flex;
+  justify-content: center;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+  font-size: 0.82rem;
 }
