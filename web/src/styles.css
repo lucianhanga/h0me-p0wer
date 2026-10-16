@@ -1626,6 +1626,13 @@ pre {
 .flip-inner {
   position: relative;
   display: grid;
+  /* Pin the single track to the container width (2026-10-16, user report —
+     battery tiles overlapped/overflowed on the phone): the default implicit
+     column is auto-sized = the faces' MAX-content, so a long unwrapped line
+     (the coverage text) blew the tile past its flex column and the two
+     battery tiles overlapped each other and the screen edge. minmax(0,…)
+     lets the faces shrink below their content width. */
+  grid-template-columns: minmax(0, 1fr);
   transition: transform 0.45s;
   transform-style: preserve-3d;
 }
@@ -2998,14 +3005,14 @@ pre {
   flex-wrap: wrap;
   justify-content: center;
   width: 100%;
-  /* Top-align the columns (2026-10-15, second alignment report): with the
-     default stretch, the taller column (more wrapped temp lines) forces
-     the shorter one to grow — and wherever that slack lands above the
-     status row, the texts misalign. With equal slot reservations both
-     modules blocks are naturally the same height, so top-aligned columns
-     line up EVERY shared row; only the last row (temps) may extend lower
-     in one column, which is invisible (nothing below it). */
-  align-items: flex-start;
+  /* Stretch = equal-height tiles (2026-10-16, user report — "the tiles are
+     not the same size" on the phone): with the flip-tile card structure the
+     slack now lands safely ABOVE the cylinder slot (.batt-modules.stacked
+     is flex:1 + justify-content:flex-end inside the face card), so the
+     status/cover/temps rows still align while the tiles match heights.
+     (The 2026-10-15 flex-start was needed when the slack could land in the
+     side block mid-column.) */
+  align-items: stretch;
 }
 
 .simple-batt-row .simple-batt {
@@ -3811,4 +3818,18 @@ pre {
 .simple-batt-back {
   display: flex;
   flex-direction: column;
+  /* Barely-there tile chrome (2026-10-16, user request — "the tile
+     background a bit more faded, barely visible"). */
+  background: #1a212866;
+  border-color: #2a323866;
+}
+
+/* Unit name at the TOP of the battery flip tiles (2026-10-16, user
+   request — "put the name of the banks on top of the tile"); BatteryModules'
+   in-stack title is suppressed via showName={false} on these faces. */
+.batt-tile-name {
+  font-weight: 600;
+  color: #e8ecef;
+  text-align: center;
+  margin-bottom: 0.6rem;
 }

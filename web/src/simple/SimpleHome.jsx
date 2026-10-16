@@ -286,9 +286,11 @@ export default function SimpleHome() {
                 className="simple-batt batt-flip"
                 back={
                   <div className="card simple-batt-back">
+                <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
                 <BatteryModules
                   live={u.live}
                   constants={u.constants}
+                  showName={false}
                   limits={
                     u.member
                       ? {}
@@ -354,6 +356,7 @@ export default function SimpleHome() {
                 }
               >
                 <div className="card simple-batt-front">
+                  <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
                   {/* Front = the SAME rendering as the back but one block
                       (single mode) — capacity-proportional (shared
                       pxPerKwh), animation included — plus the unit metrics
@@ -365,6 +368,7 @@ export default function SimpleHome() {
                   <BatteryModules
                     live={u.live}
                     constants={u.constants}
+                    showName={false}
                     heroLvlClass={uLvl}
                     heroZoneLabel={
                       uLvl === "lvl-full"

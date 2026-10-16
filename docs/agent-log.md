@@ -7103,3 +7103,32 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
 - BatteryCard's gauge card is now `gaugeCard(singleBlock)` — front =
   gaugeCard(true), back = gaugeCard(false), literally the same card
   modulo segmentation. Aggregate card unchanged.
+
+## Battery tiles: mobile overlap fix, faded chrome, name on top (2026-10-16, user screenshots)
+
+- OVERLAP on mobile: .flip-inner's implicit grid column was auto-sized =
+  the faces' MAX-content — the long coverage line blew the tile past its
+  flex column; the two tiles overlapped and overflowed the screen. Fix:
+  `grid-template-columns: minmax(0, 1fr)` (faces may shrink below content
+  width). This was latent in EVERY FlipTile; the battery tiles' long
+  status/cover lines were the first content wide enough to trigger it.
+- UNEQUAL TILE HEIGHTS: back to `align-items: stretch` on
+  .simple-batt-row — with the flip-card structure the slack now lands
+  above the cylinder slot (flex:1 + justify-end inside the face card), so
+  equal heights AND aligned text rows. (Measured "misalignment" in flipped
+  state was a getBoundingClientRect-under-rotateY(180°) artifact — rects
+  mirror around the pivot; the screenshots were always aligned.)
+- Tile background faded per request: #1a212866 / border #2a323866 on
+  .simple-batt-front/.simple-batt-back.
+- Unit NAME moved to the top of the tile (user request): SimpleHome
+  renders .batt-tile-name as the face card's first child; BatteryModules'
+  in-stack title suppressed via new showName={false} prop.
+- ACTIVITY noise dedupe (user report — "expansion detected"/"battery
+  changed" fire too often): both now log only on a REAL change against a
+  kv-persisted set (battery_unit_set / expansion_packs_<sn>), adopted
+  silently on first observation. battery_swapped params changed to
+  {from,to} SN lists (i18n en/de/ro updated — {name} dropped).
+- NOTE: the Anker REST API timed out repeatedly on the dev box around
+  20:20 (all battery syncs aborted; MQTT unaffected) — /api/battery/params
+  returned 0 units and the battery section hid itself. Environmental,
+  recovered on its own.

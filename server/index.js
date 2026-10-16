@@ -2483,7 +2483,6 @@ function startBatteryMqtts() {
       client = null;
     }
     if (client) continue;
-    if (batteryMqtts.size > 0) activity("battery_swapped", { from: [...batteryMqtts.keys()].join(","), to: m.sn, name: m.name });
     client = new AnkerMqtt(anker, m.sn, m.pn ?? "A17C3");
     client.onData = (d) => {
       upsertMember({ sn: m.sn, pn: m.pn, name: m.name, ...d });
@@ -2528,7 +2527,21 @@ function startBatteryMqtts() {
       }
       if (packs.length > 0 && !client.expansionLogged) {
         client.expansionLogged = true;
-        activity("expansion_detected", { n: packs.length, sn: packs[0]?.sn ?? null });
+        // expansion_detected only when the pack SET actually changes
+        // (2026-10-16, user report — "Expansion battery detected" repeated
+        // too often): MQTT clients are recreated on every re-sync/restart,
+        // so the in-memory guard alone re-fired constantly. The persisted
+        // set is adopted silently on first observation; a real pack
+        // add/remove still logs.
+        const key = `expansion_packs_${m.sn}`;
+        const packSet = packs.map((p) => p.sn).sort().join(",");
+        const knownPacks = kvGet(key)?.value;
+        if (knownPacks == null) {
+          kvSet(key, packSet);
+        } else if (knownPacks !== packSet) {
+          kvSet(key, packSet);
+          activity("expansion_detected", { n: packs.length, sn: packs[0]?.sn ?? null });
+        }
       }
       broadcastLive({ batteryTriggered: true });
     };
@@ -2540,6 +2553,20 @@ function startBatteryMqtts() {
     if (!latestBatteries.has(sn)) {
       client.stop();
       batteryMqtts.delete(sn);
+    }
+  }
+  // battery_swapped only on a REAL change of the unit set (2026-10-16, user
+  // report — "Battery changed to …" fired far too often): the old per-join
+  // call re-fired on every restart/re-sync. The persisted set is adopted
+  // silently on first observation; only an actual membership change logs.
+  const unitSet = [...batteryMqtts.keys()].sort().join(",");
+  if (unitSet) {
+    const knownUnits = kvGet("battery_unit_set")?.value;
+    if (knownUnits == null) {
+      kvSet("battery_unit_set", unitSet);
+    } else if (knownUnits !== unitSet) {
+      kvSet("battery_unit_set", unitSet);
+      activity("battery_swapped", { from: knownUnits, to: unitSet });
     }
   }
 }

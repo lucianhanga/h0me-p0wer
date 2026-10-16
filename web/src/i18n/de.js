@@ -89,7 +89,7 @@ export const de = {
     strategy_changed: "Strategie geändert: {from} → {to}",
     trigger_changed: "Entlade-Auslöser geändert: {from} → {to}",
     export_correction: "Export-Wächter: {exportW} W ins Netz erkannt — Vorgabe auf {newTargetW} W gesenkt",
-    battery_swapped: "Akku gewechselt zu {to} ({name})",
+    battery_swapped: "Akku-Einheiten geändert — jetzt: {to}",
     expansion_detected: "Erweiterungsakku erkannt ({n} Pack(s), SN {sn})",
     floor_changed: "Entladegrenze geändert: {from}% → {to}%",
     pv_history_repaired: "PV-Verlauf repariert: {n} Tag(e) aus Tagestotalen wiederhergestellt",
