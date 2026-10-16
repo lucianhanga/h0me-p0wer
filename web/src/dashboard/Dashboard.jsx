@@ -1,6 +1,7 @@
 import { forwardRef, useEffect, useRef, useState } from "react";
 import FlipTile from "../components/FlipTile.jsx";
 import BackBars from "./BackBars.jsx";
+import { FMT_HOUR_MIN, FMT_WEEKDAY, FMT_DAY_OF_MONTH, FMT_MONTH_NAME } from "./periodFormats.js";
 import ConsumersPeriodCard from "../components/ConsumersPeriodCard.jsx";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import Hint from "../components/Hint.jsx";
@@ -57,25 +58,25 @@ export default function Dashboard() {
           type="day"
           title={t("dashboard.today")}
           data={stats.byPeriod.today}
-          formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          formatLabel={FMT_HOUR_MIN}
         />
         <SourceCard
           type="week"
           title={t("dashboard.thisWeek")}
           data={stats.byPeriod.week}
-          formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
+          formatLabel={FMT_WEEKDAY}
         />
         <SourceCard
           type="month"
           title={t("dashboard.thisMonth")}
           data={stats.byPeriod.month}
-          formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
+          formatLabel={FMT_DAY_OF_MONTH}
         />
         <SourceCard
           type="year"
           title={t("dashboard.thisYear")}
           data={stats.byPeriod.year}
-          formatLabel={(l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })}
+          formatLabel={FMT_MONTH_NAME}
         />
         {/* Consumers period tiles (2026-10-07, user request — same 3-face
             ring/bars/list tiles as the simple view's Consume section).

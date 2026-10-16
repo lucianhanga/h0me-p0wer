@@ -4,6 +4,7 @@ import QuadFlipTile from "./QuadFlipTile.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { readCached, writeCached, periodImmutable } from "../historyCache.js";
 import { plugColor, REST_COLOR } from "../plugs/PlugsTab.jsx";
+import { PERIOD_FORMAT } from "../dashboard/periodFormats.js";
 
 // Per-period consumer breakdown tile (2026-10-07, user request) — shared by
 // the simple view's Consume section and the full Dashboard grid. One tile
@@ -287,14 +288,11 @@ export default function ConsumersPeriodCard({ type, title }) {
   // Bars granularity mirrors the Totals tiles (2026-10-07, user request):
   // the day tile's bars are HOURLY (epoch-ms labels → HH:MM), week windows
   // label by weekday, month by day-of-month, year by month name.
-  const barLabel =
-    type === "day"
-      ? (l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : type === "month"
-        ? (l) => l.slice(8)
-        : type === "year"
-          ? (l) => new Date(`${l}-15T12:00:00`).toLocaleDateString([], { month: "short" })
-          : (l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" });
+  // 2026-10-16: from the shared module-level map (user report — "the
+  // tooltip closes after 1-2 s"): an inline arrow here was a new function
+  // on every render, and ConsumerBars re-inits ECharts on labelOf identity
+  // change — every WS live push killed the open tooltip.
+  const barLabel = PERIOD_FORMAT[type] ?? PERIOD_FORMAT.week;
 
   return (
     <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>

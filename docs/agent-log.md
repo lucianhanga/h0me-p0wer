@@ -7018,3 +7018,24 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   enough); the same −20% applied to the two fillColor surfaces that were
   still at 55%: the charge/discharge energy animation (--energy-color) and
   the simple view's system-total big % — both now 44%.
+
+## Chart tooltips killed by the live push (2026-10-16, user report — "hovering the consume bars, the tooltip closes after 1-2 s")
+
+- Root cause proven by CDP instrumentation (WS-message log vs chart DOM
+  mutations): every live push re-rendered SimpleHome, and the Consume
+  tile's `barLabel` was an inline arrow → new identity per render →
+  ConsumerBars' init effect [bars, plugs, t, labelOf] re-ran → ECharts
+  dispose+init on EVERY push → tooltip DOM destroyed. Headless repro:
+  tooltip died at 4.1 s, exactly on a WS message; re-init bursts at 0/10/20 s
+  in perfect correlation with pushes.
+- Same bug class as the 2026-09-29 TodayMiniChart/SimpleCharts memoize fix
+  — those two were fixed back then, the period tiles were missed.
+- Fix: shared module-level formatters (web/src/dashboard/periodFormats.js)
+  — FMT_HOUR_MIN / FMT_WEEKDAY / FMT_DAY_OF_MONTH / FMT_MONTH_NAME +
+  PERIOD_FORMAT map. ConsumersPeriodCard's barLabel, SimpleHome's 3
+  SourceCards and Dashboard's 4 SourceCards all use the stable constants.
+- Audited every echarts.init call site: LiveTab + SimpleCharts (memoized,
+  OK), PlugCard (primitive deps, OK), RingFace (init [] + setOption, OK),
+  RoiTab/Dashboard (60 s poll renders only, OK), GraphTab (memoized, OK).
+- Verified headless after the fix: 3 WS pushes → ZERO re-inits; tooltip
+  visible in 50/50 300 ms samples over 15 s.
