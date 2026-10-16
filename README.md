@@ -16,10 +16,11 @@ and its own PV-aware power plan that drives the battery's output preset.
 ## The six tabs
 
 **Simple vs full view**: a fresh visit starts in the **simple view** — one
-calm screen with the flow diagram, both batteries as vertical stacks (with
-charge state + ETAs), three tap-to-flip history charts (12h/24h/1w/1h), and
-the Today/Week/Month cards. The header's ◐ button switches to the full tab
-interface below; the choice persists.
+calm screen with the flow diagram, both batteries as tap-to-flip tiles
+(compact one-block front, the detailed per-module stack with charge state +
+ETAs on the back — same flip in Strategy), three tap-to-flip history charts
+(12h/24h/1w/1h), and the Today/Week/Month cards. The header's ◐ button
+switches to the full tab interface below; the choice persists.
 
 - **Welcome** — an AI briefing (any OpenAI-compatible endpoint): today's
   weather with a sunrise→sunset arc, week/month sun outlook, estimated PV

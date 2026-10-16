@@ -3770,3 +3770,74 @@ pre {
   margin-top: 0.6rem;
   font-size: 0.82rem;
 }
+
+/* Battery unit flip tiles (2026-10-16, user request — "batteries as
+   tiles: front = compact one-block battery, expansions not separate;
+   back = the detailed stack as before"). The back keeps the caller's own
+   .card chrome, so flip-back's built-in chrome is dropped; overflow must
+   stay visible or the cylinder's terminal nub clips. */
+.batt-flip .flip-back {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+/* The flip root replaced the .card as the flex/grid item in both layouts
+   (.battery-list, .simple-batt-row) — the stretch chain must reach the
+   faces so both cards still fill equal tile heights. */
+.batt-flip {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.batt-flip .flip-inner {
+  flex: 1;
+}
+
+.batt-flip .flip-face > * {
+  height: 100%;
+}
+
+/* Compact front: one unsegmented block per unit, centered in the tile. */
+.batt-compact {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  padding: 0.5rem;
+}
+
+.batt-compact-name {
+  font-weight: 600;
+  color: #e8ecef;
+}
+
+/* Later in the file than .simple-batt-row .batt-seg (the +25 % rule) so
+   the compact width/height win the specificity tie in the simple view. */
+.batt-seg.batt-seg-compact {
+  width: 120px;
+  height: 170px;
+}
+
+.batt-seg-compact .batt-seg-mod {
+  height: 100%;
+}
+
+@media (max-width: 600px) {
+  .batt-seg.batt-seg-compact {
+    width: 104px;
+    height: 150px;
+  }
+}
+
+/* Simple view: the back face's card IS the old column — keep its flex
+   column layout (the slot/status/temps alignment machinery depends on
+   it). */
+.simple-batt-back {
+  display: flex;
+  flex-direction: column;
+}
