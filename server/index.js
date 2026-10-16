@@ -24,6 +24,7 @@ import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-
 import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
+import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
 import {
   saveSnapshot,
@@ -1399,6 +1400,12 @@ app.get("/api/plugs", (req, res) => {
   for (const p of latestAccountPlugs.values()) {
     todayKwh[p.sn] = plugDayKwhFromSamples(p.sn, dayStart.getTime(), Date.now());
   }
+  // Named groups (plug-groups.js): the aggregate's today = Σ members.
+  for (const g of PLUG_GROUPS) {
+    const ms = plugGroupMembers(g.sn);
+    if (!ms.length) continue;
+    todayKwh[g.sn] = Math.round(ms.reduce((a, m) => a + (todayKwh[m.sn] ?? 0), 0) * 100) / 100;
+  }
   const colorIdx = getPlugColorIdx();
   res.json({
     ok: true,
@@ -1434,6 +1441,47 @@ app.get("/api/hmip/devices", (req, res) => {
   res.json({ ok: true, data: { from, to, devices } });
 });
 
+// Named-group flip face (2026-10-16, user request — "cooking" aggregated
+// like house light): the group's current member plugs with live watts and
+// span kWh. Span kWh is hybrid: plug_daily for the days beyond the 7-day
+// sample retention, trapezoid sample integration (same as house light)
+// for the recent part — so the 30d face doesn't under-report.
+app.get("/api/plugs/group/:sn/members", (req, res) => {
+  const group = plugGroupForSn(req.params.sn);
+  if (!group) return res.status(404).json({ ok: false, error: "unknown group" });
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) {
+    return res.status(400).json({ ok: false, error: "from must be before to" });
+  }
+  const devices = plugGroupMembers(group.sn).map((p) => ({
+    sn: p.sn,
+    name: p.name,
+    room: null,
+    wattsNow: p.watts ?? null,
+    staleS: null,
+    kwh: memberSpanKwh(p.sn, from, to),
+  }));
+  devices.sort((a, b) => b.kwh - a.kwh);
+  res.json({ ok: true, data: { from, to, devices } });
+});
+
+const PLUG_SAMPLE_RETENTION_MS = 7 * 86400000; // matches prunePlugSamples
+function memberSpanKwh(sn, from, to) {
+  const edge = Date.now() - PLUG_SAMPLE_RETENTION_MS;
+  let kwh = 0;
+  let sampleFrom = from;
+  if (from < edge) {
+    const edgeDay = localDate(new Date(edge));
+    const fromDay = localDate(new Date(from));
+    for (const r of getPlugDaily(fromDay)) {
+      if (r.sn === sn && r.date < edgeDay) kwh += r.kwh ?? 0;
+    }
+    sampleFrom = Math.max(sampleFrom, new Date(`${edgeDay}T00:00:00`).getTime());
+  }
+  return Math.round((kwh + plugDayKwhFromSamples(sn, sampleFrom, to)) * 100) / 100;
+}
+
 // Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
 // nulls where no samples (server off). No interpolation — at the 10 s
 // sample cadence every chart-sized bucket either has samples or the gap is
@@ -1465,9 +1513,26 @@ app.get("/api/plugs/timeseries", (req, res) => {
   // — the full 1.76 M-row range became a C-level GROUP BY (3.8 s → ms).
   const onlySn = req.query.sn ? String(req.query.sn) : null;
   const acc = new Map(); // bt -> Map(sn -> w)
-  const bucketed = onlySn
-    ? getPlugSamplesBucketedForSn(onlySn, from, to, bucketMs)
-    : getPlugSamplesBucketed(from, to, bucketMs);
+  // Named-group card (plug-groups.js, 2026-10-16): the aggregate holds no
+  // samples of its own — sum the members' bucketed watts per bucket. A
+  // bucket with at least one reporting member sums the rest as 0 (the
+  // members are site plugs sampled together; a missing member row means
+  // offline, i.e. 0 W).
+  const onlyGroup = onlySn ? plugGroupForSn(onlySn) : null;
+  let bucketed;
+  if (onlyGroup) {
+    const sums = new Map(); // bt -> w
+    for (const m of plugGroupMembers(onlyGroup.sn)) {
+      for (const r of getPlugSamplesBucketedForSn(m.sn, from, to, bucketMs)) {
+        sums.set(r.bt, (sums.get(r.bt) ?? 0) + r.w);
+      }
+    }
+    bucketed = [...sums.entries()].map(([bt, w]) => ({ bt, w }));
+  } else {
+    bucketed = onlySn
+      ? getPlugSamplesBucketedForSn(onlySn, from, to, bucketMs)
+      : getPlugSamplesBucketed(from, to, bucketMs);
+  }
   for (const r of bucketed) {
     const rSn = onlySn ?? r.sn;
     sns.add(rSn);
@@ -2543,9 +2608,21 @@ function withFreshPlugWatts(p, ts) {
   return { ...p, ts };
 }
 
+// Raw plug states (site + account-level), BEFORE named groups collapse
+// (plug-groups.js, 2026-10-16 — "cooking*" as one consumer like house
+// light). The members keep their own plug_samples/plug_daily rows; the
+// group's curve/kWh are summed from them at read time.
+function ungroupedPlugs() {
+  return [...latestPlugs, ...latestAccountPlugs.values()];
+}
+
+function plugGroupMembers(groupSn) {
+  return ungroupedPlugs().filter((p) => plugGroupForName(p.name)?.sn === groupSn);
+}
+
 function mergedPlugs() {
   const hmip = hmipPoller.getState();
-  return [...latestPlugs, ...latestAccountPlugs.values(), ...(hmip ? [hmip] : [])];
+  return [...applyPlugGroups(ungroupedPlugs()).display, ...(hmip ? [hmip] : [])];
 }
 
 // HmIP "house light" aggregate (2026-10-12, user request — see hmip.js):
@@ -2570,7 +2647,7 @@ const hmipPoller = new HmipPoller({
     }
   },
 });
-ensurePlugColors(["hmip-house-light"]);
+ensurePlugColors(["hmip-house-light", ...PLUG_GROUPS.map((g) => g.sn)]);
 
 async function syncAccountPlugs() {
   if (!anker.configured) return;

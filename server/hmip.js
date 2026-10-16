@@ -54,6 +54,8 @@ export class HmipPoller {
       external: true,
       ts: this.state?.ts ?? null,
       deviceCount: this.state?.deviceCount ?? 0,
+      membersUrl: "/api/hmip/devices", // explicit contract — PlugsTab's
+      // AggregateBack reads membersUrl for ANY aggregate (plug groups too)
       lastError: fresh ? null : (this.lastError ?? "stale"),
     };
   }
