@@ -7150,3 +7150,19 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   because a real Anker cloud wobble tonight flooded the log with 144
   stalled/fresh pairs — which incidentally masked the first UI test (the
   panel refilled with new mqtt entries between clicks).
+
+## Battery tiles on narrow phones — the missing piece (2026-10-16, Galaxy S25 user report — "still too wide, they overlap")
+
+- TESTING TRAP: headless Chrome enforces a 500px MINIMUM window width —
+  every earlier "390px" test actually rendered at 500 CSS px, so the S25's
+  true 360px was never tested. `Emulation.setDeviceMetricsOverride` is the
+  only honest narrow viewport (all future mobile checks must use it).
+- At real 360px the remaining culprit was `.card { min-width: 180px }`:
+  two columns of ~158px each could never fit 2×220px cards. Fix:
+  `.batt-flip .flip-face > * { min-width: 0 }` next to the height rule.
+- Verified at true 360×800 (deviceScaleFactor 2): row 336px, columns
+  158px, zero elements wider than the viewport, both faces render clean.
+- NOTE: the user's 20:15 screenshot predates the #454 deploy — production
+  lagged main again; the version check via the tunnel 401s without the
+  API token, so "please deploy + hard-refresh" is the answer when the
+  deployed version is old.
