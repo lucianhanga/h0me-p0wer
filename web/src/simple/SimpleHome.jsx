@@ -15,6 +15,7 @@ import ConsumersSection from "./ConsumersSection.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import Hint from "../components/Hint.jsx";
 import { SourceCard } from "../dashboard/Dashboard.jsx";
+import { FMT_HOUR_MIN, FMT_WEEKDAY, FMT_DAY_OF_MONTH } from "../dashboard/periodFormats.js";
 
 // The simple view (2026-09-27, user request — "minimalistic, think Tesla
 // way"): ONE calm screen — the animated flow diagram as the hero, the
@@ -363,19 +364,19 @@ export default function SimpleHome() {
             type="day"
             title={t("dashboard.today")}
             data={overview.byPeriod.today}
-            formatLabel={(l) => new Date(l).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            formatLabel={FMT_HOUR_MIN}
           />
           <SourceCard
             type="week"
             title={t("dashboard.thisWeek")}
             data={overview.byPeriod.week}
-            formatLabel={(l) => new Date(`${l}T12:00:00`).toLocaleDateString([], { weekday: "short" })}
+            formatLabel={FMT_WEEKDAY}
           />
           <SourceCard
             type="month"
             title={t("dashboard.thisMonth")}
             data={overview.byPeriod.month}
-            formatLabel={(l) => (typeof l === "string" ? l.slice(8) : l)}
+            formatLabel={FMT_DAY_OF_MONTH}
           />
         </div>
         </>
