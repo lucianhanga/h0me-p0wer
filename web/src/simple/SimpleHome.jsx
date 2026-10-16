@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
-import BatteryModules, { CompactBattery, fillColor, sweepGradient } from "../battery/BatteryModules.jsx";
+import BatteryModules, { fillColor, sweepGradient } from "../battery/BatteryModules.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
@@ -354,18 +354,52 @@ export default function SimpleHome() {
                 }
               >
                 <div className="card simple-batt-front">
-                  <CompactBattery
-                    name={u.live?.name ?? t("battery.fallbackName")}
-                    soc={uSoc}
-                    capacityKwh={u.constants?.capacityKwh}
-                    hueDomain={{ minPct: accountMin, maxPct: sysMax }}
-                    statusLine={
-                      <div className={`batt-status simple-batt-status ${uMode}`}>
-                        <StatusBadge mode={uMode} />
-                        <span className="batt-status-main">{statusText}</span>
-                      </div>
+                  {/* Front = the SAME rendering as the back but one block
+                      (single mode) — capacity-proportional (shared
+                      pxPerKwh), animation included — plus the unit metrics
+                      (hero %, kWh-of-total, status, coverage). NO
+                      temperature chips on the front (2026-10-16, user
+                      request: "like on the back, with the animation and
+                      everything, but as a block … without the
+                      temperatures"). */}
+                  <BatteryModules
+                    live={u.live}
+                    constants={u.constants}
+                    heroLvlClass={uLvl}
+                    heroZoneLabel={
+                      uLvl === "lvl-full"
+                        ? t("battery.zone.full")
+                        : uLvl === "lvl-low"
+                          ? t("battery.zone.low")
+                          : null
                     }
+                    single
+                    mode={uMode}
+                    stacked
+                    legend={false}
+                    pxPerKwh={pxPerKwh}
+                    slotHeightPx={slotH}
+                    hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                   />
+                  <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
+                    <StatusBadge mode={uMode} />
+                    <span className="batt-status-main">{statusText}</span>
+                    {uEta && (
+                      <span className="batt-status-eta">
+                        {t(uMode === "charging" ? "battery.status.fullIn" : "battery.status.emptyIn", {
+                          eta: uEta,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  {u.live?.coverH != null && (
+                    <div className="batt-cover muted">
+                      {t("battery.coverAvg", {
+                        eta: formatEta(u.live.coverH),
+                        avg: params?.avgUseKwhPerDay != null ? Math.round(params.avgUseKwhPerDay * 10) : "?",
+                      })}
+                    </div>
+                  )}
                 </div>
               </FlipTile>
             );

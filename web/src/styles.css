@@ -3800,43 +3800,14 @@ pre {
   height: 100%;
 }
 
-/* Compact front: one unsegmented block per unit, centered in the tile. */
-.batt-compact {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.7rem;
-  padding: 0.5rem;
-}
+/* Compact front faces reuse BatteryModules' single mode (one block,
+   capacity-proportional via the shared pxPerKwh) — no separate compact
+   sizing needed (2026-10-16, second pass: "like on the back, with the
+   animation and everything, but as a block"). */
 
-.batt-compact-name {
-  font-weight: 600;
-  color: #e8ecef;
-}
-
-/* Later in the file than .simple-batt-row .batt-seg (the +25 % rule) so
-   the compact width/height win the specificity tie in the simple view. */
-.batt-seg.batt-seg-compact {
-  width: 120px;
-  height: 170px;
-}
-
-.batt-seg-compact .batt-seg-mod {
-  height: 100%;
-}
-
-@media (max-width: 600px) {
-  .batt-seg.batt-seg-compact {
-    width: 104px;
-    height: 150px;
-  }
-}
-
-/* Simple view: the back face's card IS the old column — keep its flex
-   column layout (the slot/status/temps alignment machinery depends on
-   it). */
+/* Simple view: the face cards are the old columns — keep the flex-column
+   layout (the slot/status/temps alignment machinery depends on it). */
+.simple-batt-front,
 .simple-batt-back {
   display: flex;
   flex-direction: column;

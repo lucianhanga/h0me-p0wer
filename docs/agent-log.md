@@ -7090,3 +7090,16 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   specificity tie against `.simple-batt-row .batt-seg` (the +25 % rule).
 - Verified headless: both views flip both tiles; back faces pixel-identical
   structure with aligned status/temps rows; fronts centered compact blocks.
+
+## Battery tile fronts reworked: single-mode BatteryModules (2026-10-16, same-day follow-up — "proportional to capacity, with metrics, animation and everything, but as a block; without the temperatures")
+
+- The CompactBattery component (added hours earlier) was deleted again —
+  the front faces now render BatteryModules itself with `single` (one
+  block) instead of a separate compact design: capacity-proportional via
+  the shared pxPerKwh, same sweep, same charge/discharge animation, hero
+  % + kWh-of-total + status + coverage metrics. Simple-view fronts skip
+  the temp chips; the Strategy front's legend row hides temps via the new
+  `legendTemps` prop (front only — the back keeps them).
+- BatteryCard's gauge card is now `gaugeCard(singleBlock)` — front =
+  gaugeCard(true), back = gaugeCard(false), literally the same card
+  modulo segmentation. Aggregate card unchanged.
