@@ -105,6 +105,16 @@ EPIPE noise on every client disconnect).
   site membership always wins (MQTT client stops if a plug joins the
   site). The watchdog watches account membership separately
   (`onAccountPlugs`).
+- **Named plug groups (since 2026-10-16)**: `server/plug-groups.js`
+  collapses plugs whose stripped display name starts with a group prefix
+  ("cooking*") into ONE aggregate consumer (`agg-cooking`) on every plug
+  surface — no synthetic storage; live watts/kWh/bars/curves are summed
+  from the members' real rows at read time (`mergedPlugs()`,
+  /api/stats/consumers, /api/plugs/timeseries?sn=agg-*). Flip face:
+  `/api/plugs/group/:sn/members` (hybrid kWh: plug_daily past the 7-day
+  sample retention, trapezoid within). Aggregate payloads carry
+  `membersUrl`; PlugsTab's AggregateBack reads it (hmip.js exposes its
+  own too). `external: true` marks flippable aggregate cards.
 
 ### Data model (SQLite, `server/data.db`, git-ignored)
 - `snapshots`: raw 5 s Modbus samples, 48 h retention, pruned hourly.

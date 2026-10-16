@@ -7039,3 +7039,36 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   RoiTab/Dashboard (60 s poll renders only, OK), GraphTab (memoized, OK).
 - Verified headless after the fix: 3 WS pushes → ZERO re-inits; tooltip
   visible in 50/50 300 ms samples over 15 s.
+
+## Named plug groups — "cooking*" as one consumer (2026-10-16, user request: "add together all the cooking, cooking2, ... into one entry, like house light, everywhere")
+
+- New `server/plug-groups.js`: PLUG_GROUPS (prefix → virtual SN
+  `agg-cooking`, display name "cooking"), `applyPlugGroups()` splits raw
+  plug states into display list + member map. NO synthetic storage —
+  members keep their plug_samples/plug_daily rows and everything sums at
+  read time, so the aggregate has full history and rest-of-home math is
+  unchanged (same total).
+- Touch points: `mergedPlugs()` (members out, aggregate state in —
+  external:true + membersUrl), /api/plugs (todayKwh summed), /api/plugs/
+  timeseries?sn=agg-cooking (per-bucket sum of members' bucketed watts),
+  /api/stats/consumers (keyOf() rolls member SNs into the group for the
+  list, period sums and ALL bar builders — hourly means summed per member,
+  NOT mean-of-sums), new GET /api/plugs/group/:sn/members (flip face;
+  hybrid span kWh: plug_daily beyond the 7-day sample retention, trapezoid
+  within). ensurePlugColors registers agg-* at startup.
+- Frontend: AggregateBack no longer hardcodes /api/hmip/devices — reads
+  `membersUrl` off the plug payload (hmip.js getState() exposes its own
+  now). ConsumersPeriodCard needed NO changes (the group is just one row).
+- Dev-box caveat: local plug_samples were nearly empty today (yesterday's
+  password incident starved the scene poll), so the flip face showed 0 kWh
+  while plug_daily had 0.45 — a data artifact, not a bug; production's
+  scene-poll/MQTT density makes trapezoid kWh track the cloud figure.
+- KNOWN pre-existing issue spotted while mapping (NOT fixed): the
+  unfiltered /api/plugs/timeseries (Rest card) sums hmip-* member rows
+  AND the hmip-house-light aggregate row → house-light watts are
+  subtracted twice from "rest of home". Fix would be excluding hmip member
+  SNs from the unfiltered sns set.
+- HARDENING (same PR): `PRAGMA busy_timeout = 5000` in db.js — a diagnostic
+  second process holding data.db made ensurePlugColors throw SQLITE_BUSY
+  inside syncAccountPlugs and crash the whole server. Background writes
+  must never be fatal.

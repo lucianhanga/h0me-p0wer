@@ -26,6 +26,7 @@ import {
 import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
+import { plugGroupForName, PLUG_GROUPS } from "./plug-groups.js";
 
 // /api/stats/* — Dashboard + top-days: today's live profile, week/month/
 // year rollups, single-period time navigation, and production leaderboards.
@@ -877,8 +878,26 @@ export function registerStatsRoute(app, deps) {
     // name — the same ordering as the Consume tab, so a plug keeps the same
     // color everywhere.
     const names = getAllPlugNames();
-    const sns = [...names.keys()].sort((a, b) =>
-      (names.get(a) ?? a).localeCompare(names.get(b) ?? b),
+    // Named plug groups (2026-10-16, user request — "cooking, cooking2, ...
+    // as ONE entry, like house light"): member SNs collapse into the group's
+    // virtual SN for the list, the period sums and every bar below. Members
+    // keep their own plug_daily rows, so the group gets full history and
+    // "rest of home" (home − Σ) is unchanged — same total either way.
+    const groupOf = new Map(); // memberSn -> groupSn
+    const membersOf = new Map(); // groupSn -> [memberSn]
+    const groupNames = new Map(); // groupSn -> display name
+    for (const [sn, name] of names) {
+      const g = plugGroupForName(name);
+      if (!g) continue;
+      groupOf.set(sn, g.sn);
+      groupNames.set(g.sn, g.name);
+      if (!membersOf.has(g.sn)) membersOf.set(g.sn, []);
+      membersOf.get(g.sn).push(sn);
+    }
+    const keyOf = (sn) => groupOf.get(sn) ?? sn;
+    const nameOf = (sn) => groupNames.get(sn) ?? names.get(sn) ?? sn;
+    const sns = [...new Set([...names.keys()].map(keyOf))].sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b)),
     );
     // Stable color assignment (2026-10-10): covers plug_daily-only SNs the
     // scene poll never saw; scene-seen plugs are already registered.
@@ -890,7 +909,8 @@ export function registerStatsRoute(app, deps) {
       for (const [date, pd] of plugsByDate) {
         if (date < from || date > to) continue;
         for (const [sn, kwh] of pd) {
-          perSn.set(sn, (perSn.get(sn) ?? 0) + (kwh ?? 0));
+          const key = keyOf(sn);
+          perSn.set(key, (perSn.get(key) ?? 0) + (kwh ?? 0));
           any = true;
         }
       }
@@ -900,7 +920,7 @@ export function registerStatsRoute(app, deps) {
     const { perSn, any } = sumIn(startStr, endStr);
     const plugs = sns.map((sn) => ({
       sn,
-      name: names.get(sn) ?? sn,
+      name: nameOf(sn),
       kwh: r2(perSn.get(sn) ?? 0),
       colorIdx: colorIdx.get(sn) ?? null,
     }));
@@ -931,14 +951,28 @@ export function registerStatsRoute(app, deps) {
         cell.s += r.watts;
         cell.c++;
       }
+      // Group SNs hold no samples themselves — sum the members' hourly
+      // means (mean watts over the hour = Wh per member).
+      const hourlyKwh = (sn, h) => {
+        const ms = membersOf.get(sn);
+        if (!ms) {
+          const cell = plugWH.get(sn)?.[h];
+          return cell?.c ? r2(cell.s / cell.c / 1000) : 0;
+        }
+        let sum = 0;
+        for (const m of ms) {
+          const cell = plugWH.get(m)?.[h];
+          if (cell?.c) sum += cell.s / cell.c / 1000;
+        }
+        return r2(sum);
+      };
       bars = [];
       for (let h = 0; h < 24; h++) {
         const bar = { label: dayStartMs + h * 3600000 }; // epoch ms — the
         // frontend formats HH:MM like the Totals Today tile
         let plugSumH = 0;
         for (const sn of sns) {
-          const cell = plugWH.get(sn)?.[h];
-          const kwh = cell?.c ? r2(cell.s / cell.c / 1000) : 0;
+          const kwh = hourlyKwh(sn, h);
           bar[`plug__${sn}`] = kwh;
           plugSumH += kwh;
         }
@@ -959,7 +993,8 @@ export function registerStatsRoute(app, deps) {
         const m = d.slice(0, 7);
         if (!plugByMonth.has(m)) plugByMonth.set(m, new Map());
         for (const [sn, kwh] of pd) {
-          plugByMonth.get(m).set(sn, (plugByMonth.get(m).get(sn) ?? 0) + (kwh ?? 0));
+          const key = keyOf(sn); // group members roll into plug__agg-*
+          plugByMonth.get(m).set(key, (plugByMonth.get(m).get(key) ?? 0) + (kwh ?? 0));
         }
       }
       const y = startStr.slice(0, 4);
@@ -975,7 +1010,13 @@ export function registerStatsRoute(app, deps) {
       }
     } else {
       bars = barDates.map((d) => {
-        const pd = plugsByDate.get(d) ?? new Map();
+        const pdRaw = plugsByDate.get(d) ?? new Map();
+        // Group members roll into the group's bar key (same as the list).
+        const pd = new Map();
+        for (const [sn, kwh] of pdRaw) {
+          const key = keyOf(sn);
+          pd.set(key, (pd.get(key) ?? 0) + (kwh ?? 0));
+        }
         const home = homeByDate.get(d) ?? 0;
         const sum = [...pd.values()].reduce((a, v) => a + (v ?? 0), 0);
         const bar = { label: d, rest: r2(Math.max(0, home - sum)) };

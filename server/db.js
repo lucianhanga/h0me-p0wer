@@ -14,6 +14,12 @@ const db = new DatabaseSync(DB_PATH);
 // 3-10 s write streams far better. Files live on a local volume (Docker
 // named volume / local disk), so WAL's shared-memory caveat doesn't apply.
 db.exec("PRAGMA journal_mode = WAL");
+// Wait out short writer contention instead of dying with SQLITE_BUSY
+// (2026-10-16 incident: a diagnostic second process holding the DB made an
+// ensurePlugColors kvSet throw "database is locked", crashing the whole
+// server via syncAccountPlugs — an unhandled background-sync write should
+// never be fatal).
+db.exec("PRAGMA busy_timeout = 5000");
 db.exec(`
   CREATE TABLE IF NOT EXISTS snapshots (
     ts INTEGER PRIMARY KEY,

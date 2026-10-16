@@ -120,7 +120,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -379,11 +379,13 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
   );
 
   // Aggregate cards (2026-10-12 — "house light" sums many metering
-  // devices): flippable, the back face lists the sub-consumers with their
-  // values for the card's selected span.
+  // devices; 2026-10-16 — named plug groups like "cooking" too): flippable,
+  // the back face lists the sub-consumers with their values for the card's
+  // selected span. The members endpoint rides on the plug payload
+  // (membersUrl) so any aggregate can point at its own source.
   if (aggregate) {
     return (
-      <FlipTile back={(flipped) => <AggregateBack activeSpanMs={activeSpan} visible={flipped} t={t} />}>
+      <FlipTile back={(flipped) => <AggregateBack activeSpanMs={activeSpan} visible={flipped} membersUrl={membersUrl} t={t} />}>
         {cardBody}
       </FlipTile>
     );
@@ -395,7 +397,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
 // is a collection): every sub-consumer with its current watts and its kWh
 // over the card's selected span, biggest first (same ordering rule as the
 // Consume list face).
-function AggregateBack({ activeSpanMs, visible, t }) {
+function AggregateBack({ activeSpanMs, visible, membersUrl, t }) {
   // Snapped 30 s window (2026-10-12 review): Date.now() in render made a
   // NEW url on every render — usePolledResource treated each as a fresh
   // resource and refetched constantly. The snap also lets the 60 s TTL
@@ -404,7 +406,7 @@ function AggregateBack({ activeSpanMs, visible, t }) {
     const end = Math.ceil(Date.now() / 30000) * 30000;
     return [end - (activeSpanMs ?? 24 * 3600 * 1000), end];
   }, [activeSpanMs]);
-  const { data } = usePolledResource(`/api/hmip/devices?from=${from}&to=${to}`, {
+  const { data } = usePolledResource(`${membersUrl ?? "/api/hmip/devices"}?from=${from}&to=${to}`, {
     intervalMs: 30000,
     enabled: visible, // both flip faces stay mounted — poll only when seen
     cacheTtlMs: 60000,
@@ -461,6 +463,7 @@ export default function PlugsTab() {
             todayKwh={live.todayKwh?.[p.sn]}
             offline={!p.online}
             aggregate={p.external === true}
+            membersUrl={p.membersUrl ?? null}
             t={t}
           />
         ))}
