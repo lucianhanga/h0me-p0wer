@@ -3038,18 +3038,15 @@ pre {
   align-self: center;
 }
 
-/* Simple view columns: the slack goes ABOVE the slot (2026-10-15, second
-   user report — "discharging"/"idle" still off on the phone): stretch
-   equalizes the column heights, but the extra height was absorbed by
-   .batt-modules-side (flex:1) BELOW the hero, pushing status/cover/temps
-   down by exactly the temps-wrap difference (the 3-module unit's temp
-   chips wrap to more lines on narrow screens — min-height reserves can
-   never match every width). Now nothing inside batt-modules grows;
-   justify-content:flex-end pushes the free space above the cylinder
-   slot, so cylinders bottom-align and every text row lines up at any
-   wrap width. */
+/* Simple view columns (2026-10-17 rework): NOTHING grows inside the face —
+   with the hero living INSIDE .batt-modules (the side block), letting the
+   modules block grow + justify-end pushed the hero DOWN in the shorter
+   column by exactly the temps-wrap difference (~17px misalignment, user
+   screenshot). Fixed equal slot reservation + no growth: every row above
+   the temps has identical height in both columns; the only variance (temp
+   chip wrap count) lands below the last row, invisible at the card bottom. */
 .simple-batt-row .batt-modules.stacked {
-  flex: 1;
+  flex: 0 0 auto;
   justify-content: flex-end;
 }
 
@@ -3780,13 +3777,27 @@ pre {
 
 /* Battery unit flip tiles (2026-10-16, user request — "batteries as
    tiles: front = compact one-block battery, expansions not separate;
-   back = the detailed stack as before"). The back keeps the caller's own
-   .card chrome, so flip-back's built-in chrome is dropped; overflow must
-   stay visible or the cylinder's terminal nub clips. */
-.batt-flip .flip-back {
-  background: transparent;
-  border: 0;
-  border-radius: 0;
+   back = the detailed stack as before").
+   2026-10-17 — the face IS the card now (user report — "batteries still
+   not properly aligned on mobile"): the inner wrapper's height:100% never
+   resolved reliably against the grid-stretched face (Chrome measured the
+   card taller than its face), so the bottom-anchored groups sat ~13px
+   apart between tiles. The wrapper dissolves (display:contents) and the
+   stretched face itself carries the chrome + the flex column. overflow
+   stays visible or the cylinder's terminal nub clips. */
+.batt-flip .flip-face {
+  position: relative; /* for the Strategy card's bottom-right timestamp */
+  display: flex;
+  flex-direction: column;
+  /* .flip-back's base height:100% is circular during grid track sizing (the
+     track then ignored the back's content height — the back overflowed the
+     tile by exactly the front/back difference, 2026-10-17). Auto + grid
+     stretch sizes it correctly. */
+  height: auto;
+  background: #1a212866; /* barely-there chrome (2026-10-16, user request) */
+  border: 1px solid #2a323866;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
   overflow: visible;
 }
 
@@ -3803,30 +3814,10 @@ pre {
   flex: 1;
 }
 
-.batt-flip .flip-face > * {
-  height: 100%;
-  /* .card carries min-width:180px — fine for one card per row, fatal for
-     the two-up phone layout (2 × 220px > 360px viewport → the tiles
-     overlapped and ran off-screen, 2026-10-16 Galaxy S25 report). */
-  min-width: 0;
-}
-
 /* Compact front faces reuse BatteryModules' single mode (one block,
    capacity-proportional via the shared pxPerKwh) — no separate compact
    sizing needed (2026-10-16, second pass: "like on the back, with the
    animation and everything, but as a block"). */
-
-/* Simple view: the face cards are the old columns — keep the flex-column
-   layout (the slot/status/temps alignment machinery depends on it). */
-.simple-batt-front,
-.simple-batt-back {
-  display: flex;
-  flex-direction: column;
-  /* Barely-there tile chrome (2026-10-16, user request — "the tile
-     background a bit more faded, barely visible"). */
-  background: #1a212866;
-  border-color: #2a323866;
-}
 
 /* Unit name at the TOP of the battery flip tiles (2026-10-16, user
    request — "put the name of the banks on top of the tile"); BatteryModules'
@@ -3911,13 +3902,17 @@ pre {
   .simple-batt-row .batt-status {
     min-height: 3.4em;
     align-content: center;
+    /* Shrink to fit: "discharging 386 W" + icon measures ~152px but the
+       two-up card offers only ~137px (measured 2026-10-17) — the atomic
+       no-wrap line overflowed the card edge. */
+    font-size: 0.75rem;
   }
 
-  /* Tighter side padding buys the status line real estate. */
-  .simple-batt-front,
-  .simple-batt-back {
-    padding-left: 0.6rem;
-    padding-right: 0.6rem;
+  /* Tighter side padding buys the status line real estate (the flip face
+     IS the card since 2026-10-17 — no inner wrapper anymore). */
+  .simple-batt-row .batt-flip .flip-face {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
   }
 }
 

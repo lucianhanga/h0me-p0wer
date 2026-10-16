@@ -136,13 +136,24 @@ export default function SimpleHome() {
   const baseH = window.matchMedia("(max-width: 600px)").matches ? 325 : 425;
   const maxCap = Math.max(...stacks.map((u) => u.constants?.capacityKwh ?? 0), 0) || 1;
   const pxPerKwh = Math.round((baseH / maxCap) * 100) / 100;
-  // .batt-seg renders its explicit height as CONTENT box (+ 6px padding +
-  // 4px border = 10px chrome), so the tallest cylinder is baseH+10 tall.
-  // The slot must reserve exactly that or the tallest column's slot
-  // overflows the reservation and its text rows drop ~10px below the
-  // other column's (2026-10-15, second alignment report — measured
-  // headless: slot h335 vs h325 with the 325 reservation).
-  const slotH = baseH + 10;
+  // The slot must reserve the REAL height of the tallest stack — the
+  // per-module heights plus the inter-module gaps and the cylinder chrome
+  // (6px padding + 4px border). Anything less overflows the reservation in
+  // the tallest column and drops its hero/status rows a few px below the
+  // other column's (2026-10-15: slot 335 vs 325; 2026-10-17: another 5px
+  // from the two 3px gaps between three modules).
+  const slotH =
+    Math.max(
+      ...stacks.map((u) => {
+        const packs = u.constants?.expansionPacks ?? 0;
+        const mods = [
+          u.constants?.baseCapacityKwh ?? u.constants?.capacityKwh ?? 0,
+          ...Array.from({ length: packs }, () => u.constants?.expansionPackKwh ?? 0),
+        ];
+        return mods.reduce((a, kwh) => a + Math.round(kwh * pxPerKwh), 0) + (mods.length - 1) * 3 + 10;
+      }),
+      0,
+    ) || baseH + 10;
   // Front faces (2026-10-16, user request — "make the batteries bigger
   // (proportionally)"): the single block gets its own, ~15 % larger scale —
   // the SAME px/kWh for both units, so proportions hold; it doesn't need to
@@ -290,7 +301,12 @@ export default function SimpleHome() {
                 key={u.live.sn ?? "aggregate"}
                 className="simple-batt batt-flip"
                 back={
-                  <div className="card simple-batt-back">
+                  <>
+                  {/* No card wrapper div (2026-10-17 — Chrome's
+                      display:contents + flex left the spacer inert and the
+                      tiles' bottom groups ~13px apart): the flip face itself
+                      carries the chrome + flex column (.batt-flip
+                      .flip-face). */}
                 <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
                 <BatteryModules
                   live={u.live}
@@ -359,11 +375,13 @@ export default function SimpleHome() {
                     />
                   ))}
                 </div>
-                  </div>
+                  </>
                 }
               >
-                <div className="card simple-batt-front">
-                  <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
+                {/* No card wrapper div — the face carries the chrome (see
+                    the back face above). */}
+                <>
+                <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
                   {/* Spacer ABOVE the block (2026-10-17, user request —
                       "align the batteries at the bottom, not at the top"):
                       the block + hero + status + cover bottom-anchor as one
@@ -428,7 +446,7 @@ export default function SimpleHome() {
                       })}
                     </div>
                   )}
-                </div>
+                </>
               </FlipTile>
             );
           })}
