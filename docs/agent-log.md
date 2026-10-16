@@ -7205,3 +7205,28 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   block + hero + status + cover now bottom-anchor as one group — both
   batteries stand on the same line above their metrics, and the small
   unit's air band sits between its title and its block.
+
+## Battery tiles: the alignment endgame (2026-10-17, user — "still not properly aligned… start the browser in mobile mode")
+
+- TESTING TRAP #2 (worse than the 500px floor): headless window-size lies;
+  AND getBoundingClientRect under rotateY(180°) mirrors rect tops — two
+  phantom "misalignments" earlier were measurement artifacts. Real mobile
+  checks need Emulation.setDeviceMetricsOverride + unrotated faces.
+- The real bug chain, finally closed: (1) Chrome's display:contents + flex
+  left the spacer inert (13px offset between the tiles' bottom groups) —
+  the wrapper divs are GONE, the flip face itself carries the card chrome +
+  flex column (.batt-flip .flip-face; gaugeCard split into gaugeCardBody +
+  a wrapper for the unflipped aggregate path). (2) .flip-back's base
+  height:100% is circular during grid track sizing → the back overflowed
+  the tile by the front/back height difference → height:auto + grid
+  stretch. (3) The 2026-10-15 "slack above the slot" fix turned poisonous
+  once the hero lived INSIDE the growing modules block (justify-end pushed
+  the hero down in the shorter column) — nothing grows inside the face
+  anymore; temps-wrap variance lands below the last row. (4) slotH now =
+  the tallest stack's REAL height (Σ round(kwh·px) + gaps + chrome) instead
+  of baseH+10 — the 3-module stack overflowed the reservation by 5px.
+  (5) "discharging 386 W" + icon measured 152px vs the 137px two-up card —
+  0.75rem status + 0.5rem side padding on ≤600px.
+- Verified with true device-metrics override at 360px: EVERY row identical
+  across tiles on both faces (seg bottoms, hero, status, temps to the px);
+  desktop 1280 strategy front/back unchanged and correct.

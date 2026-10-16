@@ -149,12 +149,15 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           }),
         );
 
-  // gaugeCard(singleBlock): the SAME card either segmented (back face) or
-  // as ONE capacity-proportional block (front face — 2026-10-16, user
-  // request: "like on the back, with the animation and everything, but as
-  // a block"). The aggregate card is always single-block.
-  const gaugeCard = (singleBlock) => (
-    <div className="card batt-gauge-card">
+  // gaugeCardBody(singleBlock): the SAME card content either segmented
+  // (back face) or as ONE capacity-proportional block (front face —
+  // 2026-10-16, user request: "like on the back, with the animation and
+  // everything, but as a block"). The aggregate card is always
+  // single-block. 2026-10-17: the flip faces get the BARE body (the face
+  // carries the chrome — a wrapper div broke bottom-alignment on phones);
+  // the unflipped aggregate path wraps it in .card itself.
+  const gaugeCardBody = (singleBlock) => (
+    <>
         <div className="batt-card-head">
           <span className="batt-card-name">{live.name ?? t("battery.fallbackName")}</span>
           {/* The aggregate is the SYSTEM, not one device — its pn/SN are the
@@ -235,7 +238,11 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             (2026-09-28, user request: "timestamps on the bottom right on
             each tile"). */}
         <div className="batt-sys-ts">{t("battery.system.updated", { time: fmtTime(live.ts) })}</div>
-      </div>
+      </>
+  );
+
+  const gaugeCard = (singleBlock) => (
+    <div className="card batt-gauge-card">{gaugeCardBody(singleBlock)}</div>
   );
 
   return (
@@ -248,9 +255,9 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
       ) : (
         <FlipTile
           className="batt-flip"
-          back={gaugeCard(false)}
+          back={gaugeCardBody(false)}
         >
-          {gaugeCard(true)}
+          {gaugeCardBody(true)}
         </FlipTile>
       )}
 
