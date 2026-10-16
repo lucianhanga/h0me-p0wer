@@ -3805,6 +3805,10 @@ pre {
 
 .batt-flip .flip-face > * {
   height: 100%;
+  /* .card carries min-width:180px — fine for one card per row, fatal for
+     the two-up phone layout (2 × 220px > 360px viewport → the tiles
+     overlapped and ran off-screen, 2026-10-16 Galaxy S25 report). */
+  min-width: 0;
 }
 
 /* Compact front faces reuse BatteryModules' single mode (one block,
