@@ -364,6 +364,14 @@ export default function SimpleHome() {
               >
                 <div className="card simple-batt-front">
                   <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
+                  {/* Spacer ABOVE the block (2026-10-17, user request —
+                      "align the batteries at the bottom, not at the top"):
+                      the block + hero + status + cover bottom-anchor as one
+                      group, so both batteries stand on the same line right
+                      above their metrics; the air band (unavoidable for the
+                      smaller, capacity-proportional unit) sits between the
+                      title and the block. */}
+                  <div className="batt-front-spacer" />
                   {/* Front = the SAME rendering as the back but one block
                       (single mode) — capacity-proportional, animation
                       included — plus the unit metrics (hero %, kWh-of-total,
@@ -373,11 +381,13 @@ export default function SimpleHome() {
                       temperatures").
                       Same day, follow-up — "make the batteries bigger
                       (proportionally) or reduce the space between the title
-                      and the battery": the front block gets its own ~15 %
-                      larger scale (still identical px/kWh across units), the
-                      slot hugs the block (no slotH reservation), and the
-                      spacer pins status/cover to the card bottom — so the
-                      block sits right under the title with no dead band. */}
+                      and the battery", then "align the batteries at the
+                      bottom": the front block gets its own ~15 % larger
+                      scale (still identical px/kWh across units), the slot
+                      hugs the block (no slotH reservation), and a spacer
+                      ABOVE the block bottom-anchors block + metrics as one
+                      group — both batteries stand on the same line above
+                      their hero, status and coverage. */}
                   <BatteryModules
                     live={u.live}
                     constants={u.constants}
@@ -397,7 +407,6 @@ export default function SimpleHome() {
                     pxPerKwh={frontPxPerKwh}
                     hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                   />
-                  <div className="batt-front-spacer" />
                   <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
                     <span className="batt-status-line">
                       <StatusBadge mode={uMode} />

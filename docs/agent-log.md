@@ -7198,3 +7198,10 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   unavoidable with capacity-proportional blocks in equal-height tiles.
 - Verified at true 360px: blocks top-aligned under the titles, statuses
   bottom-aligned across tiles, heroes caption their own blocks.
+
+## Battery fronts: bottom-aligned blocks (2026-10-17, user request — "align the batteries at the bottom, not at the top")
+
+- The spacer moved ABOVE the block (was between block and status): the
+  block + hero + status + cover now bottom-anchor as one group — both
+  batteries stand on the same line above their metrics, and the small
+  unit's air band sits between its title and its block.
