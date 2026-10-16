@@ -7183,3 +7183,18 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
 - Verified with the honest 360px override: name/hero/kWh/status rows all
   aligned across tiles; cylinder bottoms aligned; in-fill labels still
   center per fill (inherent to proportional heights).
+
+## Battery tile fronts: bigger blocks, no title gap (2026-10-16, user screenshot — "either make the batteries bigger (proportionally) or reduce the space between the title and the battery")
+
+- Both, in effect: the front block now hugs the title (slot reservation
+  dropped on the front — .simple-batt-front overrides the row's flex:1
+  modules rule; a .batt-front-spacer pins status/cover to the card bottom)
+  and the front blocks render at their own ~15 % larger scale
+  (frontPxPerKwh = (baseH+60)/maxCap — same px/kWh for both units, so
+  proportionality holds; faces never show simultaneously, so the front
+  needn't match the back's scale).
+- Consequence (accepted via the user's either/or): the SMALL unit keeps a
+  middle band of air between its hero and the bottom-pinned status —
+  unavoidable with capacity-proportional blocks in equal-height tiles.
+- Verified at true 360px: blocks top-aligned under the titles, statuses
+  bottom-aligned across tiles, heroes caption their own blocks.

@@ -143,6 +143,11 @@ export default function SimpleHome() {
   // other column's (2026-10-15, second alignment report — measured
   // headless: slot h335 vs h325 with the 325 reservation).
   const slotH = baseH + 10;
+  // Front faces (2026-10-16, user request — "make the batteries bigger
+  // (proportionally)"): the single block gets its own, ~15 % larger scale —
+  // the SAME px/kWh for both units, so proportions hold; it doesn't need to
+  // match the back's scale (the faces never show simultaneously).
+  const frontPxPerKwh = Math.round(((baseH + 60) / maxCap) * 100) / 100;
 
   return (
     <div className="simple-home">
@@ -360,13 +365,19 @@ export default function SimpleHome() {
                 <div className="card simple-batt-front">
                   <div className="batt-tile-name">{u.live?.name ?? t("battery.fallbackName")}</div>
                   {/* Front = the SAME rendering as the back but one block
-                      (single mode) — capacity-proportional (shared
-                      pxPerKwh), animation included — plus the unit metrics
-                      (hero %, kWh-of-total, status, coverage). NO
-                      temperature chips on the front (2026-10-16, user
-                      request: "like on the back, with the animation and
-                      everything, but as a block … without the
-                      temperatures"). */}
+                      (single mode) — capacity-proportional, animation
+                      included — plus the unit metrics (hero %, kWh-of-total,
+                      status, coverage). NO temperature chips on the front
+                      (2026-10-16, user request: "like on the back, with the
+                      animation and everything, but as a block … without the
+                      temperatures").
+                      Same day, follow-up — "make the batteries bigger
+                      (proportionally) or reduce the space between the title
+                      and the battery": the front block gets its own ~15 %
+                      larger scale (still identical px/kWh across units), the
+                      slot hugs the block (no slotH reservation), and the
+                      spacer pins status/cover to the card bottom — so the
+                      block sits right under the title with no dead band. */}
                   <BatteryModules
                     live={u.live}
                     constants={u.constants}
@@ -383,10 +394,10 @@ export default function SimpleHome() {
                     mode={uMode}
                     stacked
                     legend={false}
-                    pxPerKwh={pxPerKwh}
-                    slotHeightPx={slotH}
+                    pxPerKwh={frontPxPerKwh}
                     hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                   />
+                  <div className="batt-front-spacer" />
                   <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
                     <span className="batt-status-line">
                       <StatusBadge mode={uMode} />

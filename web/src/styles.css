@@ -3920,3 +3920,16 @@ pre {
     padding-right: 0.6rem;
   }
 }
+
+/* Battery tile FRONT layout (2026-10-16, user request — "reduce the space
+   between the title and the battery"): the row rule gives .batt-modules
+   flex:1 + bottom-anchored slot (that's for the BACK faces); on the front
+   the slot hugs the block (no reservation) and a spacer pins the status/
+   cover to the card bottom, so the block sits directly under the title. */
+.simple-batt-front .batt-modules.stacked {
+  flex: 0 0 auto;
+}
+
+.batt-front-spacer {
+  flex: 1;
+}
