@@ -3,7 +3,8 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
-import BatteryModules from "./BatteryModules.jsx";
+import BatteryModules, { CompactBattery } from "./BatteryModules.jsx";
+import FlipTile from "../components/FlipTile.jsx";
 import StateIcon from "../components/StateIcon.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 
@@ -148,9 +149,15 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           }),
         );
 
-  return (
-    <div>
-      <div className="card batt-gauge-card">
+  const frontStatusText =
+    mode === "idle"
+      ? t("battery.status.idle")
+      : mode === "charging"
+        ? chargeStatus.text
+        : t("battery.status.discharging", { w: fmtW(cellsW) });
+
+  const gaugeCard = (
+    <div className="card batt-gauge-card">
         <div className="batt-card-head">
           <span className="batt-card-name">{live.name ?? t("battery.fallbackName")}</span>
           {/* The aggregate is the SYSTEM, not one device — its pn/SN are the
@@ -230,6 +237,36 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
             each tile"). */}
         <div className="batt-sys-ts">{t("battery.system.updated", { time: fmtTime(live.ts) })}</div>
       </div>
+  );
+
+  return (
+    <div>
+      {/* Unit tile (2026-10-16, user request — "front: compact one-block
+          battery; back: the detailed stack as before"). The aggregate
+          system card stays unflipped — it already IS one block. */}
+      {aggregate ? (
+        gaugeCard
+      ) : (
+        <FlipTile
+          className="batt-flip"
+          back={gaugeCard}
+        >
+          <div className="card batt-gauge-card batt-compact-front">
+            <CompactBattery
+              name={live.name ?? t("battery.fallbackName")}
+              soc={live.soc}
+              capacityKwh={constants?.capacityKwh}
+              hueDomain={hueDomain}
+              statusLine={
+                <div className={`batt-status ${mode}`}>
+                  <StatusBadge mode={mode} />
+                  <span className="batt-status-main">{frontStatusText}</span>
+                </div>
+              }
+            />
+          </div>
+        </FlipTile>
+      )}
 
       <BatteryDetails
         live={live}

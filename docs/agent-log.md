@@ -7072,3 +7072,21 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   second process holding data.db made ensurePlugColors throw SQLITE_BUSY
   inside syncAccountPlugs and crash the whole server. Background writes
   must never be fatal.
+
+## Battery unit flip tiles (2026-10-16, user request — "front: compact battery, one block; back: as now")
+
+- New `CompactBattery` export in BatteryModules.jsx: one unsegmented
+  .batt-seg block per unit (unit-level SOC fill with the same
+  usable-window sweep), % + stored kWh inside, name above, status one-liner
+  below. Used as the flip FRONT of every unit tile in the simple view
+  (SimpleHome) and the Strategy tab (BatteryCard) — the back face is the
+  previous detailed per-module stack, unchanged. The aggregate system card
+  stays unflipped (it already is one block).
+- CSS machinery: `.batt-flip` carries the flex chain (flip root → inner →
+  faces → card all fill the tile, so the Strategy cards keep equal
+  heights); flip-back's built-in chrome is disabled (callers' .card is the
+  chrome) and its overflow stays visible or the cylinder nub clips.
+  `.batt-seg-compact` sizing rules live at the END of styles.css to win the
+  specificity tie against `.simple-batt-row .batt-seg` (the +25 % rule).
+- Verified headless: both views flip both tiles; back faces pixel-identical
+  structure with aligned status/temps rows; fronts centered compact blocks.

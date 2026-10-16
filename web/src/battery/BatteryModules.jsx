@@ -55,6 +55,44 @@ export const fillColor = (soc, lightness, minPct = 0, maxPct = 100) =>
 
 export { sweepGradient };
 
+// Compact single-block battery (2026-10-16, user request — "on the front
+// side show each of them as a compact battery, expansions not shown
+// separately, just one block"): the flip FRONT of every unit tile in the
+// simple view and the Strategy tab. One unsegmented block with the
+// unit-level SOC fill (same usable-window sweep as the detailed stack on
+// the back face), % and stored kWh inside; statusLine carries the mode
+// one-liner from the caller.
+export function CompactBattery({ name, soc, capacityKwh, statusLine = null, hueDomain = null }) {
+  const [hueMin, hueMax] = hueDomain ? [hueDomain.minPct ?? 0, hueDomain.maxPct ?? 100] : [0, 100];
+  const sweep = sweepGradient(hueMin, hueMax);
+  const stored = soc != null && capacityKwh != null ? Math.round(((soc / 100) * capacityKwh) * 100) / 100 : null;
+  return (
+    <div className="batt-compact">
+      <div className="batt-compact-name">{name}</div>
+      <div className="batt-seg batt-seg-compact">
+        <div className="batt-seg-mod">
+          <div
+            className="batt-seg-fill"
+            style={{
+              height: `${soc ?? 0}%`,
+              ...(soc != null
+                ? {
+                    background: sweep,
+                    backgroundSize: `100% ${(100 / Math.max(soc, 2)) * 100}%`,
+                    backgroundPosition: "bottom",
+                  }
+                : {}),
+            }}
+          />
+          <span className="batt-seg-soc">{soc != null ? `${soc} %` : "—"}</span>
+          <span className="batt-seg-kwh">{stored != null ? `${stored} kWh` : ""}</span>
+        </div>
+      </div>
+      {statusLine}
+    </div>
+  );
+}
+
 export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, heightPx = null, slotHeightPx = null, pxPerKwh = null, hueDomain = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit

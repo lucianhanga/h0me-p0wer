@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import FlowView from "../flow/FlowView.jsx";
-import BatteryModules, { fillColor, sweepGradient } from "../battery/BatteryModules.jsx";
+import BatteryModules, { CompactBattery, fillColor, sweepGradient } from "../battery/BatteryModules.jsx";
+import FlipTile from "../components/FlipTile.jsx";
 import { StatusBadge } from "../battery/BatteryTab.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
@@ -270,8 +271,21 @@ export default function SimpleHome() {
                       capacityKwh: u.constants?.capacityKwh,
                     }),
                   );
+            const statusText =
+              uMode === "idle"
+                ? t("battery.status.idle")
+                : uMode === "charging"
+                  ? uChargeStatus.text
+                  : t("battery.status.discharging", { w: `${Math.round(uW)} W` });
+            // Unit tile (2026-10-16, user request — "batteries as tiles:
+            // front = compact one-block battery, back = the detailed stack
+            // as before"). Tap flips between them.
             return (
-              <div className="simple-batt" key={u.live.sn ?? "aggregate"}>
+              <FlipTile
+                key={u.live.sn ?? "aggregate"}
+                className="simple-batt batt-flip"
+                back={
+                  <div className="card simple-batt-back">
                 <BatteryModules
                   live={u.live}
                   constants={u.constants}
@@ -303,13 +317,7 @@ export default function SimpleHome() {
                     here (removed per the same request). */}
                 <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
                   <StatusBadge mode={uMode} />
-                  <span className="batt-status-main">
-                    {uMode === "idle"
-                      ? t("battery.status.idle")
-                      : uMode === "charging"
-                        ? uChargeStatus.text
-                        : t("battery.status.discharging", { w: `${Math.round(uW)} W` })}
-                  </span>
+                  <span className="batt-status-main">{statusText}</span>
                   {uEta && (
                     <span className="batt-status-eta">
                       {t(uMode === "charging" ? "battery.status.fullIn" : "battery.status.emptyIn", {
@@ -342,7 +350,24 @@ export default function SimpleHome() {
                     />
                   ))}
                 </div>
-              </div>
+                  </div>
+                }
+              >
+                <div className="card simple-batt-front">
+                  <CompactBattery
+                    name={u.live?.name ?? t("battery.fallbackName")}
+                    soc={uSoc}
+                    capacityKwh={u.constants?.capacityKwh}
+                    hueDomain={{ minPct: accountMin, maxPct: sysMax }}
+                    statusLine={
+                      <div className={`batt-status simple-batt-status ${uMode}`}>
+                        <StatusBadge mode={uMode} />
+                        <span className="batt-status-main">{statusText}</span>
+                      </div>
+                    }
+                  />
+                </div>
+              </FlipTile>
             );
           })}
         </div>
