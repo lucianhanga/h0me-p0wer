@@ -3,7 +3,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { batteryEtaHours, chargingStatus, formatEta } from "../batteryEta.js";
 import { usePolledResource } from "../usePolledResource.js";
 import { useLiveStream } from "../useLiveStream.js";
-import BatteryModules, { CompactBattery } from "./BatteryModules.jsx";
+import BatteryModules from "./BatteryModules.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import StateIcon from "../components/StateIcon.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
@@ -149,14 +149,11 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           }),
         );
 
-  const frontStatusText =
-    mode === "idle"
-      ? t("battery.status.idle")
-      : mode === "charging"
-        ? chargeStatus.text
-        : t("battery.status.discharging", { w: fmtW(cellsW) });
-
-  const gaugeCard = (
+  // gaugeCard(singleBlock): the SAME card either segmented (back face) or
+  // as ONE capacity-proportional block (front face — 2026-10-16, user
+  // request: "like on the back, with the animation and everything, but as
+  // a block"). The aggregate card is always single-block.
+  const gaugeCard = (singleBlock) => (
     <div className="card batt-gauge-card">
         <div className="batt-card-head">
           <span className="batt-card-name">{live.name ?? t("battery.fallbackName")}</span>
@@ -187,7 +184,8 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           limits={{ minPct, floorPct: effectiveFloorPct, maxPct }}
           heroLvlClass={lvlClass}
           heroZoneLabel={zoneLabel}
-          single={aggregate}
+          single={aggregate || singleBlock}
+          legendTemps={!singleBlock}
           mode={mode}
           pxPerKwh={pxPerKwh}
           slotHeightPx={slotHeightPx}
@@ -245,26 +243,13 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           battery; back: the detailed stack as before"). The aggregate
           system card stays unflipped — it already IS one block. */}
       {aggregate ? (
-        gaugeCard
+        gaugeCard(false)
       ) : (
         <FlipTile
           className="batt-flip"
-          back={gaugeCard}
+          back={gaugeCard(false)}
         >
-          <div className="card batt-gauge-card batt-compact-front">
-            <CompactBattery
-              name={live.name ?? t("battery.fallbackName")}
-              soc={live.soc}
-              capacityKwh={constants?.capacityKwh}
-              hueDomain={hueDomain}
-              statusLine={
-                <div className={`batt-status ${mode}`}>
-                  <StatusBadge mode={mode} />
-                  <span className="batt-status-main">{frontStatusText}</span>
-                </div>
-              }
-            />
-          </div>
+          {gaugeCard(true)}
         </FlipTile>
       )}
 
