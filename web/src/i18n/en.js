@@ -74,7 +74,7 @@ export const en = {
     strategy_changed: "Strategy changed: {from} → {to}",
     trigger_changed: "Discharge trigger changed: {from} → {to}",
     export_correction: "Export watchdog: {exportW} W to the grid detected — preset cut to {newTargetW} W",
-    battery_swapped: "Battery changed to {to} ({name})",
+    battery_swapped: "Battery units changed — now: {to}",
     expansion_detected: "Expansion battery detected ({n} pack(s), SN {sn})",
     floor_changed: "Discharge floor changed: {from}% → {to}%",
     pv_history_repaired: "PV history repaired: {n} day(s) rebuilt from daily totals",

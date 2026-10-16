@@ -55,7 +55,7 @@ export const fillColor = (soc, lightness, minPct = 0, maxPct = 100) =>
 
 export { sweepGradient };
 
-export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, legendTemps = true, heightPx = null, slotHeightPx = null, pxPerKwh = null, hueDomain = null }) {
+export default function BatteryModules({ live, constants, limits = {}, heroLvlClass, heroZoneLabel, single = false, mode = "idle", stacked = false, legend = true, legendTemps = true, showName = true, heightPx = null, slotHeightPx = null, pxPerKwh = null, hueDomain = null }) {
   const t = useT();
   // stacked (simple view, 2026-09-28): cylinder on top, ALL texts (unit
   // name, hero %, kWh, per-module legend) centered underneath — units sit
@@ -181,7 +181,11 @@ export default function BatteryModules({ live, constants, limits = {}, heroLvlCl
         </div>
       </div>
       <div className="batt-modules-side">
-        {stacked && live.name && <div className="batt-modules-title">{live.name}</div>}
+        {/* The name rides at the TOP of the flip-tile card instead
+            (2026-10-16, user request — "put the name of the banks on top of
+            the tile") — SimpleHome renders it there and passes
+            showName={false}. */}
+        {stacked && showName && live.name && <div className="batt-modules-title">{live.name}</div>}
         <div className="batt-modules-hero">
           <span className="batt-gauge-pct">
             {live.soc ?? 0} %{heroZoneLabel && <span className={`batt-gauge-zone ${heroLvlClass}`}>{heroZoneLabel}</span>}

@@ -85,7 +85,7 @@ export const ro = {
     strategy_changed: "Strategie schimbată: {from} → {to}",
     trigger_changed: "Declanșator descărcare schimbat: {from} → {to}",
     export_correction: "Watchdog export: {exportW} W spre rețea detectați — preset redus la {newTargetW} W",
-    battery_swapped: "Baterie schimbată la {to} ({name})",
+    battery_swapped: "Unități baterie schimbate — acum: {to}",
     expansion_detected: "Baterie extensie detectată ({n} pachet(e), SN {sn})",
     floor_changed: "Prag de descărcare schimbat: {from}% → {to}%",
     pv_history_repaired: "Istoric PV reparat: {n} zi(le) reconstruite din totaluri zilnice",
