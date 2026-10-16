@@ -192,20 +192,21 @@ function BatteryCard({ live, config, features, constants, dischargeTolerancePct,
           hueDomain={hueDomain}
         />
         <div className={`batt-status ${mode}${mode === "charging" && chargeStatus.gridDominant ? " grid-dom" : ""}`}>
-          <StatusBadge mode={mode} />
-          {mode === "charging" && (
-            <>
+          {/* Icon + text as ONE nowrap unit (2026-10-16, user report — on
+              narrow tiles the icon wrapped onto its own line, orphaning it
+              from "discharging 420 W"). */}
+          <span className="batt-status-line">
+            <StatusBadge mode={mode} />
+            {mode === "charging" && (
               <span className="batt-status-main">{chargeStatus.text}</span>
-              {etaLabel && <span className="batt-status-eta">{t("battery.status.fullIn", { eta: etaLabel })}</span>}
-            </>
-          )}
-          {mode === "discharging" && (
-            <>
+            )}
+            {mode === "discharging" && (
               <span className="batt-status-main">{t("battery.status.discharging", { w: fmtW(cellsW) })}</span>
-              {etaLabel && <span className="batt-status-eta">{t("battery.status.emptyIn", { eta: etaLabel })}</span>}
-            </>
-          )}
-          {mode === "idle" && <span className="batt-status-main">{t("battery.status.idle")}</span>}
+            )}
+            {mode === "idle" && <span className="batt-status-main">{t("battery.status.idle")}</span>}
+          </span>
+          {mode === "charging" && etaLabel != null && <span className="batt-status-eta">{t("battery.status.fullIn", { eta: etaLabel })}</span>}
+          {mode === "discharging" && etaLabel != null && <span className="batt-status-eta">{t("battery.status.emptyIn", { eta: etaLabel })}</span>}
           {usableKwh != null && (
             <span className="batt-status-sub">{t("battery.status.usableWindow", { kwh: usableKwh })}</span>
           )}
