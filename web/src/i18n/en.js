@@ -71,6 +71,12 @@ export const en = {
   },
   activity: {
     panelTitle: "Activity",
+    selectAll: "All",
+    selectRow: "Select entry",
+    deleteSelected: "Delete ({n})",
+    clearAll: "Clear all",
+    confirmDeleteSelected: "Delete {n} selected entr(ies)?",
+    confirmClear: "Delete ALL activity entries?",
     strategy_changed: "Strategy changed: {from} → {to}",
     trigger_changed: "Discharge trigger changed: {from} → {to}",
     export_correction: "Export watchdog: {exportW} W to the grid detected — preset cut to {newTargetW} W",

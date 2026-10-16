@@ -79,6 +79,8 @@ import {
   upsertPlugDailyRow,
   logActivity,
   getActivity,
+  deleteActivity,
+  clearActivity,
   getHistoryVersion,
 } from "./db.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
@@ -1983,6 +1985,17 @@ function activity(kind, params = {}) {
 app.get("/api/activity", (req, res) => {
   res.json({ ok: true, data: getActivity(req.query.limit ?? 50) });
 });
+
+// Activity panel management (2026-10-16, user request — select one/all +
+// delete). Token auth comes from the /api middleware; log entries carry no
+// device-control risk, so no PIN.
+app.post("/api/activity/delete", (req, res) => {
+  res.json({ ok: true, deleted: deleteActivity(req.body?.ids) });
+});
+app.post("/api/activity/clear", (req, res) => {
+  clearActivity();
+  res.json({ ok: true });
+});
 let lastBatteryPushAt = 0;
 async function broadcastLive({ batteryTriggered = false } = {}) {
   if (!wss.clients.size) return;
@@ -2911,6 +2924,12 @@ setInterval(() => syncBatteryThrottled(7 * 1000), 7 * 1000).unref();
 // are skipped there.
 let lastMeterConnected = null;
 let lastMqttFresh = null;
+// MQTT flap hysteresis (2026-10-16, user report — the activity log flooded
+// with stalled/fresh pairs during a cloud wobble): log "stalled" only when
+// the channel stays stale for > 2 min, and "fresh" only after a LOGGED
+// stall. Brief broker hiccups no longer spam the log.
+let mqttStalledSince = null;
+let mqttStallLogged = false;
 setInterval(() => {
   const mc = poller.getState().connected;
   if (lastMeterConnected != null && mc !== lastMeterConnected && process.env.MODBUS_TRANSIENT !== "true") {
@@ -2918,8 +2937,18 @@ setInterval(() => {
   }
   lastMeterConnected = mc;
   const mf = primaryMqtt()?.isFresh() ?? false;
-  if (lastMqttFresh != null && mf !== lastMqttFresh) {
-    activity("mqtt", { state: mf ? "fresh" : "stalled" });
+  if (mf) {
+    mqttStalledSince = null;
+    if (mqttStallLogged) {
+      mqttStallLogged = false;
+      activity("mqtt", { state: "fresh" });
+    }
+  } else {
+    mqttStalledSince ??= Date.now();
+    if (!mqttStallLogged && lastMqttFresh != null && Date.now() - mqttStalledSince > 2 * 60 * 1000) {
+      mqttStallLogged = true;
+      activity("mqtt", { state: "stalled" });
+    }
   }
   lastMqttFresh = mf;
 }, 15 * 1000).unref();

@@ -82,6 +82,12 @@ export const ro = {
   },
   activity: {
     panelTitle: "Activitate",
+    selectAll: "Toate",
+    selectRow: "Selectează intrarea",
+    deleteSelected: "Șterge ({n})",
+    clearAll: "Șterge tot",
+    confirmDeleteSelected: "Ștergi {n} intrări selectate?",
+    confirmClear: "Ștergi TOATE intrările de activitate?",
     strategy_changed: "Strategie schimbată: {from} → {to}",
     trigger_changed: "Declanșator descărcare schimbat: {from} → {to}",
     export_correction: "Watchdog export: {exportW} W spre rețea detectați — preset redus la {newTargetW} W",

@@ -7132,3 +7132,21 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   20:20 (all battery syncs aborted; MQTT unaffected) — /api/battery/params
   returned 0 units and the battery section hid itself. Environmental,
   recovered on its own.
+
+## Activity panel: selection + bulk delete; MQTT flap hysteresis (2026-10-16, user request — "select one, all, then remove all or similar")
+
+- Server: `deleteActivity(ids)` / `clearActivity()` in db.js; POST
+  /api/activity/delete {ids} + POST /api/activity/clear in index.js.
+  Token auth via the /api middleware is enough (log entries carry no
+  device-control risk — no PIN, unlike config-drift actions).
+- UI (ActivityBell.jsx): checkbox per row + toolbar with a select-all
+  checkbox (indeterminate when partial), "Delete (n)" (disabled at 0),
+  red "Clear all"; window.confirm before both destructive actions
+  (project's existing confirm/alert pattern); selection is pruned when
+  entries disappear; refresh() after each delete. i18n en/de/ro.
+- MQTT noise hysteresis (same "happens too often" class as the dedupe in
+  PR #454): the fresh/stalled watcher now logs "stalled" only after 2 min
+  of continuous staleness and "fresh" only after a logged stall. Found
+  because a real Anker cloud wobble tonight flooded the log with 144
+  stalled/fresh pairs — which incidentally masked the first UI test (the
+  panel refilled with new mqtt entries between clicks).
