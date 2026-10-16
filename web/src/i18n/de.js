@@ -86,6 +86,12 @@ export const de = {
   },
   activity: {
     panelTitle: "Aktivität",
+    selectAll: "Alle",
+    selectRow: "Eintrag auswählen",
+    deleteSelected: "Löschen ({n})",
+    clearAll: "Alle löschen",
+    confirmDeleteSelected: "{n} ausgewählte Einträge löschen?",
+    confirmClear: "ALLE Aktivitätseinträge löschen?",
     strategy_changed: "Strategie geändert: {from} → {to}",
     trigger_changed: "Entlade-Auslöser geändert: {from} → {to}",
     export_correction: "Export-Wächter: {exportW} W ins Netz erkannt — Vorgabe auf {newTargetW} W gesenkt",

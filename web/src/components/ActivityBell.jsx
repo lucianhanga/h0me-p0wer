@@ -37,6 +37,10 @@ export default function ActivityBell() {
   const { data, refresh } = usePolledResource("/api/activity?limit=50", { intervalMs: 20000 });
   const [open, setOpen] = useState(false);
   const [pulse, setPulse] = useState(false);
+  // Selection for bulk delete (2026-10-16, user request — "select one, all,
+  // then remove"): a checkbox per row, a select-all checkbox in the toolbar
+  // (indeterminate when partial), delete-selected + clear-all with confirm.
+  const [selected, setSelected] = useState(() => new Set());
   // Watermark of what's been seen (persisted); prevSeenAt freezes the
   // watermark at panel-open time so entries stay highlighted in the panel.
   const [seenAt, setSeenAt] = useState(() => Number(localStorage.getItem(SEEN_KEY) ?? 0));
@@ -44,6 +48,49 @@ export default function ActivityBell() {
 
   const entries = useMemo(() => (Array.isArray(data) ? data : []), [data]);
   const unseen = entries.filter((e) => e.ts > seenAt).length;
+
+  // Drop selected ids that no longer exist (delete, another client, prune).
+  useEffect(() => {
+    setSelected((prev) => {
+      const live = new Set(entries.map((e) => e.id));
+      const next = new Set([...prev].filter((id) => live.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [entries]);
+
+  const allSelected = entries.length > 0 && selected.size === entries.length;
+
+  function toggleOne(id) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(entries.map((e) => e.id)));
+  }
+
+  async function deleteSelected() {
+    if (!selected.size) return;
+    if (!window.confirm(t("activity.confirmDeleteSelected", { n: selected.size }))) return;
+    await fetch("/api/activity/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [...selected] }),
+    });
+    setSelected(new Set());
+    refresh();
+  }
+
+  async function clearAll() {
+    if (!window.confirm(t("activity.confirmClear"))) return;
+    await fetch("/api/activity/clear", { method: "POST" });
+    setSelected(new Set());
+    refresh();
+  }
 
   // Instant notification on WS push — the badge lights without the poll.
   const streamMsg = useLiveStream();
@@ -121,6 +168,33 @@ export default function ActivityBell() {
             </button>
             <h4>{t("activity.panelTitle")}</h4>
             {entries.length === 0 && <p className="muted">{t("common.noData")}</p>}
+            {entries.length > 0 && (
+              <div className="activity-toolbar">
+                <label className="activity-select-all">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = selected.size > 0 && !allSelected;
+                    }}
+                    onChange={toggleAll}
+                  />
+                  {t("activity.selectAll")}
+                </label>
+                <span className="activity-toolbar-actions">
+                  <button
+                    className="activity-delete-btn"
+                    disabled={selected.size === 0}
+                    onClick={deleteSelected}
+                  >
+                    {t("activity.deleteSelected", { n: selected.size })}
+                  </button>
+                  <button className="activity-delete-btn activity-clear-btn" onClick={clearAll}>
+                    {t("activity.clearAll")}
+                  </button>
+                </span>
+              </div>
+            )}
             <div className="activity-list">
               {entries.map((e) => {
                 const text = activityText(t, e);
@@ -131,6 +205,13 @@ export default function ActivityBell() {
                   : `${d.toLocaleDateString([], { day: "numeric", month: "short" })} ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
                 return (
                   <div key={e.id} className={`activity-row${e.ts > prevSeenAt ? " activity-new" : ""}`}>
+                    <input
+                      type="checkbox"
+                      className="activity-check"
+                      checked={selected.has(e.id)}
+                      onChange={() => toggleOne(e.id)}
+                      aria-label={t("activity.selectRow")}
+                    />
                     <span className="activity-time muted">{time}</span>
                     <span className="activity-text">
                       {text}

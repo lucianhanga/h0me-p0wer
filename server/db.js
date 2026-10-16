@@ -729,6 +729,19 @@ export function getActivity(limit = 50) {
     .map((r) => ({ ...r, params: r.params ? JSON.parse(r.params) : null }));
 }
 
+// Selection delete / clear-all for the activity panel (2026-10-16, user
+// request — "select one, all, then remove").
+export function deleteActivity(ids) {
+  const clean = (Array.isArray(ids) ? ids : []).map(Number).filter((n) => Number.isInteger(n) && n > 0);
+  if (!clean.length) return 0;
+  const stmt = db.prepare(`DELETE FROM activity_log WHERE id IN (${clean.map(() => "?").join(",")})`);
+  return stmt.run(...clean).changes;
+}
+
+export function clearActivity() {
+  db.exec("DELETE FROM activity_log");
+}
+
 // Bumped whenever a repair rewrites history (the PV shape repairs) — the
 // browser-side history cache keys on this so a repair invalidates every
 // cached window (2026-10-01, user request: cache historical values in the
