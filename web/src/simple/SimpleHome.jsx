@@ -318,8 +318,10 @@ export default function SimpleHome() {
                     (2026-09-28, user request) — replaces the per-module legend
                     here (removed per the same request). */}
                 <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
-                  <StatusBadge mode={uMode} />
-                  <span className="batt-status-main">{statusText}</span>
+                  <span className="batt-status-line">
+                    <StatusBadge mode={uMode} />
+                    <span className="batt-status-main">{statusText}</span>
+                  </span>
                   {uEta && (
                     <span className="batt-status-eta">
                       {t(uMode === "charging" ? "battery.status.fullIn" : "battery.status.emptyIn", {
@@ -386,8 +388,10 @@ export default function SimpleHome() {
                     hueDomain={{ minPct: accountMin, maxPct: sysMax }}
                   />
                   <div className={`batt-status simple-batt-status ${uMode}${uMode === "charging" && uChargeStatus.gridDominant ? " grid-dom" : ""}`}>
-                    <StatusBadge mode={uMode} />
-                    <span className="batt-status-main">{statusText}</span>
+                    <span className="batt-status-line">
+                      <StatusBadge mode={uMode} />
+                      <span className="batt-status-main">{statusText}</span>
+                    </span>
                     {uEta && (
                       <span className="batt-status-eta">
                         {t(uMode === "charging" ? "battery.status.fullIn" : "battery.status.emptyIn", {

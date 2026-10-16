@@ -7166,3 +7166,20 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
   lagged main again; the version check via the tunnel 401s without the
   API token, so "please deploy + hard-refresh" is the answer when the
   deployed version is old.
+
+## Battery tiles: cross-tile text alignment (2026-10-16, user phone screenshot — "tiles ok but images and text not aligned")
+
+- Root cause: the status row wrapped DIFFERENTLY per column — the icon and
+  "discharging 420 W" were separate flex items, so the longer text pushed
+  the icon onto its own line (orphan) and added a line only in one column;
+  that shrank the left tile's module area (flex:1), shifting the cylinder
+  bottom, hero %, and every following row by ~20px vs the right tile.
+- Fix: icon+text wrapped in an atomic .batt-status-line (inline-flex,
+  nowrap) in all three status renderers (SimpleHome front/back,
+  BatteryTab); on ≤600px the simple-view status zone gets min-height 3.4em
+  (2-line main + ETA worst case, content centered) so both columns reserve
+  identical height regardless of text length; battery tile cards get
+  tighter side padding (0.6rem) on phones.
+- Verified with the honest 360px override: name/hero/kWh/status rows all
+  aligned across tiles; cylinder bottoms aligned; in-fill labels still
+  center per fill (inherent to proportional heights).

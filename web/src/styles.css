@@ -3890,3 +3890,33 @@ pre {
   accent-color: #f7a44f;
   margin: 0;
 }
+
+/* Status line as an atomic icon+text unit (2026-10-16, user report — on
+   narrow battery tiles the icon wrapped onto its OWN line, orphaning it
+   from "discharging 420 W" and shifting every row below). */
+.batt-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 600px) {
+  /* Equal status-zone height in BOTH battery tiles (same report): one
+     column's status wrapped ("discharging 420 W") while the other fit
+     ("discharging 2 W") — the height difference shrank the taller column's
+     module area, so the cylinder bottoms, hero %, and status rows all
+     drifted. Reserving the worst case (2-line main + ETA line) keeps the
+     tiles' vertical rhythm identical regardless of content length. */
+  .simple-batt-row .batt-status {
+    min-height: 3.4em;
+    align-content: center;
+  }
+
+  /* Tighter side padding buys the status line real estate. */
+  .simple-batt-front,
+  .simple-batt-back {
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+}
