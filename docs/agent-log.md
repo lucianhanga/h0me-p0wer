@@ -7230,3 +7230,42 @@ still only fill empty buckets; pre-aggregated buckets count as covered).
 - Verified with true device-metrics override at 360px: EVERY row identical
   across tiles on both faces (seg bottoms, hero, status, temps to the px);
   desktop 1280 strategy front/back unchanged and correct.
+
+## 7d+ graphs wrong for older days — three independent data bugs (2026-10-17, user report — "only the last two days are correct; 10-12 shows less PV than yesterday despite 25.22 vs 16.21 kWh")
+
+Root causes, all proven against production data:
+1. **PV one-unit**: the solar_production sync passed `deviceSn:
+   latestBattery.sn` — the endpoint then returns only THAT unit's
+   production. cloud_pv_history silently held the SECONDARY unit's ~25-35 %
+   share (verified live on 2026-10-12: device_sn "" → 24.05 kWh site
+   total, SB4 → 17.78, SB2 → 6.30). Fixed: deviceSn "" at both call sites
+   (periodic sync + backfill). cloud_pv_history wiped once (kv flag
+   pv_site_total_fix_v1) → backfill refetched 31 days of site totals.
+2. **SB4 battery trend never synced**: batterySns() = primary SN +
+   history-seen SNs — the SB4 wasn't either (circular: it never got into
+   cloud_history because it was never synced). batterySns() now includes
+   all live units (latestBatteries.keys()).
+3. **Discharge-only battery rows**: the battery day-trend's `power`
+   channel is discharge-only; the charging curve lives in the response's
+   `charge_trend` (negative, verified: −14.90 kWh ≈ charge_total 13.59 on
+   10-12). The merge AND dayBattery already treat power as signed — the
+   sync just never stored the charge half. Now merged into signed rows
+   (discharge + charge per 20-min interval) at both sync sites; battery
+   SNs' cloud_history wiped once (kv flag batt_charge_fix_v1, placed AFTER
+   the latestBatteries declaration — the first placement died on the const
+   TDZ and the flag never latched).
+- getHistoryVersion now folds in both new flags → browser chart caches
+  invalidate (historyV contract).
+- COST NOTE: the battery wipe dropped pre-30-day battery cloud history
+  (Sept 7–16 discharge curves) — outside BACKFILL_DAYS reach, not
+  recoverable via the standard backfill. pv_daily/grid_daily long-term
+  totals are unaffected; the ROI anchor (2026-10-11) is unaffected.
+- Verified on dev after full re-backfill: series PV integrals ≈ pv_daily
+  for every day (10-12: 22.44 vs 24.22 — the residual ~8 % is the
+  still-open-interval/edge skips), battery discharge now includes the SB4,
+  and charge rows are signed (charge visible for older days).
+- SIDE DISCOVERY (not chased): APCN900E26200204 held byte-identical
+  duplicates of SB2's rows — dayBattery summed both, double-counting
+  discharge on days where both existed. The wipe removed it; watch for
+  recurrence (its origin is unclear — possibly the dock's SN shadowing
+  SB2's data).
