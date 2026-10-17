@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import BatteryTab from "../battery/BatteryTab.jsx";
+import BackupCard from "./BackupCard.jsx";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 
@@ -358,6 +359,10 @@ export default function StrategyTab() {
             : state.dischargeTolerancePct
         }
       />
+
+      {/* Azure backups + restore (2026-10-17, user request — GFS retention,
+          PIN-gated restore). */}
+      <BackupCard />
 
       {pendingPatch && (
         <div className="ask-backdrop" onClick={() => setPendingPatch(null)}>

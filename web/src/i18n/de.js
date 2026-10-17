@@ -558,4 +558,16 @@ export const de = {
       breakEvenPlan: "Plan-Break-even\n{date}",
     },
   },
+  backup: {
+    title: "Backups (Azure)",
+    disabled: "Azure-Backup ist nicht konfiguriert (AZURE_BACKUP_URL fehlt in .env).",
+    now: "Jetzt sichern",
+    failed: "Backup fehlgeschlagen",
+    last: "Letztes Backup: {date} · {size} MB",
+    never: "Noch kein Backup hochgeladen — die tägliche Sicherung läuft um 03:17.",
+    restore: "Wiederherstellen",
+    restoreConfirm: "Datenbank vom {date} wiederherstellen? Dies ERSETZT alle aktuellen Daten und startet den Server neu.",
+    restoreStarted: "Wiederherstellung gestartet — der Server startet jetzt neu. Diese Seite lädt in ~20 Sekunden neu.",
+    tier: { daily: "täglich", weekly: "wöchentlich", monthly: "monatlich", yearly: "jährlich" },
+  },
 };
