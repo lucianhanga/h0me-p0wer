@@ -50,6 +50,8 @@ import {
   getStoredHomePeriodStarts,
   computeConsumptionProfile,
   wipeCloudHomeHistory,
+  wipeCloudPvHistory,
+  wipeBatteryCloudHistory,
   pruneBattery,
   savePvDaily,
   saveGridDaily,
@@ -146,9 +148,12 @@ anker.getMeterSn = () => poller.snapshot?.meter?.sn ?? getAnyDeviceSn();
 // 2026-09-26 Plus→Pro swap — pre-swap days live under the old SN, so stats
 // and ROI must query both.
 function batterySns() {
-  // All battery SNs ever seen (db.js now excludes meter SNs by shape, so no
-  // meter arg needed — 2026-09-27 meter swap).
-  return [...new Set([latestBattery?.sn, ...getBatterySns()].filter(Boolean))];
+  // All battery SNs ever seen (db.js excludes meter SNs by shape) PLUS every
+  // unit currently on the site (2026-10-17, user report — battery
+  // load/unload wrong for older days: the list was primary + history-seen
+  // only, so the SB4's day-trend was never synced at all — its SN never
+  // entered cloud_history, a circular exclusion).
+  return [...new Set([...latestBatteries.keys(), latestBattery?.sn, ...getBatterySns()].filter(Boolean))];
 }
 
 // All meter SNs ever seen (2026-09-27 meter swap, meter-1 → meter-2):
@@ -1605,9 +1610,15 @@ async function syncCloudHistory() {
             startTime: day,
             endTime: "",
           });
+          // SIGNED rows (2026-10-17, user report — battery load/unload wrong
+          // for older days): `power` is the DISCHARGE channel only; the
+          // charging curve lives in charge_trend (negative). The merge and
+          // dayBattery already treat power as signed — the sync just never
+          // stored the charge half.
+          const chargeByTime = new Map((data?.charge_trend ?? []).map((c) => [c.time, parseFloat(c.value) || 0]));
           const rows = (data?.power ?? []).map((p) => ({
             time: p.time,
-            power: p.value,
+            power: String((parseFloat(p.value) || 0) + (chargeByTime.get(p.time) ?? 0)),
             import_energy: "",
             export_energy: "",
           }));
@@ -1624,13 +1635,18 @@ async function syncCloudHistory() {
     // AGENTS.md 2026-09-16): Anker's cloud records this independently of
     // whether OUR poller was running. Kept in its own table (cloud_pv_history)
     // since it's site-wide, not per-device — see saveCloudPvTrend.
+    // device_sn MUST be empty (2026-10-17, user report — 7d graphs deflated
+    // for older days): with a solarbank SN the endpoint returns only THAT
+    // unit's production (verified live on 2026-10-12: "" → 24.05 kWh site
+    // total, SB4 → 17.78, SB2 → 6.30) — the table silently held the
+    // secondary unit's ~25-35 % share.
     for (const dayOffset of [0, 1]) {
       const d = new Date(now.getTime() - dayOffset * 86400000);
       const day = iso(d);
       try {
         const data = await anker.getEnergyAnalysis({
           siteId: latestBattery.siteId,
-          deviceSn: latestBattery.sn ?? "",
+          deviceSn: "",
           deviceType: "solar_production",
           type: "day",
           startTime: day,
@@ -1798,9 +1814,12 @@ async function catchUpBatteryPvHistory() {
           startTime: start,
           endTime: "",
         });
+        // Signed rows: discharge (power, +) + charge (charge_trend, −) —
+        // same fix as the periodic sync (2026-10-17).
+        const chargeByTime = new Map((battData?.charge_trend ?? []).map((c) => [c.time, parseFloat(c.value) || 0]));
         const battRows = (battData?.power ?? []).map((p) => ({
           time: p.time,
-          power: p.value,
+          power: String((parseFloat(p.value) || 0) + (chargeByTime.get(p.time) ?? 0)),
           import_energy: "",
           export_energy: "",
         }));
@@ -1820,7 +1839,7 @@ async function catchUpBatteryPvHistory() {
       try {
         const pvData = await anker.getEnergyAnalysis({
           siteId: latestBattery.siteId,
-          deviceSn: latestBattery.sn ?? "",
+          deviceSn: "", // site total — a unit SN returns only that unit (2026-10-17)
           deviceType: "solar_production",
           type: "day",
           startTime: start,
@@ -2209,6 +2228,25 @@ rollupPvDaily();
 rollupGridDaily();
 repairZeroedPvHistory();
 repairInflatedPvDays();
+
+// One-time repair (kv flag pv_site_total_fix_v1, 2026-10-17 — user report:
+// 7d graphs deflated for older days): the solar_production sync passed the
+// primary unit's SN, and the endpoint returned only THAT unit's production
+// — cloud_pv_history silently held the secondary unit's ~25-35 % share of
+// the site total (verified live on 2026-10-12: device_sn "" → 24.05 kWh,
+// SB4 → 17.78, SB2 → 6.30). Wipe once so the startup backfill refetches
+// every day with the fixed device_sn="" query; the history version bump
+// invalidates the browser-side chart caches (same contract as the shape
+// repairs above).
+if (!kvGet("pv_site_total_fix_v1")) {
+  try {
+    wipeCloudPvHistory();
+    kvSet("pv_site_total_fix_v1", { at: Date.now() });
+    console.log("[cloud-sync] wiped cloud_pv_history (device_sn bug — only one unit's production was stored) — backfill will refetch site totals");
+  } catch (err) {
+    console.warn(`[cloud-sync] pv-history cleanup failed: ${err.message}`);
+  }
+}
 setInterval(() => {
   pruneOld();
   pruneBattery();
@@ -2280,6 +2318,25 @@ let lastRestSignature = null; // homeLoadW|gridToHomeW|pvToGridW from the last s
 // live state (REST sync + its own MQTT channel); latestBattery is the
 // recomputed aggregate that the flow/power-plan/UI consume unchanged.
 const latestBatteries = new Map(); // SN -> per-unit live object
+
+// One-time repair (kv flag batt_charge_fix_v1, 2026-10-17 — battery
+// load/unload wrong for older days): the battery day-trend sync (a) never
+// synced the SB4 at all (its SN wasn't in batterySns()) and (b) stored only
+// the DISCHARGE channel — the charging curve lives in charge_trend
+// (negative), now merged into signed rows. Wipe the battery SNs' rows so
+// the backfill refetches both channels for every unit; the meter rows keep
+// their own SNs. History version bump invalidates browser chart caches.
+// NOTE: must sit AFTER the latestBatteries declaration — the first version
+// ran before it and died on the const TDZ (caught + skipped, 2026-10-17).
+if (!kvGet("batt_charge_fix_v1")) {
+  try {
+    wipeBatteryCloudHistory(batterySns());
+    kvSet("batt_charge_fix_v1", { at: Date.now() });
+    console.log("[cloud-sync] wiped battery cloud_history (SB4 was never synced; rows were discharge-only) — backfill will refetch signed rows for all units");
+  } catch (err) {
+    console.warn(`[cloud-sync] battery-history cleanup failed: ${err.message}`);
+  }
+}
 const batteryMqtts = new Map(); // SN -> AnkerMqtt (one client per unit)
 
 // MQTT-only fields (temperature, mainSoc, expansions) survive REST syncs —

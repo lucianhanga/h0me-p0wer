@@ -750,7 +750,9 @@ export function clearActivity() {
 export function getHistoryVersion() {
   const v2 = kvGet("pv_shape_repair_v2")?.value?.at ?? 0;
   const v3 = kvGet("pv_shape_repair_v3")?.value?.at ?? 0;
-  return Math.max(v2, v3);
+  const v4 = kvGet("pv_site_total_fix_v1")?.value?.at ?? 0;
+  const v5 = kvGet("batt_charge_fix_v1")?.value?.at ?? 0;
+  return Math.max(v2, v3, v4, v5);
 }
 
 // --- Cloud PV production day-trend (site-level "solar_production" energy
@@ -897,6 +899,24 @@ export function getStoredHomePeriodStarts(type = "day") {
 // trends) — wipe so the backfill refetches with the fixed call.
 export function wipeCloudHomeHistory() {
   db.exec("DELETE FROM cloud_home_history");
+}
+
+// One-time cleanup for the 2026-10-17 solar_production device_sn bug (the
+// sync passed a solarbank SN → the endpoint returned only THAT unit's
+// production, ~25-35 % of the site total) — wipe so the backfill refetches
+// with the fixed device_sn="" call.
+export function wipeCloudPvHistory() {
+  db.exec("DELETE FROM cloud_pv_history");
+}
+
+// One-time cleanup for the same day's battery history repairs: rows stored
+// before the signed-discharge+charge fix are discharge-only — wipe the
+// battery SNs' rows (meter rows keep their own SNs) so the backfill
+// refetches both channels.
+export function wipeBatteryCloudHistory(sns) {
+  const clean = (Array.isArray(sns) ? sns : []).filter(Boolean);
+  if (!clean.length) return;
+  db.prepare(`DELETE FROM cloud_history WHERE device_sn IN (${clean.map(() => "?").join(",")})`).run(...clean);
 }
 
 const selectCloudHomeDaySum = db.prepare(`
