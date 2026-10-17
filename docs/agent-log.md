@@ -7269,3 +7269,30 @@ Root causes, all proven against production data:
   discharge on days where both existed. The wipe removed it; watch for
   recurrence (its origin is unclear — possibly the dock's SN shadowing
   SB2's data).
+
+## Azure Blob backup + PIN-gated restore (2026-10-17, user request)
+
+- `server/backup.js`: daily 03:17 local snapshot — `VACUUM INTO` (WAL-safe,
+  read-only handle) → gzip (~240 MB → ~58 MB) → PUT BlockBlob with the SAS
+  URL from `AZURE_BACKUP_URL` (.env, full container URL incl. token —
+  SECRET, never logged/committed). GFS retention prune after each upload
+  (user's exact tiers): 7 daily · 4 weekly · 12 monthly · 1 per year —
+  `retentionTiers()` (per-blob tier for the UI) + `retentionKeep()` (the
+  prune's keep-set).
+- Endpoints: GET /api/backup/status (list + tiers + last-run kv), POST
+  /api/backup/now (token), POST /api/backup/restore (PIN-gated, same
+  STRATEGY_PIN as the strategy gate).
+- Restore: download → gunzip → SQLite-magic + page_count validation →
+  staged swap over DB_PATH (old file kept as data.db.pre-restore) →
+  **delete data.db-wal/-shm** (the first restore test booted into
+  "database disk image is malformed": the OLD running server's WAL was
+  applied to the restored snapshot) → exit(0) after the response; Docker's
+  restart policy boots the restored DB.
+- UI: Strategy tab's BackupCard — last-run line, "Back up now", blob list
+  with tier badges, restore with confirm → PIN prompt → alert + 20 s
+  auto-reload. i18n en/de/ro.
+- .gitignore now covers `server/data.db.*` (the pre-restore safety copy
+  must never be committed either).
+- Verified end-to-end locally against the copied production DB: upload
+  (58.3 MB blob), status+tier, PIN restore, exit, healthy boot on the
+  restored file.

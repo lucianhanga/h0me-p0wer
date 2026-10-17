@@ -556,4 +556,16 @@ export const en = {
     failed: "Speech recognition failed ({error})",
     thinkingWithTranscript: "“{transcript}” — thinking…",
   },
+  backup: {
+    title: "Backups (Azure)",
+    disabled: "Azure backup is not configured (AZURE_BACKUP_URL missing in .env).",
+    now: "Back up now",
+    failed: "Backup failed",
+    last: "Last backup: {date} · {size} MB",
+    never: "No backup uploaded yet — the daily run fires at 03:17.",
+    restore: "Restore",
+    restoreConfirm: "Restore the database from {date}? This REPLACES all current data and restarts the server.",
+    restoreStarted: "Restore started — the server restarts now. This page reloads in ~20 seconds.",
+    tier: { daily: "daily", weekly: "weekly", monthly: "monthly", yearly: "yearly" },
+  },
 };

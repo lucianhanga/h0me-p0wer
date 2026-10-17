@@ -569,4 +569,16 @@ export const ro = {
     failed: "Recunoașterea vocală a eșuat ({error})",
     thinkingWithTranscript: "„{transcript}” — mă gândesc…",
   },
+  backup: {
+    title: "Backup-uri (Azure)",
+    disabled: "Backup-ul Azure nu este configurat (AZURE_BACKUP_URL lipsește din .env).",
+    now: "Fă backup acum",
+    failed: "Backup eșuat",
+    last: "Ultimul backup: {date} · {size} MB",
+    never: "Niciun backup încărcat — rularea zilnică pornește la 03:17.",
+    restore: "Restaurează",
+    restoreConfirm: "Restaurezi baza de date din {date}? Aceasta ÎNLOCUIEȘTE toate datele curente și repornește serverul.",
+    restoreStarted: "Restaurare pornită — serverul repornește acum. Pagina se reîncarcă în ~20 de secunde.",
+    tier: { daily: "zilnic", weekly: "săptămânal", monthly: "lunar", yearly: "anual" },
+  },
 };

@@ -25,6 +25,7 @@ import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
+import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
 import {
   saveSnapshot,
@@ -2005,6 +2006,52 @@ app.get("/api/activity", (req, res) => {
   res.json({ ok: true, data: getActivity(req.query.limit ?? 50) });
 });
 
+// Azure Blob backup (2026-10-17, user request — daily GFS backups + a way
+// to recover from the advanced view). Status/list is token-auth only;
+// restore is PIN-gated (it REPLACES the live DB and restarts the process).
+app.get("/api/backup/status", async (req, res) => {
+  try {
+    const backups = backupEnabled() ? await listBackups() : [];
+    const tiers = retentionTiers(backups.map((b) => b.name));
+    res.json({
+      ok: true,
+      data: {
+        enabled: backupEnabled(),
+        last: lastBackupInfo(),
+        backups: backups.map((b) => ({ ...b, tier: tiers.get(b.name) ?? null })).reverse(), // newest first
+      },
+    });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: String(err.message ?? err) });
+  }
+});
+app.post("/api/backup/now", async (req, res) => {
+  if (!backupEnabled()) return res.status(400).json({ ok: false, error: "AZURE_BACKUP_URL not configured" });
+  try {
+    res.json({ ok: true, data: await backupNow() });
+  } catch (err) {
+    console.warn(`[backup] manual backup failed: ${err.message}`);
+    res.status(502).json({ ok: false, error: String(err.message ?? err) });
+  }
+});
+app.post("/api/backup/restore", async (req, res) => {
+  const pin = req.body?.pin ?? null;
+  if (pin !== (process.env.STRATEGY_PIN ?? "0000")) {
+    return res.status(403).json({ ok: false, error: "wrong PIN" });
+  }
+  const name = String(req.body?.name ?? "");
+  try {
+    const data = await restoreFromBackup(name);
+    res.json({ ok: true, data: { ...data, restarting: true } });
+    // Respond first, then die — Docker's restart policy boots the restored
+    // DB (locally: restart the dev server by hand).
+    setTimeout(() => process.exit(0), 1500).unref();
+  } catch (err) {
+    console.warn(`[backup] restore failed: ${err.message}`);
+    res.status(502).json({ ok: false, error: String(err.message ?? err) });
+  }
+});
+
 // Activity panel management (2026-10-16, user request — select one/all +
 // delete). Token auth comes from the /api middleware; log entries carry no
 // device-control risk, so no PIN.
@@ -3280,6 +3327,7 @@ setInterval(() => {
 
 poller.start();
 hmipPoller.start();
+startBackupScheduler(); // Azure GFS backup, daily 03:17 when AZURE_BACKUP_URL is set
 // PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
 // weather data, refreshed on a relaxed cadence; first call right away.
 refreshPvPotential();

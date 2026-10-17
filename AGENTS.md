@@ -247,6 +247,13 @@ production screenshot, check the deployed version:
   token. Deliberately **fails open when `API_TOKEN` is unset**. Internal
   loopback calls must send the token too — auth once broke them (regression
   fixed in PR #376).
+- **Azure Blob backup** (`server/backup.js`, since 2026-10-17): daily 03:17
+  gzipped `VACUUM INTO` snapshot uploaded to the container in
+  `AZURE_BACKUP_URL` (.env, full URL incl. SAS — secret). GFS retention
+  (7 daily · 4 weekly · 12 monthly · 1/year) pruned after each upload.
+  Restore from the Strategy tab's Backups card, PIN-gated: staged swap over
+  `data.db` (old kept as `.pre-restore`) + WAL/SHM deletion (mandatory —
+  stale WAL corrupts the restored file) + process exit; Docker restarts it.
 - **Config-drift watchdog** (`server/config-watchdog.js`, 2026-10-09):
   alerts (`config_drift` activity) when the battery schedule (5-min read)
   or smart-plug membership (scene poll) change outside this server —

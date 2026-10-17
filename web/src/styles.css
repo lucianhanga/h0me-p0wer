@@ -3928,3 +3928,8 @@ pre {
 .batt-front-spacer {
   flex: 1;
 }
+
+/* Backup card (2026-10-17): tier badge next to the backup date. */
+.backup-tier {
+  margin-left: 0.5rem;
+}
