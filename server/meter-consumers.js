@@ -13,8 +13,23 @@ import { upsertPlugDailyRow, plugDayKwhFromSamples } from "./db.js";
 // (forever → Consume tiles, /api/plugs todayKwh).
 const CONSUMERS = [
   { sn: "meter-multi-microwave", name: "microwave", phases: [0] },
-  { sn: "meter-multi-heating", name: "heating", phases: [1, 2] },
+  // Heating is a COMPOSITE consumer (2026-10-18, user request): L2 = the
+  // underfloor-heating motor, L3 = the district-heat device. The tile is
+  // flippable (like "cooking" / "house light") and lists both members with
+  // their live watts + span kWh via /api/meter-multi/members.
+  { sn: "meter-multi-heating", name: "heating", phases: [1, 2], aggregate: true },
 ];
+
+// Per-phase members (only for the flip face): their sample rows exist ONLY
+// so the members endpoint can integrate span kWh. They are NOT consumers in
+// their own right (no cards, no plug_daily, and excluded from the unfiltered
+// /api/plugs/timeseries sn set so Rest-of-home isn't double-subtracted).
+const MEMBERS = [
+  { sn: "meter-multi-l2", name: "underfloor heating", phase: 1 },
+  { sn: "meter-multi-l3", name: "district heating", phase: 2 },
+];
+
+export { MEMBERS as METER_MULTI_MEMBERS };
 
 const DAY_MS = 86400000;
 
@@ -56,14 +71,24 @@ export class MeterConsumers {
         sn: c.sn,
         name: c.name,
         tag: "Meter",
-        typeTag: "Phases",
+        typeTag: c.aggregate ? "Aggregate" : "Phases",
         watts,
         online: Boolean(snapshot),
-        external: false, // plain consumer card (not an aggregate flip)
+        external: Boolean(c.aggregate), // heating is flippable (members face)
+        membersUrl: c.aggregate ? "/api/meter-multi/members" : undefined,
         ts: snapshot?.timestamp ? new Date(snapshot.timestamp).getTime() : null,
         meterConnected: connected,
       };
     });
+  }
+
+  getMemberStates() {
+    const { snapshot } = this.poller.getState();
+    return MEMBERS.map((m) => ({
+      sn: m.sn,
+      name: m.name,
+      wattsNow: snapshot ? Math.max(0, snapshot.primary?.phases?.[m.phase]?.power ?? 0) : null,
+    }));
   }
 
   #wattsFor(c, snapshot) {
@@ -76,6 +101,10 @@ export class MeterConsumers {
     if (!state.snapshot) return;
     const ts = Date.now();
     const rows = CONSUMERS.map((c) => ({ sn: c.sn, watts: this.#wattsFor(c, state.snapshot) }));
+    // Per-phase member rows for the flip face (not consumers themselves).
+    for (const m of MEMBERS) {
+      rows.push({ sn: m.sn, watts: Math.max(0, state.snapshot.primary?.phases?.[m.phase]?.power ?? 0) });
+    }
     try {
       this.onSample(ts, rows);
     } catch (err) {

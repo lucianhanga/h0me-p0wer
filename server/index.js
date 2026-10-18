@@ -1491,6 +1491,28 @@ function memberSpanKwh(sn, from, to) {
   return Math.round((kwh + plugDayKwhFromSamples(sn, sampleFrom, to)) * 100) / 100;
 }
 
+// meter-multi heating flip face (2026-10-18, user request — "make the tile
+// flippable and show the two values the heating is composed from"):
+// L2 (underfloor) and L3 (district heat) with live watts + span kWh from
+// their per-phase plug_samples (same trapezoid integration as house light).
+app.get("/api/meter-multi/members", (req, res) => {
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) {
+    return res.status(400).json({ ok: false, error: "from must be before to" });
+  }
+  const devices = meterConsumers.getMemberStates().map((m) => ({
+    sn: m.sn,
+    name: m.name,
+    room: null,
+    wattsNow: m.wattsNow,
+    staleS: null,
+    kwh: plugDayKwhFromSamples(m.sn, from, to),
+  }));
+  devices.sort((a, b) => b.kwh - a.kwh);
+  res.json({ ok: true, data: { from, to, devices } });
+});
+
 // Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
 // nulls where no samples (server off). No interpolation — at the 10 s
 // sample cadence every chart-sized bucket either has samples or the gap is
@@ -1544,6 +1566,14 @@ app.get("/api/plugs/timeseries", (req, res) => {
   }
   for (const r of bucketed) {
     const rSn = onlySn ?? r.sn;
+    // Member rows must NOT join the unfiltered sn set (2026-10-18): the
+    // Rest card sums pr.plugs for home − Σplugs, and counting BOTH a
+    // composite (hmip-house-light / meter-multi-heating) AND its members
+    // would subtract those watts twice from rest-of-home. Members still
+    // have their own sample rows for the flip-face kWh integration.
+    if (!onlySn && (rSn.startsWith("hmip-") || rSn.startsWith("meter-multi-l"))) {
+      continue;
+    }
     sns.add(rSn);
     if (!acc.has(r.bt)) acc.set(r.bt, new Map());
     acc.get(r.bt).set(rSn, Math.round(r.w));
