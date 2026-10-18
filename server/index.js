@@ -24,6 +24,7 @@ import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-
 import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
+import { MeterConsumers } from "./meter-consumers.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
@@ -2766,8 +2767,27 @@ function plugGroupMembers(groupSn) {
 
 function mergedPlugs() {
   const hmip = hmipPoller.getState();
-  return [...applyPlugGroups(ungroupedPlugs()).display, ...(hmip ? [hmip] : [])];
+  return [
+    ...applyPlugGroups(ungroupedPlugs()).display,
+    ...(hmip ? [hmip] : []),
+    ...meterConsumers.getStates(),
+  ];
 }
+
+// Appliance consumers on the second meter (2026-10-18, user request —
+// h-solar-meter-multi-1 at METER_MULTI_IP): L1 = microwave, L2+L3 =
+// heating. Same plug machinery as the smart plugs / house light.
+const meterConsumers = new MeterConsumers({
+  host: process.env.METER_MULTI_IP ?? "192.168.1.16",
+  onSample: (ts, rows) => {
+    try {
+      savePlugSamples(ts, rows);
+    } catch (err) {
+      console.warn("[db] failed to persist meter-consumer sample:", err.message);
+    }
+  },
+});
+ensurePlugColors(["meter-multi-microwave", "meter-multi-heating"]);
 
 // HmIP "house light" aggregate (2026-10-12, user request — see hmip.js):
 // the HmIP bridge's metering devices summed into one consumer. Samples and
@@ -3327,6 +3347,7 @@ setInterval(() => {
 
 poller.start();
 hmipPoller.start();
+meterConsumers.start();
 startBackupScheduler(); // Azure GFS backup, daily 03:17 when AZURE_BACKUP_URL is set
 // PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
 // weather data, refreshed on a relaxed cadence; first call right away.
@@ -3341,6 +3362,7 @@ function gracefulShutdown() {
 
   poller.stop();
   hmipPoller.stop();
+  meterConsumers.stop();
   for (const client of batteryMqtts.values()) client.stop();
   for (const client of accountPlugMqtts.values()) client.stop();
   for (const client of sitePlugMqtts.values()) client.stop();
