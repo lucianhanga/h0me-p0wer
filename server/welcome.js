@@ -19,6 +19,7 @@ import {
 } from "./welcome-ai.js";
 import { savedEur } from "./savings.js";
 import { resolveConstants, systemCapacityKwh } from "./battery-params.js";
+import { getPvForecast } from "./pv-forecast.js";
 
 // Fixed briefing times (local clock): every 2 h from 6:00 to 22:00 — 9 AI
 // calls/day, each updated with the day's actuals so far. Stale = cache older
@@ -80,6 +81,9 @@ export function registerWelcomeRoute(app, deps) {
         }),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
+    // Same deterministic PVGIS expectation as the simple view's DayBrief and
+    // the production graph: historical mean, no LLM arithmetic.
+    const forecast = await getPvForecast().catch(() => null);
     let ai;
     let aiPowered = Boolean(config.ai.apiKey);
     if (aiPowered) {
@@ -141,9 +145,10 @@ export function registerWelcomeRoute(app, deps) {
       endOfDay: {
         ...ai.endOfDay,
         estimatedSavingsEur: savedEur(
-          context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh,
+          forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh,
           config.tariff,
         ),
+        pvgisExpectedTodayKwh: forecast?.expectedDailyKwh ?? null,
       },
       // Was previously based on ai.production?.weekKwh — already a latent
       // mismatch (production.weekKwh answers "how much so far", not "how
@@ -156,6 +161,7 @@ export function registerWelcomeRoute(app, deps) {
       // the lazy 30-min mini-refresh below knows it doesn't need to.
       today: { ...ai.today, statusQuoUpdatedAt: new Date().toISOString() },
       aiPowered,
+      forecastVersion: 1,
       generatedAt: new Date().toISOString(),
       stale: false,
       // Ground truth owned by the server — never by the model.
@@ -190,6 +196,7 @@ export function registerWelcomeRoute(app, deps) {
   function freshCache(lang) {
     const cached = kvGet(cacheKey(lang));
     if (!cached) return null;
+    if (cached.value?.forecastVersion !== 1) return null;
     // Fresh = generated at/after the most recent briefing slot; a fallback
     // payload additionally expires after 15 min so the AI self-heals sooner.
     if (cached.fetchedAt < lastSlotMs()) return null;

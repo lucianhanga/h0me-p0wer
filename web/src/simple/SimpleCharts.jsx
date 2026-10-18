@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import echarts from "../echarts.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { robustCap, rowValue, tightAxisBounds } from "../graph/derive.js";
+import { pvExpectedAt, toPvExpectedRows } from "../graph/pvExpected.js";
 import QuadFlipTile from "../components/QuadFlipTile.jsx";
 
 // Simple view's three read-only charts (2026-09-28, user request): house
@@ -24,7 +25,12 @@ const DEFS = [
   },
   {
     titleKey: "graph.title.production",
-    series: [{ key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", area: true, width: 2 }],
+    series: [
+      { key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", area: true, width: 2 },
+      // Dashed historical-mean PVGIS expectation (same local time axis as
+      // the actual production line).
+      { key: "pvgisExpected", nameKey: "graph.series.pvgisExpected", color: "#6bb8f5", width: 1, dashed: true },
+    ],
   },
   {
     titleKey: "graph.title.battery",
@@ -36,12 +42,15 @@ const DEFS = [
 ];
 
 // Face order per the user's spec: 12h, 24h, 1w, 1h, 6h — round robin.
+// The extra "expected" face (PVGIS historical-mean) exists only for the
+// production tile.
 const SPANS = [
   { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
   { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
   { key: "graph.span.1h", ms: 3600 * 1000 },
   { key: "graph.span.6h", ms: 6 * 3600 * 1000 },
+  { key: "graph.span.expected", ms: null },
 ];
 
 // Default face (2026-10-04, user request: "make the default graphs in the
@@ -51,11 +60,20 @@ const DEFAULT_SPAN_IDX = SPANS.findIndex((s) => s.key === "graph.span.6h");
 
 const REFRESH_MS = 60000;
 
-function ChartCanvas({ def, rows }) {
+function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (!rows?.length) return undefined;
-    const seriesData = def.series.map((s) => rows.map((r) => [r.t, rowValue(s.key, r)]));
+    const sourceRows = expectedOnly ? expectedRows : rows;
+    if (!sourceRows?.length) return undefined;
+    const series = expectedOnly ? def.series.filter((s) => s.key === "pvgisExpected") : def.series;
+    const seriesData = series.map((s) => {
+      if (s.key === "pvgisExpected") {
+        return expectedOnly
+          ? sourceRows.map((r) => [r.t, r.pvgisExpected])
+          : sourceRows.map((r) => [r.t, pvExpectedAt(expectedRows, r.t)]);
+      }
+      return sourceRows.map((r) => [r.t, rowValue(s.key, r)]);
+    });
     // Tight y-axis around the data (2026-10-03, user request — same rule as
     // the Graph tab's power charts, INCLUDING the same outlier cap: a kettle
     // spike would otherwise stretch the glance view's axis exactly the way
@@ -90,6 +108,8 @@ function ChartCanvas({ def, rows }) {
       },
       xAxis: {
         type: "time",
+        min: expectedOnly ? sourceRows[0].t : null,
+        max: expectedOnly ? sourceRows[sourceRows.length - 1].t : null,
         axisLine: { lineStyle: { color: "#2a3238" } },
         axisLabel: {
           color: "#8b98a5",
@@ -116,13 +136,13 @@ function ChartCanvas({ def, rows }) {
         splitLine: { lineStyle: { color: "#2a323866" } },
       },
       legend: { show: false }, // the title button carries the tile's identity
-      series: def.series.map((s, si) => ({
+      series: series.map((s, si) => ({
         name: s.name,
         type: "line",
         showSymbol: false,
         connectNulls: false,
         stack: s.stack,
-        lineStyle: { color: s.color, width: s.width ?? 1 },
+        lineStyle: { color: s.color, width: s.width ?? 1, type: s.dashed ? "dashed" : "solid" },
         itemStyle: { color: s.color },
         areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
         emphasis: { disabled: true },
@@ -135,20 +155,24 @@ function ChartCanvas({ def, rows }) {
       ro.disconnect();
       chart.dispose();
     };
-  }, [def, rows]);
+  }, [def, rows, expectedOnly, expectedRows]);
   return <div ref={ref} className="chart-box-sm" />;
 }
 
-function SimpleChartTile({ def }) {
+function SimpleChartTile({ def, expectedRows }) {
   const t = useT();
   const [spanIdx, setSpanIdx] = useState(DEFAULT_SPAN_IDX); // first face: 6h
   const [rows, setRows] = useState(null);
-  const spanMs = SPANS[spanIdx].ms;
+  const spans = def.titleKey === "graph.title.production" ? SPANS : SPANS.filter((s) => s.ms != null);
+  const currentSpan = spans[spanIdx];
+  const expectedOnly = currentSpan.ms == null;
+  const spanMs = expectedOnly ? 24 * 3600 * 1000 : currentSpan.ms;
   // Memoized — a fresh {…def} object per render re-inited ECharts on every
   // WS push (2026-09-29 review: the dispose/init storm class the
   // TodayMiniChart fix established we must memoize for).
   const chartDef = useMemo(() => ({ ...def, spanMs }), [def, spanMs]);
   useEffect(() => {
+    if (expectedOnly) return undefined;
     let cancelled = false;
     // Clear on span change — the previous face's data must not render under
     // the new face's label while the fetch is in flight (2026-09-29 review).
@@ -168,16 +192,17 @@ function SimpleChartTile({ def }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [spanMs]);
+  }, [spanMs, expectedOnly]);
+  const hasData = expectedOnly ? expectedRows.length > 0 : rows?.length > 0;
   return (
     <section className="simple-chart">
       <QuadFlipTile
         title={def.title}
-        faceLabel={t(SPANS[spanIdx].key)}
-        onFlip={() => setSpanIdx((i) => (i + 1) % SPANS.length)}
+        faceLabel={t(currentSpan.key)}
+        onFlip={() => setSpanIdx((i) => (i + 1) % spans.length)}
       >
-        {rows?.length ? (
-          <ChartCanvas def={chartDef} rows={rows} />
+        {hasData ? (
+          <ChartCanvas def={chartDef} rows={rows} expectedOnly={expectedOnly} expectedRows={expectedRows} />
         ) : (
           <div className="chart-box-sm simple-chart-loading" />
         )}
@@ -188,6 +213,17 @@ function SimpleChartTile({ def }) {
 
 export default function SimpleCharts() {
   const t = useT();
+  const [expectedRows, setExpectedRows] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/pv/forecast")
+      .then((r) => r.json())
+      .then((payload) => {
+        if (!cancelled && payload?.ok) setExpectedRows(toPvExpectedRows(payload));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
   // Resolve titles/series names once per language.
   const defs = useMemo(
     () =>
@@ -201,7 +237,7 @@ export default function SimpleCharts() {
   return (
     <div className="simple-charts">
       {defs.map((def) => (
-        <SimpleChartTile key={def.titleKey} def={def} />
+        <SimpleChartTile key={def.titleKey} def={def} expectedRows={expectedRows} />
       ))}
     </div>
   );

@@ -363,6 +363,9 @@ export default function WelcomeTab() {
           <p className="wx-big">
             <span className="wx-c-pv">{fmt1(data.production.todayKwh)} kWh</span> <span className="muted">{t("welcome.rightNow.producedToday")}</span>
           </p>
+          {data.endOfDay.pvgisExpectedTodayKwh != null && (
+            <p className="muted">{t("welcome.pvgisExpected", { kwh: fmt1(data.endOfDay.pvgisExpectedTodayKwh) })}</p>
+          )}
           <p className="muted">
             {t("welcome.rightNow.weekSoFar")} <span className="wx-c-pv">{fmt1(data.production.weekKwh)} kWh</span> · {t("welcome.rightNow.monthSoFar")}{" "}
             <span className="wx-c-pv">{fmt1(data.production.monthKwh)} kWh</span>
