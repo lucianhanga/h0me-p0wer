@@ -7296,3 +7296,18 @@ Root causes, all proven against production data:
 - Verified end-to-end locally against the copied production DB: upload
   (58.3 MB blob), status+tier, PIN restore, exit, healthy boot on the
   restored file.
+
+## Appliance consumers on the second meter (2026-10-18, user request — "h-solar-meter-multi-1 with 3 appliances on different phases; add microwave + heating")
+
+- `server/meter-consumers.js`: second MeterPoller (transient, 5 s) reads
+  per-phase active power over Modbus TCP (192.168.1.16 = METER_MULTI_IP).
+  Mapping (user's assignment): L1 → `meter-multi-microwave`,
+  L2+L3 → `meter-multi-heating`. Values clamped at ≥ 0 (export ≠ load).
+- Rides the existing plug machinery: plug_samples (7 d, curves + Rest math)
+  and plug_daily (trapezoid + gap clamp, today running + yesterday final on
+  rollover, 60 s cadence). mergedPlugs() appends getStates() — plain
+  consumer cards (tag "Meter", typeTag "Phases"), NOT aggregate flips.
+- .env: METER_MULTI_IP documented in .env.example; set on dev + production.
+- Verified live on the real meter: microwave 0 W (idle), heating 18 W,
+  samples + /api/plugs/timeseries?sn=… curve, /api/stats/consumers rows
+  with color slots.
