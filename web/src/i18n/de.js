@@ -423,7 +423,7 @@ export const de = {
       pvProduction: "PV-Produktion",
       pvToBattery: "PV in den Akku",
       pvToHome: "PV ins Haus",
-      pvgisExpected: "PVGIS erwartet",
+      pvForecast: "Wetterprognose",
       discharging: "Entladen",
       charging: "Laden",
       outsideTemp: "Außen",
@@ -459,7 +459,7 @@ export const de = {
     spent: "ausgegeben",
     saved: "gespart",
     measured: "gemessen",
-    pvgisExpected: "PVGIS erwartet: ≈ {kwh} kWh",
+    pvForecast: "Wetterprognose: ≈ {kwh} kWh",
     weather: { sun: "{hours} h Sonne", radiation: "☀ {kwh} kWh/m² Strahlung heute" },
     startOfDay: {
       title: "Wie der Tag begann",

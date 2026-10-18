@@ -7346,3 +7346,18 @@ Root causes, all proven against production data:
 - Verified with the live PVGIS service (15.24 kWh for 2026-10-18), API and
   interpolation checks, Vite build, and headless Chrome in simple + advanced
   views (expected face, restore, Welcome note, zero browser exceptions).
+
+## Weather-based PV forecast replaces the historical mean (2026-10-18, user clarification)
+
+- The user intended a forecast for TODAY, not a climatological average.
+  `server/pv-forecast.js` now uses Open-Meteo `global_tilted_irradiance`
+  with the configured tilt/azimuth, 6.0 kWp and 14% system loss: hourly W =
+  GTI × kWp × 0.86; hourly energy sums to the full-day kWh. No LLM arithmetic.
+- Weather responses cache for 15 min per location+array geometry, with
+  last-good fallback. The API shape and 00:00–24:00 chart contract stay intact;
+  labels/internal fields now say weather forecast instead of PVGIS expected.
+- Welcome's AI/fallback context receives the same weather forecast as DayBrief;
+  forecastVersion=2 invalidates the historical-mean cached briefings.
+- Verified by a red/green deterministic conversion check, live API (5.54 kWh
+  for 2026-10-18 vs the historical 15.24), matching DayBrief/Welcome values,
+  Vite build, and headless simple/advanced chart flows with zero exceptions.

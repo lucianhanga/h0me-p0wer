@@ -1,114 +1,85 @@
-import { geocode, parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
+import { geocode, parseWelcomeConfig, fetchJson, localDate } from "./welcome-sources.js";
 import { kvGet, kvSet } from "./db.js";
 
-// Deterministic PVGIS expected-production model (2026-10-18, user request):
-// historical PVGIS seriescalc data for the installed system, reduced to one
-// hourly expected-power curve per local day. NOT a weather forecast: the
-// values are the historical mean production at each hour of the SAME local
-// month/day across the 2005–2023 PVGIS years.
-//
-// PVGIS row: { time: "20230615:1200", P: 5234.12 } — P is WATTS.
-// We convert each timestamp from UTC to Europe/Berlin using Intl's timezone
-// database (DST-safe, no hand-rolled offsets), then average P per hour.
-const PVGIS_URL = "https://re.jrc.ec.europa.eu/api/v5_3/seriescalc";
-const CACHE_KEY = "pvgis_seriescalc_v1";
+const OPEN_METEO_URL = "https://api.open-meteo.com/v1/forecast";
+const CACHE_KEY = "open_meteo_pv_forecast_v1";
+const CACHE_TTL_MS = 15 * 60 * 1000;
+const SYSTEM_LOSS = 0.14;
+const SOURCE = "open-meteo-weather-forecast";
 
-const BERLIN_PARTS = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Europe/Berlin",
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  hourCycle: "h23",
-});
-
-function berlinParts(date) {
-  const parts = {};
-  for (const { type, value } of BERLIN_PARTS.formatToParts(date)) {
-    if (["year", "month", "day", "hour"].includes(type)) parts[type] = Number(value);
+export function buildWeatherForecast(hourly, pv, now = new Date()) {
+  const date = localDate(now);
+  if (!Array.isArray(hourly?.time) || !Array.isArray(hourly?.global_tilted_irradiance)) {
+    throw new Error("Open-Meteo returned no tilted-irradiance forecast");
   }
-  return parts;
-}
-
-function parsePvgisTime(value) {
-  const m = /^(\d{4})(\d{2})(\d{2}):(\d{2})(\d{2})$/.exec(value);
-  if (!m) return null;
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
-}
-
-function buildHourlyForecast(hourlyRows, targetDate) {
-  const target = berlinParts(targetDate);
-  const perHour = Array.from({ length: 24 }, () => ({ sum: 0, count: 0 }));
-  for (const row of hourlyRows) {
-    const ts = parsePvgisTime(row?.time);
-    const power = Number(row?.P);
-    if (ts == null || !Number.isFinite(power)) continue;
-    const local = berlinParts(new Date(ts));
-    if (local.month !== target.month || local.day !== target.day) continue;
-    perHour[local.hour].sum += power;
-    perHour[local.hour].count++;
-  }
-  return perHour.map(({ sum, count }, hour) => {
-    const watts = count ? Math.round((sum / count) * 100) / 100 : 0;
-    return { hour, watts, kw: watts / 1000 };
+  const rows = hourly.time
+    .map((time, i) => ({ time, irradiance: hourly.global_tilted_irradiance[i] }))
+    .filter((row) => row.time.startsWith(date));
+  if (rows.length !== 24) throw new Error(`Open-Meteo returned ${rows.length} hours for ${date}`);
+  const hours = rows.map(({ time, irradiance }) => {
+    const gti = Number(irradiance);
+    const watts = Math.round(Math.max(0, Number.isFinite(gti) ? gti : 0) * pv.peakKwp * (1 - SYSTEM_LOSS) * 100) / 100;
+    return {
+      hour: Number(time.slice(11, 13)),
+      watts,
+      kw: watts / 1000,
+      t: new Date(`${time}:00`).getTime(),
+    };
   });
+  return {
+    date,
+    hours,
+    expectedDailyKwh: Math.round(hours.reduce((sum, h) => sum + h.kw, 0) * 100) / 100,
+    source: SOURCE,
+  };
 }
 
-let seriescalcInflight = null;
+let forecastInflight = null;
 
-function loadSeriescalc() {
-  if (seriescalcInflight) return seriescalcInflight;
-  seriescalcInflight = (async () => {
+function loadForecastWeather() {
+  if (forecastInflight) return forecastInflight;
+  forecastInflight = (async () => {
     const config = parseWelcomeConfig();
     if (!config) return null;
     const geo = await geocode(config.address);
     const pv = config.pv;
-    const cacheKey = `${CACHE_KEY}:${geo.lat},${geo.lon},${pv.peakKwp},${pv.aspect},${pv.tiltDeg}`;
+    const cacheKey = `${CACHE_KEY}:${geo.lat},${geo.lon},${pv.tiltDeg},${pv.aspect}`;
     const cached = kvGet(cacheKey);
-    if (cached?.value?.hourly?.length) return cached.value;
-    const params = new URLSearchParams({
-      lat: String(geo.lat),
-      lon: String(geo.lon),
-      startyear: "2005",
-      endyear: "2023",
-      pvcalculation: "1",
-      peakpower: String(pv.peakKwp),
-      loss: "14",
-      angle: String(pv.tiltDeg),
-      aspect: String(pv.aspect),
-      pvtechchoice: "crystSi2025",
-      mountingplace: "free",
-      usehorizon: "1",
-      outputformat: "json",
-    });
-    const data = await fetchJson(`${PVGIS_URL}?${params}`, { timeoutMs: 60000 });
-    const hourly = data?.outputs?.hourly;
-    if (!Array.isArray(hourly) || !hourly.length) {
-      throw new Error("PVGIS returned no hourly production data");
+    if (cached?.value?.hourly && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      return { ...cached.value, pv };
     }
-    const value = { hourly, fetchedAt: Date.now() };
-    kvSet(cacheKey, value);
-    return value;
+    try {
+      const params = new URLSearchParams({
+        latitude: String(geo.lat),
+        longitude: String(geo.lon),
+        timezone: "Europe/Berlin",
+        forecast_days: "2",
+        hourly: "global_tilted_irradiance",
+        tilt: String(pv.tiltDeg),
+        azimuth: String(pv.aspect),
+      });
+      const data = await fetchJson(`${OPEN_METEO_URL}?${params}`, { timeoutMs: 20000 });
+      if (!data?.hourly?.global_tilted_irradiance?.length) {
+        throw new Error("Open-Meteo returned no tilted-irradiance forecast");
+      }
+      const value = { hourly: data.hourly, fetchedAt: Date.now() };
+      kvSet(cacheKey, value);
+      return { ...value, pv };
+    } catch (err) {
+      if (cached?.value?.hourly) return { ...cached.value, pv };
+      throw err;
+    }
   })().finally(() => {
-    seriescalcInflight = null;
+    forecastInflight = null;
   });
-  return seriescalcInflight;
+  return forecastInflight;
 }
 
 export async function getPvForecast() {
-  const payload = await loadSeriescalc();
+  const payload = await loadForecastWeather();
   if (!payload) return null;
-  const today = new Date();
-  const hours = buildHourlyForecast(payload.hourly, today);
-  const expectedDailyKwh = Math.round(hours.reduce((a, h) => a + h.kw, 0) * 100) / 100;
   return {
-    date: today.toLocaleDateString("sv"),
-    hours: hours.map((h) => ({
-      ...h,
-      t: new Date(today.getFullYear(), today.getMonth(), today.getDate(), h.hour).getTime(),
-    })),
-    expectedDailyKwh,
-    source: "pvgis-historical-mean",
+    ...buildWeatherForecast(payload.hourly, payload.pv),
     fetchedAt: payload.fetchedAt,
   };
 }

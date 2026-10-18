@@ -419,7 +419,7 @@ export const ro = {
       pvProduction: "Producție PV",
       pvToBattery: "PV spre baterie",
       pvToHome: "PV spre casă",
-      pvgisExpected: "PVGIS așteptat",
+      pvForecast: "Prognoză meteo",
       discharging: "Descărcare",
       charging: "Încărcare",
       outsideTemp: "Exterior",
@@ -455,7 +455,7 @@ export const ro = {
     spent: "cheltuit",
     saved: "economisit",
     measured: "măsurat",
-    pvgisExpected: "PVGIS așteptat: ≈ {kwh} kWh",
+    pvForecast: "Prognoză meteo: ≈ {kwh} kWh",
     weather: { sun: "{hours} h soare", radiation: "☀ {kwh} kWh/m² radiație azi" },
     startOfDay: {
       title: "Cum a început ziua",

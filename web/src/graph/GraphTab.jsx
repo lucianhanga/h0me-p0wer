@@ -57,12 +57,12 @@ const GRAPHS = [
   },
   {
     titleKey: "graph.title.production",
-    legendKeys: ["graph.series.pvProduction", "graph.series.pvToBattery", "graph.series.pvToHome", "graph.series.pvgisExpected"],
+    legendKeys: ["graph.series.pvProduction", "graph.series.pvToBattery", "graph.series.pvToHome", "graph.series.pvForecast"],
     series: [
       { key: "pvBatt", nameKey: "graph.series.pvToBattery", color: "#3da568", width: 1, stack: "p" },
       { key: "pvHome", nameKey: "graph.series.pvToHome", color: "#8ee3a8", width: 1, stack: "p" },
       { key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", width: 2 },
-      { key: "pvgisExpected", nameKey: "graph.series.pvgisExpected", color: "#6bb8f5", width: 1, dashed: true },
+      { key: "pvForecast", nameKey: "graph.series.pvForecast", color: "#6bb8f5", width: 1, dashed: true },
     ],
   },
   {
@@ -452,10 +452,10 @@ export default function GraphTab() {
         // construction.
         const homeSeries = rows.map((r) => rowValue("home", r));
         const seriesData = def.series.map((s) => {
-          if (expectedOnly && s.key !== "pvgisExpected") return [];
-          if (s.key === "pvgisExpected") {
+          if (expectedOnly && s.key !== "pvForecast") return [];
+          if (s.key === "pvForecast") {
             return expectedOnly
-              ? expectedRows.map((r) => [r.t, r.pvgisExpected])
+              ? expectedRows.map((r) => [r.t, r.pvForecast])
               : rows.map((r) => [r.t, pvExpectedAt(expectedRows, r.t)]);
           }
           const data =
@@ -727,7 +727,7 @@ export default function GraphTab() {
           if (disposed || !expected.length) return;
           expectedOnly = true;
           fetchSeq++;
-          const name = t("graph.series.pvgisExpected");
+          const name = t("graph.series.pvForecast");
           chart.setOption({ legend: { data: [name], selected: { [name]: true } } });
           applyRows(rowsRef.rows);
           setWindow(expected[0].t, expected[expected.length - 1].t);

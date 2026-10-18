@@ -27,9 +27,7 @@ const DEFS = [
     titleKey: "graph.title.production",
     series: [
       { key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", area: true, width: 2 },
-      // Dashed historical-mean PVGIS expectation (same local time axis as
-      // the actual production line).
-      { key: "pvgisExpected", nameKey: "graph.series.pvgisExpected", color: "#6bb8f5", width: 1, dashed: true },
+      { key: "pvForecast", nameKey: "graph.series.pvForecast", color: "#6bb8f5", width: 1, dashed: true },
     ],
   },
   {
@@ -42,8 +40,7 @@ const DEFS = [
 ];
 
 // Face order per the user's spec: 12h, 24h, 1w, 1h, 6h — round robin.
-// The extra "expected" face (PVGIS historical-mean) exists only for the
-// production tile.
+// The extra "expected" face (weather forecast) exists only for the production tile.
 const SPANS = [
   { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
@@ -65,11 +62,11 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
   useEffect(() => {
     const sourceRows = expectedOnly ? expectedRows : rows;
     if (!sourceRows?.length) return undefined;
-    const series = expectedOnly ? def.series.filter((s) => s.key === "pvgisExpected") : def.series;
+    const series = expectedOnly ? def.series.filter((s) => s.key === "pvForecast") : def.series;
     const seriesData = series.map((s) => {
-      if (s.key === "pvgisExpected") {
+      if (s.key === "pvForecast") {
         return expectedOnly
-          ? sourceRows.map((r) => [r.t, r.pvgisExpected])
+          ? sourceRows.map((r) => [r.t, r.pvForecast])
           : sourceRows.map((r) => [r.t, pvExpectedAt(expectedRows, r.t)]);
       }
       return sourceRows.map((r) => [r.t, rowValue(s.key, r)]);

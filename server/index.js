@@ -2039,10 +2039,9 @@ app.get("/api/activity", (req, res) => {
 });
 
 app.get("/api/pv/forecast", async (req, res) => {
-  // Deterministic PVGIS historical-mean expected production for the current
-  // local day: hourly watts + expected full-day total. Cached permanently
-  // in kv (historical data is immutable); last-good payload is used if
-  // PVGIS is unreachable.
+  // Weather-based hourly PV forecast for the current local day. The
+  // tilted-irradiance response is cached briefly; the last good payload is
+  // used if Open-Meteo is unreachable.
   try {
     const data = await getPvForecast();
     if (!data) return res.status(400).json({ ok: false, error: "HOME_ADDRESS not set in .env" });
