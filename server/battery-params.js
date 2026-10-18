@@ -459,6 +459,12 @@ export function registerBatteryParamsRoute(app, { anker, getLiveBattery, getMemb
           live: primary.live
             ? {
                 ...primary.live,
+                // The aggregate is NOT the primary unit: give it a synthetic
+                // identity so SimpleHome's WS mergeUnit (which matches by sn)
+                // can't overwrite the aggregate SOC with a member's value —
+                // the system total bar flip-flopped between the two units'
+                // SOCs (2026-10-18, user report).
+                sn: "aggregate",
                 expansions: allExpansions.length ? allExpansions : primary.live.expansions,
                 storedKwh:
                   primary.live.soc != null

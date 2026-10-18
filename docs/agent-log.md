@@ -7311,3 +7311,22 @@ Root causes, all proven against production data:
 - Verified live on the real meter: microwave 0 W (idle), heating 18 W,
   samples + /api/plugs/timeseries?sn=… curve, /api/stats/consumers rows
   with color slots.
+
+## Heating flip face + aggregate SOC alternation (2026-10-18, user requests)
+
+- Heating (L2+L3 composite) is now an AGGREGATE card (external: true,
+  typeTag "Aggregate", membersUrl /api/meter-multi/members): flip it to see
+  L2 "underfloor heating" and L3 "district heating" with live watts +
+  span kWh (trapezoid from their per-phase plug_samples). Per-phase rows
+  are stored but carry no card of their own.
+- Rest-of-home double-count closed: unfiltered /api/plugs/timeseries now
+  skips member rows (hmip-* and meter-multi-l*) from the sns set, so the
+  Rest card no longer subtracts a composite AND its members. This also
+  fixes the pre-existing house-light double-subtraction noted 2026-10-16.
+- Aggregate SOC alternation root cause: the aggregate entry in
+  /api/battery/params kept the primary unit's SN — SimpleHome's WS
+  mergeUnit matched it by SN and overwrote the aggregate SOC with a
+  member's value whenever that unit's MQTT push arrived (and the primary
+  unit alternates). The aggregate entry now carries sn: "aggregate" —
+  synthetic, so no member can clobber it. SOC itself stays sourced from
+  Anker's site-level total_battery_power (unchanged).
