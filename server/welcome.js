@@ -81,21 +81,23 @@ export function registerWelcomeRoute(app, deps) {
         }),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
-    // Same deterministic PVGIS expectation as the simple view's DayBrief and
-    // the production graph: historical mean, no LLM arithmetic.
     const forecast = await getPvForecast().catch(() => null);
+    const forecastContext = {
+      ...context,
+      pvProjectedTodayKwh: forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh,
+    };
     let ai;
     let aiPowered = Boolean(config.ai.apiKey);
     if (aiPowered) {
       try {
-        ai = await callWelcomeAI(config, context, lang);
+        ai = await callWelcomeAI(config, forecastContext, lang);
       } catch (err) {
         console.warn(`[welcome] AI call failed (${err.message}) — deterministic fallback`);
-        ai = buildFallback(config, context);
+        ai = buildFallback(config, forecastContext);
         aiPowered = false;
       }
     } else {
-      ai = buildFallback(config, context);
+      ai = buildFallback(config, forecastContext);
     }
     const payload = {
       ...ai,
@@ -148,7 +150,7 @@ export function registerWelcomeRoute(app, deps) {
           forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh ?? context.pvProducedTodayKwh,
           config.tariff,
         ),
-        pvgisExpectedTodayKwh: forecast?.expectedDailyKwh ?? null,
+        pvForecastTodayKwh: forecast?.expectedDailyKwh ?? null,
       },
       // Was previously based on ai.production?.weekKwh — already a latent
       // mismatch (production.weekKwh answers "how much so far", not "how
@@ -161,7 +163,7 @@ export function registerWelcomeRoute(app, deps) {
       // the lazy 30-min mini-refresh below knows it doesn't need to.
       today: { ...ai.today, statusQuoUpdatedAt: new Date().toISOString() },
       aiPowered,
-      forecastVersion: 1,
+      forecastVersion: 2,
       generatedAt: new Date().toISOString(),
       stale: false,
       // Ground truth owned by the server — never by the model.
@@ -196,7 +198,7 @@ export function registerWelcomeRoute(app, deps) {
   function freshCache(lang) {
     const cached = kvGet(cacheKey(lang));
     if (!cached) return null;
-    if (cached.value?.forecastVersion !== 1) return null;
+    if (cached.value?.forecastVersion !== 2) return null;
     // Fresh = generated at/after the most recent briefing slot; a fallback
     // payload additionally expires after 15 min so the AI self-heals sooner.
     if (cached.fetchedAt < lastSlotMs()) return null;

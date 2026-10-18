@@ -19,7 +19,7 @@ import { getPvForecast } from "./pv-forecast.js";
 // forecasted production for the installed capacity, and the expected house
 // consumption split (grid / battery / expected end-of-day SOC). Cached in
 // kv per (language, date) — the key IS the date, so it can never refresh
-// mid-day. The deterministic numbers (production forecast from PVGIS,
+// mid-day. The deterministic numbers (production forecast from Open-Meteo,
 // house estimate from the 56-day consumption profile) are server-computed
 // and override whatever the AI proposes — the model only narrates and does
 // the grid/battery split reasoning ("AI narrates, server computes", the
@@ -152,9 +152,8 @@ export function registerDayBriefRoute(app, deps) {
       fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() }).catch(() => null),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
-    // Deterministic PVGIS expected daily total (historical mean) replaces the
-    // older radiation-prorated climatology estimate — more accurate per the
-    // user's request, and shared by the production graph's expected line.
+    // Deterministic weather-based daily total, shared with the production
+    // graph's expected line and the Welcome briefing.
     const forecast = await getPvForecast().catch(() => null);
     const houseEstimateKwh = houseEstimateFromProfile();
     const capacityKwh = deps.getLiveBattery() ? (deps.getCapacityKwh?.() ?? null) : null;
@@ -178,7 +177,7 @@ export function registerDayBriefRoute(app, deps) {
       ai = buildDayBriefFallback(aiContext, houseEstimateKwh);
     }
     // Server-owned numbers, never the model's (same backstop philosophy as
-    // welcome.js's production override): the production forecast is PVGIS
+    // welcome.js's production override): the production forecast is weather
     // arithmetic, the house total is the measured consumption profile.
     const houseKwh = houseEstimateKwh ?? round1(ai.usage?.houseKwh);
     let gridKwh = Math.max(0, ai.usage?.gridKwh ?? 0);
@@ -208,8 +207,8 @@ export function registerDayBriefRoute(app, deps) {
         .trim(),
       weatherCode: context.today?.weathercode ?? null,
       forecastPvKwh: forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh ?? null,
-      pvgisExpectedTodayKwh: forecast?.expectedDailyKwh ?? null,
-      pvgisExpectedHours: forecast?.hours ?? null,
+      pvForecastTodayKwh: forecast?.expectedDailyKwh ?? null,
+      pvForecastHours: forecast?.hours ?? null,
       peakKwp: config.pv.peakKwp,
       usage: {
         houseKwh,
@@ -219,7 +218,7 @@ export function registerDayBriefRoute(app, deps) {
       },
       note: ai.note,
       aiPowered,
-      forecastVersion: 1,
+      forecastVersion: 2,
       date: localDate(),
       generatedAt: new Date().toISOString(),
     };
@@ -281,7 +280,7 @@ export function registerDayBriefRoute(app, deps) {
     }
     const key = `daybrief:${lang}:${localDate()}`;
     const cached = kvGet(key);
-    if (cached?.value?.forecastVersion === 1) return res.json({ ok: true, data: cached.value });
+    if (cached?.value?.forecastVersion === 2) return res.json({ ok: true, data: cached.value });
     if (cached) {
       generateOnce(config, lang, key).catch((err) =>
         console.warn(`[daybrief] forecast upgrade failed: ${err.message}`),

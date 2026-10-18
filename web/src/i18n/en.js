@@ -406,7 +406,7 @@ export const en = {
       pvProduction: "PV production",
       pvToBattery: "PV to battery",
       pvToHome: "PV to home",
-      pvgisExpected: "PVGIS expected",
+      pvForecast: "Weather forecast",
       discharging: "Discharging",
       charging: "Charging",
       outsideTemp: "Outside",
@@ -442,7 +442,7 @@ export const en = {
     spent: "spent",
     saved: "saved",
     measured: "measured",
-    pvgisExpected: "PVGIS expected: ≈ {kwh} kWh",
+    pvForecast: "Weather forecast: ≈ {kwh} kWh",
     weather: { sun: "{hours} h sun", radiation: "☀ {kwh} kWh/m² radiation today" },
     startOfDay: {
       title: "How the day started",

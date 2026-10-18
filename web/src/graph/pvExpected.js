@@ -2,12 +2,12 @@ export function toPvExpectedRows(payload) {
   const hours = Array.isArray(payload?.data?.hours) ? payload.data.hours : [];
   const rows = hours
     .filter((h) => Number.isFinite(h?.t) && Number.isFinite(h?.watts))
-    .map((h) => ({ t: h.t, pvgisExpected: h.watts }))
+    .map((h) => ({ t: h.t, pvForecast: h.watts }))
     .sort((a, b) => a.t - b.t);
   if (rows.length === 24) {
     const end = new Date(rows[0].t);
     end.setDate(end.getDate() + 1);
-    rows.push({ t: end.getTime(), pvgisExpected: rows[0].pvgisExpected });
+    rows.push({ t: end.getTime(), pvForecast: rows[0].pvForecast });
   }
   return rows;
 }
@@ -23,7 +23,7 @@ export function pvExpectedAt(rows, t) {
   }
   const a = rows[lo];
   const b = rows[hi];
-  if (a.t === b.t || t === a.t) return a.pvgisExpected;
+  if (a.t === b.t || t === a.t) return a.pvForecast;
   const ratio = (t - a.t) / (b.t - a.t);
-  return a.pvgisExpected + (b.pvgisExpected - a.pvgisExpected) * ratio;
+  return a.pvForecast + (b.pvForecast - a.pvForecast) * ratio;
 }
