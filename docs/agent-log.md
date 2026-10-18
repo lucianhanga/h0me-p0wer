@@ -7330,3 +7330,19 @@ Root causes, all proven against production data:
   unit alternates). The aggregate entry now carries sn: "aggregate" —
   synthetic, so no member can clobber it. SOC itself stays sourced from
   Anker's site-level total_battery_power (unchanged).
+
+## PVGIS expected-production curve (2026-10-18, user request)
+
+- `server/pv-forecast.js` downloads PVGIS v5.3 seriescalc (2005–2023,
+  configured 6.0 kWp / tilt / aspect, crystSi2025), caches the raw response
+  per location+array config, converts UTC to Europe/Berlin with Intl, and
+  averages each hour for the SAME local month/day. `/api/pv/forecast` returns
+  24 hourly watts plus the deterministic daily kWh total; no LLM arithmetic.
+- DayBrief and Welcome use that total (forecastVersion=1 forces a one-time
+  refresh of legacy cached briefings). Welcome shows the expected daily total.
+- Simple + advanced Power Production charts overlay a dashed, interpolated
+  PVGIS line. The production-only expected face/button shows the hourly curve
+  from local 00:00 to 24:00; ordinary spans restore the actual chart.
+- Verified with the live PVGIS service (15.24 kWh for 2026-10-18), API and
+  interpolation checks, Vite build, and headless Chrome in simple + advanced
+  views (expected face, restore, Welcome note, zero browser exceptions).

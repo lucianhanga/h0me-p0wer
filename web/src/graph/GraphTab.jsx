@@ -3,6 +3,7 @@ import echarts from "../echarts.js";
 import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { robustCap, rowValue, tightAxisBounds } from "./derive.js";
+import { pvExpectedAt, toPvExpectedRows } from "./pvExpected.js";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 import { fetchOnce } from "../fetchDedupe.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
@@ -56,11 +57,12 @@ const GRAPHS = [
   },
   {
     titleKey: "graph.title.production",
-    legendKeys: ["graph.series.pvProduction", "graph.series.pvToBattery", "graph.series.pvToHome"],
+    legendKeys: ["graph.series.pvProduction", "graph.series.pvToBattery", "graph.series.pvToHome", "graph.series.pvgisExpected"],
     series: [
       { key: "pvBatt", nameKey: "graph.series.pvToBattery", color: "#3da568", width: 1, stack: "p" },
       { key: "pvHome", nameKey: "graph.series.pvToHome", color: "#8ee3a8", width: 1, stack: "p" },
       { key: "pv", nameKey: "graph.series.pvProduction", color: "#5fce80", width: 2 },
+      { key: "pvgisExpected", nameKey: "graph.series.pvgisExpected", color: "#6bb8f5", width: 1, dashed: true },
     ],
   },
   {
@@ -404,6 +406,31 @@ export default function GraphTab() {
 
       const rowsRef = { rows: [], bucketMs: 5000 };
       let fetchSeq = 0;
+      let expectedRows = [];
+      let expectedPromise = null;
+      let expectedOnly = false;
+      let disposed = false;
+
+      function loadExpectedRows() {
+        if (def.titleKey !== "graph.title.production") return Promise.resolve([]);
+        if (expectedRows.length) return Promise.resolve(expectedRows);
+        if (!expectedPromise) {
+          expectedPromise = fetchOnce("/api/pv/forecast")
+            .then((payload) => {
+              if (payload?.ok) expectedRows = toPvExpectedRows(payload);
+              return expectedRows;
+            })
+            .catch(() => [])
+            .finally(() => { expectedPromise = null; });
+        }
+        return expectedPromise;
+      }
+
+      if (def.titleKey === "graph.title.production") {
+        loadExpectedRows().then(() => {
+          if (!disposed && expectedRows.length) applyRows(rowsRef.rows);
+        });
+      }
 
       function applyRows(rows) {
         // The "Grid range" min/max envelope series was REMOVED entirely
@@ -425,6 +452,12 @@ export default function GraphTab() {
         // construction.
         const homeSeries = rows.map((r) => rowValue("home", r));
         const seriesData = def.series.map((s) => {
+          if (expectedOnly && s.key !== "pvgisExpected") return [];
+          if (s.key === "pvgisExpected") {
+            return expectedOnly
+              ? expectedRows.map((r) => [r.t, r.pvgisExpected])
+              : rows.map((r) => [r.t, pvExpectedAt(expectedRows, r.t)]);
+          }
           const data =
             s.key === "home"
               ? rows.map((r, i) => [r.t, homeSeries[i]])
@@ -447,18 +480,19 @@ export default function GraphTab() {
         // "peak 610 W (off-scale)" note). Module charts get fixed sane
         // caps instead — a battery never exceeds 60 °C or 100 %.
         const isModuleChart = gi >= 3;
-        const posEnv = rows.map((_, i) => {
+        const envelopeRows = expectedOnly ? expectedRows : rows;
+        const posEnv = envelopeRows.map((_, i) => {
           let m = null;
           for (const d of seriesData) {
-            const v = d[i][1];
+            const v = d[i]?.[1];
             if (v != null && Number.isFinite(v)) m = m == null ? v : Math.max(m, v);
           }
           return m;
         });
-        const negEnv = rows.map((_, i) => {
+        const negEnv = envelopeRows.map((_, i) => {
           let m = null;
           for (const d of seriesData) {
-            const v = d[i][1];
+            const v = d[i]?.[1];
             if (v != null && Number.isFinite(v)) m = m == null ? v : Math.min(m, v);
           }
           return m;
@@ -641,6 +675,7 @@ export default function GraphTab() {
       }
 
       function loadVisible() {
+        if (expectedOnly) return;
         const win = visibleWindow();
         if (!win) return;
         const [fromMs, toMs] = win;
@@ -654,7 +689,7 @@ export default function GraphTab() {
       }
 
       chart.on("datazoom", () => {
-        if (programmatic) return;
+        if (programmatic || expectedOnly) return;
         scheduleLoad();
         const win = visibleWindow();
         if (win) {
@@ -667,6 +702,16 @@ export default function GraphTab() {
 
       const unit = {
         async setSpan(ms) {
+          const restoreLegend = expectedOnly;
+          expectedOnly = false;
+          if (restoreLegend) {
+            chart.setOption({
+              legend: {
+                data: def.legend,
+                selected: Object.fromEntries(def.legend.map((n) => [n, true])),
+              },
+            });
+          }
           savedSpanMs[gi] = ms;
           // Snap the right edge UP to a 5-min boundary so repeated span
           // clicks share one cache URL (see fetchTimeseries); the live
@@ -677,6 +722,18 @@ export default function GraphTab() {
           setWindow(from, to);
           setActiveArr((arr) => arr.map((a, i) => (i === gi ? ms : a)));
         },
+        async setExpected() {
+          const expected = await loadExpectedRows();
+          if (disposed || !expected.length) return;
+          expectedOnly = true;
+          fetchSeq++;
+          const name = t("graph.series.pvgisExpected");
+          chart.setOption({ legend: { data: [name], selected: { [name]: true } } });
+          applyRows(rowsRef.rows);
+          setWindow(expected[0].t, expected[expected.length - 1].t);
+          setStatsArr((arr) => arr.map((s, i) => (i === gi ? null : s)));
+          setActiveArr((arr) => arr.map((a, i) => (i === gi ? "expected" : a)));
+        },
       };
       apiRefs.current[gi] = unit;
 
@@ -685,7 +742,7 @@ export default function GraphTab() {
 
       // Keep the view fresh while watching the live edge.
       const liveTimer = setInterval(async () => {
-        if (liveBusy) return;
+        if (liveBusy || expectedOnly) return;
         const win = visibleWindow();
         if (!win) return;
         const [fromMs, toMs] = win;
@@ -728,6 +785,7 @@ export default function GraphTab() {
 
       return {
         dispose() {
+          disposed = true;
           clearInterval(liveTimer);
           clearTimeout(fetchTimer);
           document.removeEventListener("visibilitychange", onVisible);
@@ -761,6 +819,14 @@ export default function GraphTab() {
                 {t(s.labelKey)}
               </button>
             ))}
+            {i === 1 && (
+              <button
+                className={activeArr[i] === "expected" ? "span-active" : ""}
+                onClick={() => apiRefs.current[i]?.setExpected()}
+              >
+                {t("graph.span.expected")}
+              </button>
+            )}
             {i === 0 && (
               <button
                 className={phasesOn ? "span-active" : ""}

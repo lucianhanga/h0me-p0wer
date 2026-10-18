@@ -11,6 +11,7 @@ import {
 } from "./welcome-sources.js";
 import { kvGet, kvSet, computeConsumptionProfile } from "./db.js";
 import { internalAuthHeaders } from "./auth.js";
+import { getPvForecast } from "./pv-forecast.js";
 
 // AI day briefing for the simple view's first section (2026-10-03, user
 // request): ONE AI message generated at the beginning of the day and kept
@@ -151,10 +152,15 @@ export function registerDayBriefRoute(app, deps) {
       fetchJson(deps.statsOverviewUrl, { headers: internalAuthHeaders() }).catch(() => null),
     ]);
     const context = buildContext({ config, geo, weather, pvgis, statsOverview, deps });
+    // Deterministic PVGIS expected daily total (historical mean) replaces the
+    // older radiation-prorated climatology estimate — more accurate per the
+    // user's request, and shared by the production graph's expected line.
+    const forecast = await getPvForecast().catch(() => null);
     const houseEstimateKwh = houseEstimateFromProfile();
     const capacityKwh = deps.getLiveBattery() ? (deps.getCapacityKwh?.() ?? null) : null;
     const aiContext = {
       ...context,
+      pvProjectedTodayKwh: forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh,
       houseEstimateKwh,
       battery: { ...context.battery, capacityKwh },
     };
@@ -201,7 +207,9 @@ export function registerDayBriefRoute(app, deps) {
         .replace(/\s{2,}/g, " ")
         .trim(),
       weatherCode: context.today?.weathercode ?? null,
-      forecastPvKwh: context.pvProjectedTodayKwh ?? null,
+      forecastPvKwh: forecast?.expectedDailyKwh ?? context.pvProjectedTodayKwh ?? null,
+      pvgisExpectedTodayKwh: forecast?.expectedDailyKwh ?? null,
+      pvgisExpectedHours: forecast?.hours ?? null,
       peakKwp: config.pv.peakKwp,
       usage: {
         houseKwh,
@@ -211,6 +219,7 @@ export function registerDayBriefRoute(app, deps) {
       },
       note: ai.note,
       aiPowered,
+      forecastVersion: 1,
       date: localDate(),
       generatedAt: new Date().toISOString(),
     };
@@ -272,7 +281,13 @@ export function registerDayBriefRoute(app, deps) {
     }
     const key = `daybrief:${lang}:${localDate()}`;
     const cached = kvGet(key);
-    if (cached) return res.json({ ok: true, data: cached.value });
+    if (cached?.value?.forecastVersion === 1) return res.json({ ok: true, data: cached.value });
+    if (cached) {
+      generateOnce(config, lang, key).catch((err) =>
+        console.warn(`[daybrief] forecast upgrade failed: ${err.message}`),
+      );
+      return res.json({ ok: true, data: cached.value });
+    }
     try {
       // Cold start (first request of the day in this language): wait once.
       const payload = await generateOnce(config, lang, key);

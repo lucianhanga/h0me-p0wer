@@ -27,6 +27,7 @@ import { HmipPoller } from "./hmip.js";
 import { MeterConsumers } from "./meter-consumers.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
+import { getPvForecast } from "./pv-forecast.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
 import {
   saveSnapshot,
@@ -2035,6 +2036,20 @@ function activity(kind, params = {}) {
 
 app.get("/api/activity", (req, res) => {
   res.json({ ok: true, data: getActivity(req.query.limit ?? 50) });
+});
+
+app.get("/api/pv/forecast", async (req, res) => {
+  // Deterministic PVGIS historical-mean expected production for the current
+  // local day: hourly watts + expected full-day total. Cached permanently
+  // in kv (historical data is immutable); last-good payload is used if
+  // PVGIS is unreachable.
+  try {
+    const data = await getPvForecast();
+    if (!data) return res.status(400).json({ ok: false, error: "HOME_ADDRESS not set in .env" });
+    res.json({ ok: true, data });
+  } catch (err) {
+    res.status(502).json({ ok: false, error: String(err.message ?? err) });
+  }
 });
 
 // Azure Blob backup (2026-10-17, user request — daily GFS backups + a way
