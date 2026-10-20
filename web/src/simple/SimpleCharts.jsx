@@ -62,14 +62,14 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
   useEffect(() => {
     const sourceRows = expectedOnly ? expectedRows : rows;
     if (!sourceRows?.length) return undefined;
-    const series = expectedOnly ? def.series.filter((s) => s.key === "pvForecast") : def.series;
+    const series = expectedOnly ? def.series.filter((s) => ["pv", "pvForecast"].includes(s.key)) : def.series;
     const seriesData = series.map((s) => {
       if (s.key === "pvForecast") {
         return expectedOnly
-          ? sourceRows.map((r) => [r.t, r.pvForecast])
+          ? expectedRows.map((r) => [r.t, r.pvForecast])
           : sourceRows.map((r) => [r.t, pvExpectedAt(expectedRows, r.t)]);
       }
-      return sourceRows.map((r) => [r.t, rowValue(s.key, r)]);
+      return (expectedOnly ? (rows ?? []) : sourceRows).map((r) => [r.t, rowValue(s.key, r)]);
     });
     // Tight y-axis around the data (2026-10-03, user request — same rule as
     // the Graph tab's power charts, INCLUDING the same outlier cap: a kettle
@@ -169,14 +169,15 @@ function SimpleChartTile({ def, expectedRows }) {
   // TodayMiniChart fix established we must memoize for).
   const chartDef = useMemo(() => ({ ...def, spanMs }), [def, spanMs]);
   useEffect(() => {
-    if (expectedOnly) return undefined;
     let cancelled = false;
     // Clear on span change — the previous face's data must not render under
     // the new face's label while the fetch is in flight (2026-09-29 review).
     setRows(null);
     const load = () => {
       const to = Date.now();
-      fetch(`/api/timeseries?from=${to - spanMs}&to=${to}&points=600&view=${spanMs}`)
+      const from = expectedOnly ? new Date().setHours(0, 0, 0, 0) : to - spanMs;
+      const viewMs = expectedOnly ? 24 * 3600 * 1000 : spanMs;
+      fetch(`/api/timeseries?from=${from}&to=${to}&points=600&view=${viewMs}`)
         .then((r) => r.json())
         .then((p) => {
           if (!cancelled && p?.ok) setRows(p.data);
