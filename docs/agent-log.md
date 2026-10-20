@@ -7361,3 +7361,12 @@ Root causes, all proven against production data:
 - Verified by a red/green deterministic conversion check, live API (5.54 kWh
   for 2026-10-18 vs the historical 15.24), matching DayBrief/Welcome values,
   Vite build, and headless simple/advanced chart flows with zero exceptions.
+
+## Actual production on the expected tile face (2026-10-20, user request)
+
+- Simple view → Trends → Power Production → expected now loads today's
+  timeseries from local midnight through now and draws actual PV production
+  together with the dashed weather forecast through 24:00.
+- Verified red/green in headless Chrome: the expected face previously made no
+  new timeseries request; after the change it loads today-to-now and the canvas
+  contains both green actual-production and blue forecast pixels.
