@@ -7370,3 +7370,16 @@ Root causes, all proven against production data:
 - Verified red/green in headless Chrome: the expected face previously made no
   new timeseries request; after the change it loads today-to-now and the canvas
   contains both green actual-production and blue forecast pixels.
+
+## Consume cache-first entry (2026-10-21, user report — still waits on page entry)
+
+- The cache existed, but two UNCACHED gates blocked it: the simple view's
+  Consume summary probe and the advanced tab's /api/plugs list rendered nothing
+  until their requests finished; only child tiles/charts used historyCache.
+- `usePolledResource` cacheTtlMs is now true stale-while-revalidate: a stale
+  entry renders immediately and fresh data replaces it; fresh entries skip the
+  request. The Consume summary and /api/plugs both opt in.
+- Current ConsumersPeriodCard periods also render any cached payload before
+  the refresh fetch, while immutable periods still use forever cache.
+- Verified in headless Chrome with API requests delayed 1.5 s: simple Consume
+  and advanced Consume both render instantly from cache; cacheEntries=21.

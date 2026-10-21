@@ -15,6 +15,7 @@ export default function ConsumersSection() {
   const { data } = usePolledResource("/api/stats/consumers?type=day&offset=0", {
     intervalMs: 60000,
     keepLastGoodOnError: true,
+    cacheTtlMs: 2 * 60 * 1000,
   });
   if (!data?.plugs?.length) return null;
 

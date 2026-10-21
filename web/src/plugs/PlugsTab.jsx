@@ -439,6 +439,7 @@ export default function PlugsTab() {
   const { data: live, error } = usePolledResource("/api/plugs", {
     intervalMs: 3000,
     keepLastGoodOnError: true,
+    cacheTtlMs: 3000,
   });
 
   if (error && !live) return <p className="error">{String(error)}</p>;
