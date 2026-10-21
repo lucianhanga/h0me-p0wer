@@ -7,11 +7,6 @@ import { readCached, writeCached } from "./historyCache.js";
 // AGENTS.md's architecture-review entry: the same ~15 lines, written 5+
 // times, each with tiny drifting differences).
 //
-// `envelope` (default true): this API has two response shapes in the wild
-// (a second architecture-review finding, not yet fixed) — most routes
-// return {ok, data, error}; a few (/api/power-plan and friends) return the
-// bare payload directly. Pass `envelope: false` for those.
-//
 // `keepLastGoodOnError` (default false): once real data has loaded, a
 // transient poll failure is swallowed instead of surfacing as an error —
 // for tabs whose render prioritizes showing an error over showing stale
@@ -29,7 +24,7 @@ import { readCached, writeCached } from "./historyCache.js";
 // refresh button).
 export function usePolledResource(
   url,
-  { intervalMs, envelope = true, keepLastGoodOnError = false, enabled = true, cacheTtlMs = 0 } = {},
+  { intervalMs, keepLastGoodOnError = false, enabled = true, cacheTtlMs = 0 } = {},
 ) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
@@ -48,7 +43,7 @@ export function usePolledResource(
       const hit = fresh ?? readCached(url);
       if (hit) {
         if (!mounted.current) return Promise.resolve();
-        setData(envelope ? hit.data : hit);
+        setData(hit.data);
         hasData.current = true;
         setError(null);
         setLoading(false);
@@ -59,12 +54,8 @@ export function usePolledResource(
       .then((r) => r.json())
       .then((res) => {
         if (!mounted.current) return;
-        if (envelope) {
-          if (!res.ok) throw new Error(res.error ?? "request failed");
-          setData(res.data);
-        } else {
-          setData(res);
-        }
+        if (!res.ok) throw new Error(res.error ?? "request failed");
+        setData(res.data);
         if (cacheTtlMs) writeCached(url, res);
         hasData.current = true;
         setError(null);
@@ -77,7 +68,7 @@ export function usePolledResource(
       .finally(() => {
         if (mounted.current) setLoading(false);
       });
-  }, [url, envelope, keepLastGoodOnError, enabled, cacheTtlMs]);
+  }, [url, keepLastGoodOnError, enabled, cacheTtlMs]);
 
   useEffect(() => {
     mounted.current = true;

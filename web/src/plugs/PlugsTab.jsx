@@ -6,7 +6,11 @@ import FlipTile from "../components/FlipTile.jsx";
 import { readCached, writeCached } from "../historyCache.js";
 import { fetchOnce } from "../fetchDedupe.js";
 import { homeOf } from "../graph/derive.js";
-import { SHORTCUTS } from "../graph/GraphTab.jsx";
+import { SHORTCUTS } from "../graph/spans.js";
+import SpanButtons from "../components/SpanButtons.jsx";
+import { CHART_COLORS } from "../components/chartTheme.js";
+import { forwardHoldBridge } from "../graph/forwardHold.js";
+import { mergeRowsByT } from "../graph/mergeRowsByT.js";
 
 // Smart plugs tab (2026-10-06): one card per A17X8 plug with a power chart,
 // plus a derived "rest of home" chart (home − Σ plugs, floored at 0 — plug
@@ -62,15 +66,15 @@ function chartOption(color) {
     tooltip: {
       trigger: "axis",
       valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
-      backgroundColor: "#1a2128",
-      borderColor: "#2a3238",
-      textStyle: { color: "#e8ecef", fontSize: 12 },
+      backgroundColor: CHART_COLORS.tooltipBg,
+      borderColor: CHART_COLORS.border,
+      textStyle: { color: CHART_COLORS.text, fontSize: 12 },
     },
     xAxis: {
       type: "time",
-      axisLine: { lineStyle: { color: "#2a3238" } },
+      axisLine: { lineStyle: { color: CHART_COLORS.border } },
       axisLabel: {
-        color: "#8b98a5",
+        color: CHART_COLORS.muted,
         fontSize: 10,
         hideOverlap: true,
         formatter: (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -86,12 +90,12 @@ function chartOption(color) {
       // range needs them.
       minInterval: 50,
       axisLabel: {
-        color: "#8b98a5",
+        color: CHART_COLORS.muted,
         fontSize: 10,
         formatter: (v) => `${Math.round(v)}`,
         inside: isPhone,
       },
-      splitLine: { lineStyle: { color: "#2a323866" } },
+      splitLine: { lineStyle: { color: CHART_COLORS.split } },
     },
     // preventDefaultMouseMove: false (2026-10-07, user report): with the
     // default (true) the inside-zoom roam controller preventDefaults
@@ -210,17 +214,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     // for dense series, which have no nulls to bridge.
     const BRIDGE_MAX_GAP_MS = 2 * 60 * 1000;
     function bridgeGaps(data) {
-      let lastT = null;
-      let lastV = null;
-      return data.map(([t, v]) => {
-        if (v != null) {
-          lastT = t;
-          lastV = v;
-          return [t, v];
-        }
-        if (lastT != null && t - lastT <= BRIDGE_MAX_GAP_MS) return [t, lastV];
-        return [t, null];
-      });
+      return forwardHoldBridge(data, BRIDGE_MAX_GAP_MS);
     }
 
     // Symbols only where the (bridged) series is still sparse — after the
@@ -333,10 +327,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
         const payload = await fetchRows(lastT + 1, Date.now(), `bucket=${bucketMs}`);
         if (payload?.data.length) {
           const cutoff = Date.now() - width * 1.5;
-          const byT = new Map();
-          for (const r of rows) if (r[0] >= cutoff) byT.set(r[0], r);
-          for (const r of payload.data) byT.set(r[0], r);
-          rows = [...byT.values()].sort((a, b) => a[0] - b[0]);
+          rows = mergeRowsByT(rows, payload.data, cutoff, (r) => r[0]);
           applySeries();
         }
         // Only slide the window if the right edge is still at the live edge.
@@ -393,15 +384,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
               (2026-10-12): FlipTile flips on any inner click — only the header
               area is meant to flip. */}
           <div className="controls" onClick={(e) => e.stopPropagation()}>
-            {SHORTCUTS.map((s) => (
-              <button
-                key={s.labelKey}
-                className={activeSpan === s.ms ? "span-active" : ""}
-                onClick={() => apiRef.current?.setSpan(s.ms)}
-              >
-                {t(s.labelKey)}
-              </button>
-            ))}
+            <SpanButtons active={activeSpan} onSelect={(ms) => apiRef.current?.setSpan(ms)} t={t} />
           </div>
           <div className="plug-chart" ref={ref} onClick={(e) => aggregate && e.stopPropagation()} />
         </>

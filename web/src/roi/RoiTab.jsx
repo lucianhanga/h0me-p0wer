@@ -4,6 +4,7 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { apiUrl } from "../auth.js";
+import { CHART_COLORS } from "../components/chartTheme.js";
 
 const DAY_MS = 86400000;
 const fmtEur = (v) =>
@@ -361,27 +362,27 @@ function AmortizationChart({ data }) {
       grid: { top: 28, right: 16, bottom: 8, left: 8, containLabel: true },
       legend: {
         top: 0,
-        textStyle: { color: "#8b98a5", fontSize: 10 },
+        textStyle: { color: CHART_COLORS.muted, fontSize: 10 },
         itemWidth: 14,
         itemHeight: 8,
       },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a2128",
-        borderColor: "#2a3238",
-        textStyle: { color: "#e8ecef", fontSize: 11 },
+        backgroundColor: CHART_COLORS.tooltipBg,
+        borderColor: CHART_COLORS.border,
+        textStyle: { color: CHART_COLORS.text, fontSize: 11 },
         valueFormatter: (v) => (v == null ? "—" : fmtEur(v)),
       },
       xAxis: {
         type: "time",
-        axisLabel: { color: "#8b98a5", fontSize: 10, hideOverlap: true },
-        axisLine: { lineStyle: { color: "#2a3238" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 10, hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_COLORS.border } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b98a5", fontSize: 10, formatter: (v) => `€${v}` },
-        splitLine: { lineStyle: { color: "#2a323866" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 10, formatter: (v) => `€${v}` },
+        splitLine: { lineStyle: { color: CHART_COLORS.split } },
       },
       series: [
         {

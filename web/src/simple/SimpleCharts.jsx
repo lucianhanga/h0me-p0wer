@@ -4,6 +4,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import { robustCap, rowValue, tightAxisBounds } from "../graph/derive.js";
 import { pvExpectedAt, toPvExpectedRows } from "../graph/pvExpected.js";
 import QuadFlipTile from "../components/QuadFlipTile.jsx";
+import { CHART_COLORS } from "../components/chartTheme.js";
 
 // Simple view's three read-only charts (2026-09-28, user request): house
 // consumption by source (grid / solar / battery, stacked + home line),
@@ -98,18 +99,18 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
       grid: { top: 8, right: 8, bottom: 24, left: 8, containLabel: true },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a2128",
-        borderColor: "#2a3238",
-        textStyle: { color: "#e8ecef", fontSize: 12 },
+        backgroundColor: CHART_COLORS.tooltipBg,
+        borderColor: CHART_COLORS.border,
+        textStyle: { color: CHART_COLORS.text, fontSize: 12 },
         valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
       },
       xAxis: {
         type: "time",
         min: expectedOnly ? sourceRows[0].t : null,
         max: expectedOnly ? sourceRows[sourceRows.length - 1].t : null,
-        axisLine: { lineStyle: { color: "#2a3238" } },
+        axisLine: { lineStyle: { color: CHART_COLORS.border } },
         axisLabel: {
-          color: "#8b98a5",
+          color: CHART_COLORS.muted,
           fontSize: 11,
           hideOverlap: true,
           formatter: (ts) => {
@@ -129,8 +130,8 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
         splitNumber: 3,
         min: tight?.min ?? null,
         max: tight?.max ?? null,
-        axisLabel: { color: "#8b98a5", fontSize: 11, formatter: (v) => `${Math.round(v)} W` },
-        splitLine: { lineStyle: { color: "#2a323866" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 11, formatter: (v) => `${Math.round(v)} W` },
+        splitLine: { lineStyle: { color: CHART_COLORS.split } },
       },
       legend: { show: false }, // the title button carries the tile's identity
       series: series.map((s, si) => ({
