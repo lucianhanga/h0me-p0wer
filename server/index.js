@@ -29,6 +29,7 @@ import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "
 import { estimatedAvgWattsForSpan, estimatedCategories, estimatedKwhForSpan, findEstimatedConsumer } from "./estimated-consumers.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { getPvForecast } from "./pv-forecast.js";
+import { accuracyWindows, getProviderState, ProviderMeterPoller, providerTimeseries } from "./provider-meter.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
 import {
   saveSnapshot,
@@ -79,6 +80,7 @@ import {
   getPlugSamplesBucketed,
   getPlugSamplesBucketedForSn,
   prunePlugSamples,
+  pruneProviderMeterSamples,
   savePlugDaily,
   getPlugDaily,
   plugDayKwhFromSamples,
@@ -1435,6 +1437,27 @@ app.get("/api/plugs", (req, res) => {
   });
 });
 
+app.get("/api/provider-meter", (req, res) => {
+  res.json({ ok: true, data: getProviderState() });
+});
+
+app.get("/api/provider-meter/timeseries", (req, res) => {
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) return res.status(400).json({ ok: false, error: "from must be before to" });
+  const viewMs = Math.max(Number(req.query.view ?? 0) || to - from, 1000);
+  const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
+  const requestedBucketMs = Number(req.query.bucket ?? 0);
+  const bucketMs = requestedBucketMs > 0
+    ? Math.max(5000, requestedBucketMs)
+    : Math.max(5000, Math.ceil(viewMs / points / 5000) * 5000);
+  res.json({ ok: true, data: providerTimeseries(from, to, bucketMs), bucketMs });
+});
+
+app.get("/api/provider-meter/accuracy", (req, res) => {
+  res.json({ ok: true, data: accuracyWindows() });
+});
+
 app.get("/api/estimated-consumers/:category/members", (req, res) => {
   const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
   const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
@@ -2353,6 +2376,7 @@ pruneOld();
 pruneBattery();
 pruneCloudGrid();
 prunePlugSamples();
+pruneProviderMeterSamples();
 rollupPvDaily();
 rollupGridDaily();
 repairZeroedPvHistory();
@@ -2381,6 +2405,7 @@ setInterval(() => {
   pruneBattery();
   pruneCloudGrid();
   prunePlugSamples();
+pruneProviderMeterSamples();
   rollupPvDaily();
   rollupGridDaily();
 }, 3600 * 1000).unref();
@@ -2880,6 +2905,11 @@ const meterConsumers = new MeterConsumers({
   },
 });
 ensurePlugColors(["meter-multi-microwave", "meter-multi-heating"]);
+
+const providerMeter = new ProviderMeterPoller({
+  url: process.env.PROVIDER_METER_URL,
+  intervalMs: Number(process.env.PROVIDER_METER_POLL_MS ?? 10000),
+});
 
 // HmIP "house light" aggregate (2026-10-12, user request — see hmip.js):
 // the HmIP bridge's metering devices summed into one consumer. Samples and
@@ -3440,6 +3470,7 @@ setInterval(() => {
 poller.start();
 hmipPoller.start();
 meterConsumers.start();
+providerMeter.start();
 startBackupScheduler(); // Azure GFS backup, daily 03:17 when AZURE_BACKUP_URL is set
 // PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
 // weather data, refreshed on a relaxed cadence; first call right away.
@@ -3455,6 +3486,7 @@ function gracefulShutdown() {
   poller.stop();
   hmipPoller.stop();
   meterConsumers.stop();
+  providerMeter.stop();
   for (const client of batteryMqtts.values()) client.stop();
   for (const client of accountPlugMqtts.values()) client.stop();
   for (const client of sitePlugMqtts.values()) client.stop();

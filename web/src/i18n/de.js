@@ -440,6 +440,16 @@ export const de = {
     offScaleTitle: "Eine kurze Spitze ist höher als die Skala dieser Ansicht — die Linie wird oben/unten abgeschnitten, damit die normale Schwankung lesbar bleibt.",
     hint: "ziehen zum Verschieben · scrollen zum Zoomen — jedes Diagramm hat sein eigenes Fenster",
   },
+  provider: {
+    title: "Versorgerzähler",
+    official: "offizieller Netzzähler",
+    sourceLabel: "Leistungsquelle",
+    source: { meter: "Zähler", derived: "abgeleitet", unavailable: "warte auf Zählerdifferenz" },
+    tracked: "seit Tracking",
+    accuracy: "Zählervergleich",
+    accuracySub: "Versorger vs. Smart Meter Gen 2",
+    windows: { "1h": "1 h", "24h": "24 h", tracked: "seit Tracking" },
+  },
   welcome: {
     loadError: "Willkommen — {error}",
     preparing: "Dein Briefing wird vorbereitet…",

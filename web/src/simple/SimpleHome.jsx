@@ -12,6 +12,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
 import PvStrings from "./PvStrings.jsx";
+import ProviderMeterSimple from "../provider/ProviderMeterSimple.jsx";
 import ConsumersSection from "./ConsumersSection.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import Hint from "../components/Hint.jsx";
@@ -456,6 +457,7 @@ export default function SimpleHome() {
       <SectionTitle>{t("simple.charts")}</SectionTitle>
       <SimpleCharts />
       <PvStrings flow={flow} />
+      <ProviderMeterSimple />
       {overview?.byPeriod?.today && (
         <>
           <SectionTitle>{t("simple.periods")}</SectionTitle>

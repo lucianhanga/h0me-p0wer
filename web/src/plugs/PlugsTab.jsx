@@ -120,7 +120,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -145,6 +145,14 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     // any cached copy instantly and this always fetches fresh to replace
     // it. Zoom/pan and live deltas stay uncached.
     async function fetchRows(fromMs, toMs, extra, { spanCache = false } = {}) {
+      if (provider) {
+        const url = `/api/provider-meter/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}`;
+        const pr = await fetchOnce(url).catch(() => null);
+        if (!pr?.ok) return null;
+        const result = { bucketMs: pr.bucketMs, data: pr.data.map((r) => [r.t, r.power ?? null]) };
+        if (spanCache) writeCached(url, result);
+        return result;
+      }
       // sn= (2026-10-12 Consume-slowness fix): the server then reads only
       // this plug's rows via the (sn, ts) index instead of full-scanning
       // plug_samples for every card. The Rest card stays unfiltered — it
@@ -237,9 +245,10 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       // (stale-while-revalidate — the live appender covers the gap between
       // the cached window's end and now within seconds).
       if (opts.spanCache) {
-        const snParam = isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
+        const snParam = provider ? "" : isRest ? "" : `&sn=${encodeURIComponent(sn)}`;
+        const baseUrl = provider ? "/api/provider-meter/timeseries" : "/api/plugs/timeseries";
         const hit = readCached(
-          `/api/plugs/timeseries?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`,
+          `${baseUrl}?from=${Math.round(fromMs)}&to=${Math.round(toMs)}&${extra}${snParam}`,
         );
         if (hit) {
           rows = hit.data;
@@ -349,7 +358,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       chart.dispose();
       apiRef.current = null;
     };
-  }, [cardKey, sn, isRest, color]);
+  }, [cardKey, sn, isRest, color, provider]);
 
   const displayWatts = isRest ? restWatts : watts;
   const cardBody = (
@@ -363,7 +372,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           <span className="plug-watts">
             {offline ? t("plugs.offline") : displayWatts != null ? `${Math.round(displayWatts)} W` : "—"}
           </span>
-          {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {t("plugs.today")}</span>}
+          {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {energyLabel ?? t("plugs.today")}</span>}
         </div>
       </div>
       {/* Span buttons + chart must not toggle the aggregate flip
@@ -440,6 +449,34 @@ function AggregateBack({ activeSpanMs, visible, membersUrl, t }) {
   );
 }
 
+function ProviderAccuracyCard({ accuracy, t }) {
+  const rows = (accuracy ?? []).filter((r) => r.available);
+  if (!rows.length) return null;
+  return (
+    <div className="card plug-card provider-accuracy">
+      <div className="plug-card-head">
+        <div className="plug-card-title">
+          <span className="plug-name">{t("provider.accuracy")}</span>
+          <span className="plug-sub">{t("provider.accuracySub")}</span>
+        </div>
+      </div>
+      <div className="src-rows">
+        {rows.map((r) => (
+          <div className="src-row" key={r.key}>
+            <span className="src-label">{t(`provider.windows.${r.key}`)}</span>
+            <span className="src-value">
+              <span className="muted">{r.providerImportKwh.toFixed(3)} / {r.gen2ImportKwh.toFixed(3)} kWh</span>
+              <span className={r.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
+                {r.deviationKwh >= 0 ? "+" : ""}{r.deviationKwh.toFixed(3)} kWh · {r.deviationPct != null ? `${r.deviationPct >= 0 ? "+" : ""}${r.deviationPct}%` : "—"}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function PlugsTab() {
   const t = useT();
   const { data: live, error } = usePolledResource("/api/plugs", {
@@ -451,6 +488,16 @@ export default function PlugsTab() {
     intervalMs: 60000,
     keepLastGoodOnError: true,
     cacheTtlMs: 2 * 60 * 1000,
+  });
+  const { data: provider } = usePolledResource("/api/provider-meter", {
+    intervalMs: 10000,
+    keepLastGoodOnError: true,
+    cacheTtlMs: 10000,
+  });
+  const { data: accuracy } = usePolledResource("/api/provider-meter/accuracy", {
+    intervalMs: 60000,
+    keepLastGoodOnError: true,
+    cacheTtlMs: 60000,
   });
 
   if (error && !live) return <p className="error">{String(error)}</p>;
@@ -479,6 +526,21 @@ export default function PlugsTab() {
             t={t}
           />
         ))}
+        {provider?.available && (
+          <PlugCard
+            cardKey="provider-meter"
+            sn="provider-meter"
+            provider={true}
+            title={t("provider.title")}
+            subtitle={`${t("provider.official")} · ${provider.importKwh.toFixed(3)} kWh · ${t(`provider.source.${provider.powerSource}`)}`}
+            color="#6bb8f5"
+            watts={provider.powerW}
+            todayKwh={provider.todayImportKwh ?? provider.trackedImportKwh}
+            energyLabel={provider.todayImportKwh != null ? t("plugs.today") : t("provider.tracked")}
+            offline={false}
+            t={t}
+          />
+        )}
         <PlugCard
           cardKey="rest"
           isRest={true}
@@ -490,6 +552,7 @@ export default function PlugsTab() {
           offline={false}
           t={t}
         />
+        <ProviderAccuracyCard accuracy={accuracy} t={t} />
       </div>
       <p className="plug-note">{t("plugs.note")}</p>
     </section>
