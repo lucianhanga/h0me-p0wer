@@ -26,6 +26,7 @@ import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
 import { MeterConsumers } from "./meter-consumers.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
+import { estimatedAvgWattsForSpan, estimatedCategories, estimatedKwhForSpan, findEstimatedConsumer } from "./estimated-consumers.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { getPvForecast } from "./pv-forecast.js";
 import { pvPotentialWPerKwp, refreshPvPotential } from "./pv-potential.js";
@@ -1416,6 +1417,11 @@ app.get("/api/plugs", (req, res) => {
     if (!ms.length) continue;
     todayKwh[g.sn] = Math.round(ms.reduce((a, m) => a + (todayKwh[m.sn] ?? 0), 0) * 100) / 100;
   }
+  const estimated = estimatedCategories();
+  for (const c of estimated) {
+    todayKwh[c.sn] = Math.round(estimatedKwhForSpan(c, dayStart.getTime(), Date.now()) * 100) / 100;
+  }
+  ensurePlugColors(estimated.map((c) => c.sn));
   const colorIdx = getPlugColorIdx();
   res.json({
     ok: true,
@@ -1427,6 +1433,28 @@ app.get("/api/plugs", (req, res) => {
       // todayKwh above is the per-plug daily figure every surface uses.
     },
   });
+});
+
+app.get("/api/estimated-consumers/:category/members", (req, res) => {
+  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
+  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  if (!(from < to)) {
+    return res.status(400).json({ ok: false, error: "from must be before to" });
+  }
+  const wanted = decodeURIComponent(req.params.category);
+  const category = estimatedCategories().find((c) => c.name === wanted || c.sn === wanted);
+  if (!category) return res.status(404).json({ ok: false, error: "unknown estimated consumer category" });
+  const devices = category.members
+    .map((m) => ({
+      sn: m.sn,
+      name: m.name,
+      room: `${m.count} × ${m.averageWatts} W`,
+      wattsNow: m.watts,
+      staleS: null,
+      kwh: estimatedKwhForSpan(m, from, to),
+    }))
+    .sort((a, b) => b.kwh - a.kwh);
+  res.json({ ok: true, data: { from, to, devices } });
 });
 
 // HmIP aggregate flip face (2026-10-12, user request): the sub-consumers
@@ -1551,8 +1579,12 @@ app.get("/api/plugs/timeseries", (req, res) => {
   // members are site plugs sampled together; a missing member row means
   // offline, i.e. 0 W).
   const onlyGroup = onlySn ? plugGroupForSn(onlySn) : null;
+  const onlyEstimated = onlySn ? findEstimatedConsumer(onlySn) : null;
+  if (onlyEstimated) sns.add(onlyEstimated.sn);
   let bucketed;
-  if (onlyGroup) {
+  if (onlyEstimated) {
+    bucketed = [];
+  } else if (onlyGroup) {
     const sums = new Map(); // bt -> w
     for (const m of plugGroupMembers(onlyGroup.sn)) {
       for (const r of getPlugSamplesBucketedForSn(m.sn, from, to, bucketMs)) {
@@ -1579,12 +1611,17 @@ app.get("/api/plugs/timeseries", (req, res) => {
     if (!acc.has(r.bt)) acc.set(r.bt, new Map());
     acc.get(r.bt).set(rSn, Math.round(r.w));
   }
+  const estimated = onlyEstimated ? [onlyEstimated] : estimatedCategories();
+  const estimatedBySn = new Map(estimated.map((c) => [c.sn, c]));
   const rows = [];
   for (let bt = Math.floor(from / bucketMs) * bucketMs; bt < to; bt += bucketMs) {
     const row = { t: bt };
     const m = acc.get(bt);
     for (const sn of sns) {
-      row[`plug__${sn}`] = m?.get(sn) ?? null;
+      const estimatedConsumer = estimatedBySn.get(sn);
+      row[`plug__${sn}`] = estimatedConsumer
+        ? Math.round(estimatedAvgWattsForSpan(estimatedConsumer, bt, Math.min(bt + bucketMs, to)) * 100) / 100
+        : (m?.get(sn) ?? null);
     }
     rows.push(row);
   }
@@ -2815,6 +2852,17 @@ function mergedPlugs() {
     ...applyPlugGroups(ungroupedPlugs()).display,
     ...(hmip ? [hmip] : []),
     ...meterConsumers.getStates(),
+    ...estimatedCategories().map((c) => ({
+      sn: c.sn,
+      name: c.name,
+      tag: "Estimate",
+      typeTag: "Estimate",
+      watts: c.watts,
+      online: true,
+      ts: Date.now(),
+      external: true,
+      membersUrl: `/api/estimated-consumers/${encodeURIComponent(c.name)}/members`,
+    })),
   ];
 }
 
