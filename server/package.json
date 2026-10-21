@@ -12,7 +12,7 @@
     "dev": "node --watch index.js"
   },
   "dependencies": {
-    "dotenv": "^18.0.6",
+    "dotenv": "^18.0.8",
     "express": "^5.2.1",
     "modbus-serial": "^8.0.17",
     "mqtt": "^5.16.1",
