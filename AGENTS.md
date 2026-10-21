@@ -199,7 +199,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-21, v1.5.310, `main`.** Production deploys are the user's own
+**As of 2026-10-22, v1.5.311, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a

@@ -480,7 +480,7 @@ export function registerStatsRoute(app, deps) {
         ),
         exportKwh: r2(
           yearRows.reduce(
-            (a, r) => a + r2(monthKwh(r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh ?? 0), 0)),
+            (a, r) => a + r2(monthRowsFor(meterSns, r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh ?? 0), 0)),
             0,
           ),
         ),
