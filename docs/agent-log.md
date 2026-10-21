@@ -7478,3 +7478,11 @@ Root causes, all proven against production data:
   and consumersRestToday exactly equal to the web Consume breakdown.
 - Verified against the live stats endpoint: 18 consumers, rest 0.3 kWh;
   Garmin's flat optional-field contract remains backward compatible.
+
+## Dependency maintenance batch (2026-10-21, user request — fix all Dependabot issues)
+
+- Merged all five open Dependabot PRs: concurrently 10.0.6, react 19.3.1,
+  react-dom 19.3.1, mqtt 5.16.1, dotenv 18.0.8. react-dom and dotenv needed
+  Dependabot rebases after their paired PRs landed; every final CI run passed.
+- npm run setup + full Vite build pass with 0 vulnerabilities. Open PRs and
+  unmerged branches are now empty; local has only main.
