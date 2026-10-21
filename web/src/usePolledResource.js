@@ -38,22 +38,21 @@ export function usePolledResource(
   const hasData = useRef(false);
 
   // cacheTtlMs (2026-10-12, user request — "cache everything in the
-  // browser, also the consume values"): serve the localStorage history
-  // cache when a fresh-enough entry exists, and write every successful
-  // fetch back. For data that changes on the server's own cadence
-  // (cloud syncs every 15 min, 30 s hmip polls) — staleness is bounded
-  // by the TTL, network churn drops to zero on re-renders/re-mounts.
+  // browser, also the consume values"): fresh entries skip the request;
+  // stale entries render immediately while the fresh fetch replaces them
+  // (stale-while-revalidate), and every successful fetch is written back.
   const load = useCallback(() => {
     if (!enabled || !url) return Promise.resolve();
     if (cacheTtlMs) {
-      const hit = readCached(url, cacheTtlMs);
+      const fresh = readCached(url, cacheTtlMs);
+      const hit = fresh ?? readCached(url);
       if (hit) {
         if (!mounted.current) return Promise.resolve();
         setData(envelope ? hit.data : hit);
         hasData.current = true;
         setError(null);
         setLoading(false);
-        return Promise.resolve();
+        if (fresh) return Promise.resolve();
       }
     }
     return fetch(url)

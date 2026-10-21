@@ -207,11 +207,9 @@ export default function ConsumersPeriodCard({ type, title }) {
         const hit = readCached(url);
         if (hit?.ok) return hit.data;
       } else {
-        // Current period (2026-10-12, user request — "cache the consume
-        // values"): today's/yesterday's rows still get rewritten by the
-        // 15-min cloud sync, so a forever-cache would go stale — but a
-        // 2-min TTL kills the refetch storm when flipping faces,
-        // re-mounting tiles, or tab-hopping.
+        // Current period: fresh cache (<2 min) skips the request; older
+        // cache is rendered by the initial effect while this fetch refreshes
+        // it (stale-while-revalidate).
         const hit = readCached(url, 2 * 60 * 1000);
         if (hit?.ok) return hit.data;
       }
@@ -227,6 +225,11 @@ export default function ConsumersPeriodCard({ type, title }) {
   // Initial load + 60 s refresh of the live (offset 0) period.
   useEffect(() => {
     let cancelled = false;
+    const cached = readCached(`/api/stats/consumers?type=${type}&offset=0`);
+    if (cached?.ok) {
+      setCurrent(cached.data);
+      setBlocked(!cached.data.hasEarlier);
+    }
     const tick = async () => {
       const d = await load(0);
       if (!cancelled && d) {
