@@ -3625,6 +3625,90 @@ pre {
   font-variant-numeric: tabular-nums;
 }
 
+.provider-advanced-reading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 0.75rem;
+  margin: 0.45rem 0 0.15rem;
+  padding: 0.55rem 0.65rem;
+  background: #141a20;
+  border: 1px solid #2a323866;
+  border-radius: 6px;
+}
+
+.provider-advanced-reading span,
+.provider-odometer span,
+.provider-metric span {
+  display: block;
+  color: #8b98a5;
+  font-size: 0.72rem;
+}
+
+.provider-advanced-reading strong {
+  color: #e8ecef;
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.provider-advanced-reading small {
+  color: #8b98a5;
+  white-space: nowrap;
+}
+
+.provider-meter-simple {
+  padding: 1rem 1.25rem;
+  margin: 0.75rem 0;
+}
+
+.provider-simple-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.provider-odometer {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.provider-odometer strong {
+  display: block;
+  color: #e8ecef;
+  font-size: 1.45rem;
+  font-weight: 650;
+}
+
+.provider-simple-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+.provider-metric {
+  min-width: 0;
+  padding: 0.7rem 0.75rem;
+  background: #141a20;
+  border: 1px solid #2a323866;
+  border-radius: 6px;
+}
+
+.provider-metric strong {
+  display: block;
+  margin-top: 0.2rem;
+  color: #e8ecef;
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.provider-metric small {
+  display: block;
+  margin-top: 0.2rem;
+  color: #8b98a5;
+}
+
 .plug-chart {
   height: 140px;
   margin-top: 0.25rem;
@@ -3642,6 +3726,20 @@ pre {
 @media (max-width: 600px) {
   .plug-cards {
     grid-template-columns: 1fr;
+  }
+
+  .provider-simple-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-simple-head,
+  .provider-advanced-reading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .provider-odometer {
+    text-align: left;
   }
 }
 

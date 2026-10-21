@@ -16,34 +16,35 @@ export default function ProviderMeterSimple() {
   if (!provider?.available) return null;
   const check = (accuracy ?? []).find((r) => r.available && r.key === "24h") ?? (accuracy ?? []).find((r) => r.available);
   return (
-    <div className="card plug-card provider-meter-simple">
-      <div className="plug-card-head">
+    <div className="card provider-meter-simple">
+      <div className="provider-simple-head">
         <div className="plug-card-title">
           <span className="plug-name">{t("provider.title")}</span>
           <span className="plug-sub">{t("provider.official")}</span>
         </div>
-        <div className="plug-card-stats">
-          <span className="plug-watts">
-            {provider.powerW != null ? `${Math.round(provider.powerW)} W` : "—"}
-          </span>
-          <span className="plug-kwh">{provider.importKwh.toFixed(3)} kWh</span>
+        <div className="provider-odometer">
+          <span>{t("provider.meterReading")}</span>
+          <strong>{provider.importKwh.toFixed(3)} kWh</strong>
         </div>
       </div>
-      <div className="src-rows">
-        <div className="src-row">
-          <span className="src-label">{t("provider.sourceLabel")}</span>
-          <span className="src-value muted">{t(`provider.source.${provider.powerSource}`)}</span>
+      <div className="provider-simple-metrics">
+        <div className="provider-metric">
+          <span>{t("provider.power")}</span>
+          <strong>{provider.powerW != null ? `${Math.round(provider.powerW)} W` : "—"}</strong>
+          <small>{t(`provider.source.${provider.powerSource}`)}</small>
         </div>
-        <div className="src-row">
-          <span className="src-label">{t("provider.tracked")}</span>
-          <span className="src-value">{provider.trackedImportKwh.toFixed(3)} kWh</span>
+        <div className="provider-metric">
+          <span>{t("provider.tracked")}</span>
+          <strong>{provider.trackedImportKwh.toFixed(3)} kWh</strong>
+          <small>{t("provider.sinceTracking")}</small>
         </div>
         {check && (
-          <div className="src-row">
-            <span className="src-label">{t("provider.accuracy")}</span>
-            <span className="src-value">
-              {check.deviationKwh >= 0 ? "+" : ""}{check.deviationKwh.toFixed(3)} kWh · {check.deviationPct != null ? `${check.deviationPct >= 0 ? "+" : ""}${check.deviationPct}%` : "—"}
-            </span>
+          <div className="provider-metric">
+            <span>{t("provider.accuracy")}</span>
+            <strong className={check.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
+              {check.deviationKwh >= 0 ? "+" : ""}{check.deviationKwh.toFixed(3)} kWh
+            </strong>
+            <small>{check.deviationPct != null ? `${check.deviationPct >= 0 ? "+" : ""}${check.deviationPct}%` : "—"}</small>
           </div>
         )}
       </div>
