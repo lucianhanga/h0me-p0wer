@@ -4,6 +4,7 @@ import QuadFlipTile from "./QuadFlipTile.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { readCached, writeCached, periodImmutable } from "../historyCache.js";
 import { plugColor, REST_COLOR } from "../plugs/PlugsTab.jsx";
+import { consumerListRows } from "./consumerRows.js";
 import { PERIOD_FORMAT } from "../dashboard/periodFormats.js";
 
 // Per-period consumer breakdown tile (2026-10-07, user request) — shared by
@@ -148,18 +149,9 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
 }
 
 export function ListFace({ data, t }) {
-  // Biggest consumer first (2026-10-10, user request); rest of home stays
-  // pinned after the consumers, whole-house total remains the footer.
-  const rows = [...data.plugs]
-    .sort((a, b) => (b.kwh ?? 0) - (a.kwh ?? 0))
-    .map((p) => ({
-      key: p.sn,
-      label: p.name,
-      color: plugColor(p, 0),
-      kwh: p.kwh,
-    }));
-  // Rest row pinned last of the consumers, then the whole-house total.
-  rows.push({ key: "rest", label: t("plugs.rest"), color: REST_COLOR, kwh: data.restKwh });
+  // Biggest consumer first (2026-10-10, user request); colors stay attached
+  // to the ring/bar order, not the sorted list order. Rest stays last.
+  const rows = consumerListRows(data, t("plugs.rest"), plugColor, REST_COLOR);
   return (
     <div className="src-card-body consumers-ring-back">
       <div className="src-rows">
