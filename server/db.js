@@ -1337,3 +1337,75 @@ export function getAllPlugNames() {
   }
   return names;
 }
+
+// --- Provider's official meter (BitShake/Tasmota StatusSNS) ----------------
+// Independent from Anker's Smart Meter Gen 2 so the two can be compared.
+// Never joins the consumer/rest calculations: this is whole-house import.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS provider_meter_samples (
+    ts INTEGER PRIMARY KEY,
+    import_kwh REAL NOT NULL,
+    export_kwh REAL NOT NULL,
+    reported_power_w REAL,
+    derived_power_w REAL,
+    power_source TEXT NOT NULL,
+    meter_number TEXT
+  )
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_provider_meter_ts ON provider_meter_samples(ts)`);
+
+const insertProviderMeter = db.prepare(`
+  INSERT OR REPLACE INTO provider_meter_samples
+  (ts, import_kwh, export_kwh, reported_power_w, derived_power_w, power_source, meter_number)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
+const selectProviderMeterRows = db.prepare(`
+  SELECT * FROM provider_meter_samples WHERE ts >= ? AND ts <= ? ORDER BY ts ASC
+`);
+const selectProviderMeterLatest = db.prepare(`
+  SELECT * FROM provider_meter_samples ORDER BY ts DESC LIMIT 1
+`);
+const selectProviderMeterFirst = db.prepare(`
+  SELECT * FROM provider_meter_samples ORDER BY ts ASC LIMIT 1
+`);
+const pruneProviderMeterStmt = db.prepare(`DELETE FROM provider_meter_samples WHERE ts < ?`);
+
+export function saveProviderMeterSample(sample) {
+  insertProviderMeter.run(
+    sample.ts,
+    sample.importKwh,
+    sample.exportKwh,
+    sample.reportedPowerW,
+    sample.derivedPowerW,
+    sample.powerSource,
+    sample.meterNumber,
+  );
+}
+
+const providerRow = (r) => ({
+  ts: r.ts,
+  importKwh: r.import_kwh,
+  exportKwh: r.export_kwh,
+  reportedPowerW: r.reported_power_w,
+  derivedPowerW: r.derived_power_w,
+  powerSource: r.power_source,
+  meterNumber: r.meter_number,
+});
+
+export function getProviderMeterSamples(fromMs, toMs) {
+  return selectProviderMeterRows.all(fromMs, toMs).map(providerRow);
+}
+
+export function getLatestProviderMeterSample() {
+  const r = selectProviderMeterLatest.get();
+  return r ? providerRow(r) : null;
+}
+
+export function getFirstProviderMeterSample() {
+  const r = selectProviderMeterFirst.get();
+  return r ? providerRow(r) : null;
+}
+
+export function pruneProviderMeterSamples() {
+  pruneProviderMeterStmt.run(Date.now() - 7 * 86400000);
+}

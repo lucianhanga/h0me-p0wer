@@ -436,6 +436,16 @@ export const ro = {
     offScaleTitle: "Un vârf scurt depășește scala acestei vizualizări — linia este tăiată sus/jos pentru ca variația normală să rămână lizibilă.",
     hint: "trage pentru a deplasa · derulează pentru zoom — fiecare grafic are propria fereastră",
   },
+  provider: {
+    title: "Contor furnizor",
+    official: "contor oficial de rețea",
+    sourceLabel: "Sursa puterii",
+    source: { meter: "contor", derived: "derivat", unavailable: "aștept delta contor" },
+    tracked: "de la urmărire",
+    accuracy: "Comparație contoare",
+    accuracySub: "furnizor vs Smart Meter Gen 2",
+    windows: { "1h": "1 h", "24h": "24 h", tracked: "de la urmărire" },
+  },
   welcome: {
     loadError: "Bun venit — {error}",
     preparing: "Se pregătește briefingul…",

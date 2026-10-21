@@ -7414,3 +7414,25 @@ Root causes, all proven against production data:
   checkpointed backup /data/data.db.backup-control-20261021171010. The plug
   remains connected in Anker, so it will collect new rows unless removed there
   or ignored in config later.
+
+## Provider's official meter + Gen 2 accuracy check (2026-10-21, user request)
+
+- BitShake/Tasmota endpoint: PROVIDER_METER_URL points at
+  /cm?cmnd=Status%208. server/provider-meter.js polls every 10 s and stores
+  provider_meter_samples (7 d): import/export kWh, reported Power, derived
+  power, source, meter number. Independent of consumers/Rest by design.
+- Until the E220's PIN-locked extended dataset reports nonzero Power, watts
+  derive from the monotonic ImportActive delta over ~60 s (1 Wh resolution;
+  0 W while the official import counter is flat). Any nonzero reported Power
+  (including export-sign) wins and is marked "meter".
+- /api/provider-meter, /timeseries, /accuracy. Accuracy compares matching
+  provider counter deltas with the CANONICAL Gen 2 snapshot trapezoid moved
+  to server/energy-grid.js (welcome-ai shares it): 1h/24h/tracked windows,
+  deviation kWh + %.
+- UI: advanced Consume gets a separate Provider meter card (odometer, source,
+  tracked/today kWh, power chart) + Meter check card; simple view gets a
+  compact Provider meter summary. PROVIDER_METER_URL documented in
+  .env.example; no Rest-of-home subtraction.
+- Verified red/green parse/derive/accuracy math, live BitShake (9655.000 kWh,
+  derived 0 W while import is flat), browser simple+advanced cards, and Vite
+  build.

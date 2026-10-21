@@ -423,6 +423,16 @@ export const en = {
     offScaleTitle: "A brief spike is taller than this view's scale — the line is clipped at the top/bottom so normal variation stays readable.",
     hint: "drag to pan · scroll to zoom — each graph has its own window",
   },
+  provider: {
+    title: "Provider meter",
+    official: "official grid meter",
+    sourceLabel: "Power source",
+    source: { meter: "meter", derived: "derived", unavailable: "waiting for counter delta" },
+    tracked: "tracked",
+    accuracy: "Meter check",
+    accuracySub: "provider vs Smart Meter Gen 2",
+    windows: { "1h": "1 h", "24h": "24 h", tracked: "tracked" },
+  },
   welcome: {
     loadError: "Welcome — {error}",
     preparing: "Preparing your briefing…",

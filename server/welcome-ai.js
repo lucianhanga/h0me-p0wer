@@ -4,13 +4,13 @@
 // them.
 import {
   getCloudTrend, getCloudTrendMulti,
-  getSnapshotRows,
   getFirstBatteryAfter,
   getBatteryHistory,
   integrateBatteryEnergy,
   getCloudPvDayPower,
   sumCloudEnergyInGaps,
 } from "./db.js";
+import { integrateGridImportKwh } from "./energy-grid.js";
 import { localDate, LANG_NAMES } from "./welcome-sources.js";
 import { deriveBatteryFlow } from "./battery-params.js";
 
@@ -37,22 +37,6 @@ function dailyImportRows(sn, monthsBack = 2) {
     }
   }
   return rows;
-}
-
-// Trapezoid-integrate real grid import (kWh) over [startMs, endMs] from 5 s
-// local snapshots — shared so "so far" (until now) and "until sunrise"
-// (2026-09-19, user request: "How the day started" showed grid import SO
-// FAR, i.e. until now, not bounded to sunrise as the card's name implies)
-// can't compute this two different ways.
-function integrateGridImportKwh(startMs, endMs) {
-  const rows = getSnapshotRows(startMs, endMs).filter((r) => r.grid_total != null);
-  let kwh = 0;
-  for (let i = 1; i < rows.length; i++) {
-    const dtH = (rows[i].ts - rows[i - 1].ts) / 3600000;
-    if (dtH > 0.25) continue;
-    kwh += (((Math.max(rows[i - 1].grid_total, 0) + Math.max(rows[i].grid_total, 0)) / 2) * dtH) / 1000;
-  }
-  return round1(kwh);
 }
 
 // Trapezoid-integrate real battery CELLS discharge (kWh, i.e. energy the
