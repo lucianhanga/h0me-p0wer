@@ -1,6 +1,6 @@
 const DEFAULT_CONSUMERS = [
-  { name: "FritzPoE", count: 5, averageWatts: 10, category: "routers" },
-  { name: "Netgear Orbi", count: 2, averageWatts: 20, category: "routers" },
+  { name: "FritzPoE", count: 5, averageWatts: 10, category: "routers", since: "2026-10-21" },
+  { name: "Netgear Orbi", count: 2, averageWatts: 20, category: "routers", since: "2026-10-21" },
 ];
 
 function slug(value) {

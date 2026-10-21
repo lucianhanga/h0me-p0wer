@@ -7445,3 +7445,15 @@ Root causes, all proven against production data:
 - Advanced Consume: the Provider chart card now shows a dedicated prominent
   meter-reading block above its span buttons/chart (9655.000 kWh + source),
   not only a small subtitle.
+
+## Consume colors + estimated-router start date (2026-10-21, user report)
+
+- Consumers list face sorted by kWh before assigning fallback colors, so the
+  list could disagree with ring/bars. consumerListRows() now maps colors in
+  the original ring/bar order first, then sorts rows.
+- Routers were estimated for the WHOLE year (634.67 kWh) because the default
+  config had no since and year home history is incomplete (rest collapsed to
+  0). Defaults and production ESTIMATED_CONSUMERS_JSON now start both entries
+  at 2026-10-21; year routers drop to 1.88 kWh (0.7%) and rest recovers.
+- Production backup: .env.backup-estimated-since-20261021-205536; container
+  recreated and verified 90 W with since on both members.
