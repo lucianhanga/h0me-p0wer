@@ -20,7 +20,9 @@ import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
 import { trackVisitor, activeVisitorCount, touchVisitor, visitorKeyFromUpgradeRequest } from "./visitors.js";
 import { pvKwhForDay } from "./welcome-ai.js";
-import { parseWelcomeConfig, geocode, fetchHourlyTemperatures } from "./welcome-sources.js";
+import { parseWelcomeConfig, geocode, fetchHourlyTemperatures, localDate } from "./welcome-sources.js";
+import { parseSpan } from "./http-span.js";
+import { respondMembers } from "./member-routes.js";
 import { PowerPlanController } from "./power-plan.js";
 import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
@@ -117,14 +119,6 @@ const METER_PORT = Number(process.env.METER_PORT ?? 502);
 
 const SERVER_DIR = path.dirname(fileURLToPath(import.meta.url));
 const WEB_DIST = path.join(SERVER_DIR, "..", "web", "dist");
-
-// Cloud period dates are interpreted by Anker as ACCOUNT-LOCAL days, so they
-// must come from local components — toISOString() is UTC and shifts the day
-// for the first 1–2 h after local midnight.
-export function localDate(d = new Date()) {
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 const poller = new MeterPoller(METER_IP, METER_PORT, {
   // POLL_INTERVAL_MS: poll cadence (default 1000 — the AE1X0's registers
@@ -761,12 +755,10 @@ app.get("/api/timeseries", (req, res) => {
   });
 });
 async function timeseriesInner(req, res) {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
   // Round the bucket up to a whole poll-interval step; never finer than the
   // actual sampling rate. `view` (ms) is the VISIBLE window: buckets are
   // sized for it even when the fetched range is padded wider.
@@ -1442,9 +1434,9 @@ app.get("/api/provider-meter", (req, res) => {
 });
 
 app.get("/api/provider-meter/timeseries", (req, res) => {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) return res.status(400).json({ ok: false, error: "from must be before to" });
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const viewMs = Math.max(Number(req.query.view ?? 0) || to - from, 1000);
   const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
   const requestedBucketMs = Number(req.query.bucket ?? 0);
@@ -1459,25 +1451,21 @@ app.get("/api/provider-meter/accuracy", (req, res) => {
 });
 
 app.get("/api/estimated-consumers/:category/members", (req, res) => {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const wanted = decodeURIComponent(req.params.category);
   const category = estimatedCategories().find((c) => c.name === wanted || c.sn === wanted);
   if (!category) return res.status(404).json({ ok: false, error: "unknown estimated consumer category" });
-  const devices = category.members
-    .map((m) => ({
-      sn: m.sn,
-      name: m.name,
-      room: `${m.count} × ${m.averageWatts} W`,
-      wattsNow: m.watts,
-      staleS: null,
-      kwh: estimatedKwhForSpan(m, from, to),
-    }))
-    .sort((a, b) => b.kwh - a.kwh);
-  res.json({ ok: true, data: { from, to, devices } });
+  const devices = category.members.map((m) => ({
+    sn: m.sn,
+    name: m.name,
+    room: `${m.count} × ${m.averageWatts} W`,
+    wattsNow: m.watts,
+    staleS: null,
+    kwh: estimatedKwhForSpan(m, from, to),
+  }));
+  respondMembers(res, from, to, devices);
 });
 
 // HmIP aggregate flip face (2026-10-12, user request): the sub-consumers
@@ -1485,11 +1473,9 @@ app.get("/api/estimated-consumers/:category/members", (req, res) => {
 // watts from the poller's last poll, period kWh integrated from their
 // per-device plug_samples (same trapezoid as plugDayKwhFromSamples).
 app.get("/api/hmip/devices", (req, res) => {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const devices = hmipPoller.getDevices().map((d) => ({
     sn: d.sn,
     name: d.name,
@@ -1498,8 +1484,7 @@ app.get("/api/hmip/devices", (req, res) => {
     staleS: d.staleS,
     kwh: plugDayKwhFromSamples(d.sn, from, to),
   }));
-  devices.sort((a, b) => b.kwh - a.kwh);
-  res.json({ ok: true, data: { from, to, devices } });
+  respondMembers(res, from, to, devices);
 });
 
 // Named-group flip face (2026-10-16, user request — "cooking" aggregated
@@ -1510,11 +1495,9 @@ app.get("/api/hmip/devices", (req, res) => {
 app.get("/api/plugs/group/:sn/members", (req, res) => {
   const group = plugGroupForSn(req.params.sn);
   if (!group) return res.status(404).json({ ok: false, error: "unknown group" });
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const devices = plugGroupMembers(group.sn).map((p) => ({
     sn: p.sn,
     name: p.name,
@@ -1523,8 +1506,7 @@ app.get("/api/plugs/group/:sn/members", (req, res) => {
     staleS: null,
     kwh: memberSpanKwh(p.sn, from, to),
   }));
-  devices.sort((a, b) => b.kwh - a.kwh);
-  res.json({ ok: true, data: { from, to, devices } });
+  respondMembers(res, from, to, devices);
 });
 
 const PLUG_SAMPLE_RETENTION_MS = 7 * 86400000; // matches prunePlugSamples
@@ -1548,11 +1530,9 @@ function memberSpanKwh(sn, from, to) {
 // L2 (underfloor) and L3 (district heat) with live watts + span kWh from
 // their per-phase plug_samples (same trapezoid integration as house light).
 app.get("/api/meter-multi/members", (req, res) => {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const devices = meterConsumers.getMemberStates().map((m) => ({
     sn: m.sn,
     name: m.name,
@@ -1561,8 +1541,7 @@ app.get("/api/meter-multi/members", (req, res) => {
     staleS: null,
     kwh: plugDayKwhFromSamples(m.sn, from, to),
   }));
-  devices.sort((a, b) => b.kwh - a.kwh);
-  res.json({ ok: true, data: { from, to, devices } });
+  respondMembers(res, from, to, devices);
 });
 
 // Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
@@ -1571,11 +1550,9 @@ app.get("/api/meter-multi/members", (req, res) => {
 // real. The frontend aligns these with /api/timeseries (same `bucket`
 // param) to derive "rest of home" = home − Σ plugs client-side.
 app.get("/api/plugs/timeseries", (req, res) => {
-  const to = Math.min(Number(req.query.to ?? Date.now()), Date.now());
-  const from = Number(req.query.from ?? to - 24 * 3600 * 1000);
-  if (!(from < to)) {
-    return res.status(400).json({ ok: false, error: "from must be before to" });
-  }
+  const span = parseSpan(req, res);
+  if (!span) return;
+  const { from, to } = span;
   const viewMs = Math.max(Number(req.query.view ?? 0) || to - from, 1000);
   const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
   const minBucketMs = poller.pollIntervalMs;
