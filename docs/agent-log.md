@@ -7398,3 +7398,19 @@ Root causes, all proven against production data:
 - Verified red/green parser/energy arithmetic, live API day/week/month/year
   totals, chart and member endpoints, and headless browser card + flipped
   member list with zero browser exceptions.
+
+## Rest-of-home header and Rest audit (2026-10-21, user requests)
+
+- Advanced Consume's Rest card no longer hardcodes both header values null:
+  live watts come from the latest value of the SAME derived Rest series the
+  chart draws; today's kWh comes from /api/stats/consumers?type=day&offset=0
+  (the SAME period identity used by the Consume totals, with browser SWR cache).
+- Rest-of-home audit: live /api/plugs/timeseries includes est-routers (90 W)
+  in the subtraction set and excludes hmip-*/meter-multi-l*/estimated member
+  keys (no double-count). Period identity verified exactly: home 6.52 kWh −
+  consumers 5.85 kWh = rest 0.67 kWh; routers contributed 1.73 kWh.
+- Production DB cleanup (explicit user request): removed control plug
+  AYTQNA0G22410842 — 570 plug_samples, 2 plug_daily rows, and its color slot;
+  checkpointed backup /data/data.db.backup-control-20261021171010. The plug
+  remains connected in Anker, so it will collect new rows unless removed there
+  or ignored in config later.
