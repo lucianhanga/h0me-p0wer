@@ -124,6 +124,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
+  const [restWatts, setRestWatts] = useState(null);
 
   useEffect(() => {
     // No width/height at init — the pinned-size rotation bug (2026-09-12).
@@ -220,6 +221,10 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       const bridged = bridgeGaps(rows);
       const nonNull = bridged.reduce((a, r) => a + (r[1] != null ? 1 : 0), 0);
       const sparse = bridged.length > 0 && nonNull / bridged.length < 0.5;
+      if (isRest) {
+        const latest = [...bridged].reverse().find((r) => r[1] != null);
+        setRestWatts(latest?.[1] ?? null);
+      }
       chart.setOption({ series: [{ data: bridged, showSymbol: sparse }] });
     }
 
@@ -346,6 +351,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
     };
   }, [cardKey, sn, isRest, color]);
 
+  const displayWatts = isRest ? restWatts : watts;
   const cardBody = (
     <div className={`card plug-card${offline ? " plug-offline" : ""}`}>
       <div className="plug-card-head">
@@ -355,7 +361,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
         </div>
         <div className="plug-card-stats">
           <span className="plug-watts">
-            {offline ? t("plugs.offline") : watts != null ? `${Math.round(watts)} W` : "—"}
+            {offline ? t("plugs.offline") : displayWatts != null ? `${Math.round(displayWatts)} W` : "—"}
           </span>
           {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {t("plugs.today")}</span>}
         </div>
@@ -441,6 +447,11 @@ export default function PlugsTab() {
     keepLastGoodOnError: true,
     cacheTtlMs: 3000,
   });
+  const { data: todayConsumers } = usePolledResource("/api/stats/consumers?type=day&offset=0", {
+    intervalMs: 60000,
+    keepLastGoodOnError: true,
+    cacheTtlMs: 2 * 60 * 1000,
+  });
 
   if (error && !live) return <p className="error">{String(error)}</p>;
   if (!live) return <p>{t("common.loading")}</p>;
@@ -475,7 +486,7 @@ export default function PlugsTab() {
           subtitle={t("plugs.restSub")}
           color={REST_COLOR}
           watts={null}
-          todayKwh={null}
+          todayKwh={todayConsumers?.restKwh}
           offline={false}
           t={t}
         />
