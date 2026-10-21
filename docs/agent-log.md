@@ -7523,5 +7523,13 @@ Root causes, all proven against production data:
   no token is configured). docker compose config validates.
 - README intro/tab tour refreshed for the dock-era system (Power Dock, SB4,
   SB2, 12×500 W PV, smart plugs, Consume/provider meter). AGENTS.md current
-  state moved to 2026-10-21/v1.5.310, Node 22+, completed watch WIP removed,
+  state moved to 2026-10-21/v1.5.311, Node 22+, completed watch WIP removed,
   and the stale esbuild allow-scripts note generalized.
+
+## Stats overview hotfix (2026-10-22, final cleanup audit catch)
+
+- Final Dashboard browser verification caught a PR 2 regression: one
+  year-overview reducer still called the removed monthKwh alias, returning
+  HTTP 500 from /api/stats/overview. Replaced it with monthRowsFor and
+  verified /api/stats/overview ok:true plus Dashboard cards render again.
+  v1.5.310 was therefore never tagged; release proceeds as v1.5.311.
