@@ -120,7 +120,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -375,6 +375,15 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           {todayKwh != null && <span className="plug-kwh">{todayKwh.toFixed(2)} kWh {energyLabel ?? t("plugs.today")}</span>}
         </div>
       </div>
+      {provider && meterReadingKwh != null && (
+        <div className="provider-advanced-reading">
+          <div>
+            <span>{meterReadingLabel}</span>
+            <strong>{meterReadingKwh.toFixed(3)} kWh</strong>
+          </div>
+          <small>{meterSourceLabel}</small>
+        </div>
+      )}
       {/* Span buttons + chart must not toggle the aggregate flip
           (2026-10-12): FlipTile flips on any inner click — only the header
           area is meant to flip. */}
@@ -532,11 +541,14 @@ export default function PlugsTab() {
             sn="provider-meter"
             provider={true}
             title={t("provider.title")}
-            subtitle={`${t("provider.official")} · ${provider.importKwh.toFixed(3)} kWh · ${t(`provider.source.${provider.powerSource}`)}`}
+            subtitle={t("provider.official")}
             color="#6bb8f5"
             watts={provider.powerW}
             todayKwh={provider.todayImportKwh ?? provider.trackedImportKwh}
             energyLabel={provider.todayImportKwh != null ? t("plugs.today") : t("provider.tracked")}
+            meterReadingKwh={provider.importKwh}
+            meterReadingLabel={t("provider.meterReading")}
+            meterSourceLabel={t(`provider.source.${provider.powerSource}`)}
             offline={false}
             t={t}
           />

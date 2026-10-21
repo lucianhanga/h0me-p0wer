@@ -7436,3 +7436,12 @@ Root causes, all proven against production data:
 - Verified red/green parse/derive/accuracy math, live BitShake (9655.000 kWh,
   derived 0 W while import is flat), browser simple+advanced cards, and Vite
   build.
+
+## Provider meter card layout (2026-10-21, user feedback — simple tile too tight, advanced meter value hard to find)
+
+- Simple view: ProviderMeterSimple now has a dedicated spacious card — large
+  odometer reading plus three metric boxes (power+source, tracked energy,
+  accuracy) instead of compact plug rows; phone stacks them.
+- Advanced Consume: the Provider chart card now shows a dedicated prominent
+  meter-reading block above its span buttons/chart (9655.000 kWh + source),
+  not only a small subtitle.
