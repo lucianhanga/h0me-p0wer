@@ -1,9 +1,11 @@
 # h0me-p0wer
 
-Home-energy dashboard **and controller** for the **Anker SOLIX** balcony
-setup: Smart Meter Gen 2 (AE1X0, local Modbus TCP) + Solarbank 2 E1600 Plus
-battery + 2×500 W PV — live monitoring, history, AI briefings, ROI tracking,
-and its own PV-aware power plan that drives the battery's output preset.
+Home-energy dashboard **and controller** for an **Anker SOLIX** home setup:
+Power Dock AE100 with Solarbank 4 E5000 Pro and Solarbank 2 E1600 Pro
+(plus expansion batteries), Smart Meter Gen 2 (local Modbus TCP), 12×500 W
+PV, smart plugs, and the provider's official meter — live monitoring,
+history, AI briefings, ROI tracking, and a PV-aware power plan that drives
+the battery schedule.
 
 | Welcome (AI briefing) | Live (power flow) | Strategy (battery + power plan) |
 |---|---|---|
@@ -13,14 +15,16 @@ and its own PV-aware power plan that drives the battery's output preset.
 |---|---|---|
 | ![Graph](docs/phone-graph.png) | ![Dashboard](docs/phone-dashboard.png) | ![ROI](docs/phone-roi.png) |
 
-## The six tabs
+## The tabs
 
 **Simple vs full view**: a fresh visit starts in the **simple view** — one
 calm screen with the flow diagram, both batteries as tap-to-flip tiles
 (compact one-block front, the detailed per-module stack with charge state +
-ETAs on the back — same flip in Strategy), three tap-to-flip history charts
-(12h/24h/1w/1h), and the Today/Week/Month cards. The header's ◐ button
-switches to the full tab interface below; the choice persists.
+ETAs on the back — same flip in Strategy), tap-to-flip history charts
+(12h/24h/1w/1h/6h, plus the Power Production weather-forecast face), the
+official provider-meter summary, and Today/Week/Month/Year cards. The
+header's ◐ button switches to the full tab interface below; the choice
+persists.
 
 - **Welcome** — an AI briefing (any OpenAI-compatible endpoint): today's
   weather with a sunrise→sunset arc, week/month sun outlook, estimated PV
@@ -46,6 +50,10 @@ switches to the full tab interface below; the choice persists.
   Battery), each with its own span buttons (1h/6h/12h/24h/7d/30d), pan/zoom,
   resolution that follows zoom (raw 1 s samples where local data exists,
   cloud 20-min anchors + interpolation for the past), and live updates.
+- **Consume** — per-consumer live power and history for smart plugs, metered
+  appliances, grouped/estimated loads, and Rest-of-home; aggregate cards flip
+  to their members, and the provider meter card compares the official meter
+  with Smart Meter Gen 2.
 - **Dashboard** — consumption by source for today/week/month/year: house
   total split into grid / PV-direct / from-battery (cells only — no double
   booking), plus PV→battery stored and total PV produced; € spent vs saved

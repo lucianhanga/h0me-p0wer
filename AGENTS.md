@@ -39,7 +39,7 @@ EPIPE noise on every client disconnect).
 
 ## Architecture
 
-- `server/` — Node 20+ ESM, no build step:
+- `server/` — Node 22+ ESM, no build step:
   - `index.js` — Express routes + WS broadcast + cloud sync scheduling
   - `modbus.js` — `MeterPoller`: reads the meter every 1 s, reconnects with 10 s backoff
   - `registers.js` — AE1X0 register map + decoders
@@ -199,7 +199,7 @@ EPIPE noise on every client disconnect).
 
 ## Current state / known limitations
 
-**As of 2026-10-10, v1.5.238, `main`.** Production deploys are the user's own
+**As of 2026-10-21, v1.5.310, `main`.** Production deploys are the user's own
 step (`git pull --ff-only && docker compose up -d --build` on h-iot-serv) —
 never deploy from here; read-only SSH diagnosis (`ssh lh@192.168.1.10`) is
 fine when the user asks (instruction 2026-09-27). Before diagnosing a
@@ -217,9 +217,7 @@ production screenshot, check the deployed version:
   `BIND_IP=127.0.0.1` (app reachable only via the Cloudflare tunnel).
   Plug surfaces: Consume tab (full view), Consume section (simple view) +
   Consume rows (Dashboard) — all on /api/stats/consumers +
-  /api/plugs/timeseries. In-flight WIP from a parallel session 2026-10-09:
-  branch `wip/watch-consumers-today` (watch endpoint gains per-plug kWh;
-  saved unverified, check the Garmin contract before finishing it).
+  /api/plugs/timeseries.
 - **No automated tests anywhere** — verification is manual dry-run scripts,
   the standalone simulation harness pattern (fake Date.now + stateful mock
   anker + real PowerPlanController), and live-in-browser checks.
@@ -232,8 +230,9 @@ production screenshot, check the deployed version:
 **Standing facts, still true:**
 - Meter SN syncs from the live Modbus reading (not hardcoded). Cloud sync
   waits for the first snapshot before starting.
-- npm's `allow-scripts` blocks esbuild's postinstall on fresh installs:
-  `npm approve-scripts esbuild && npm rebuild esbuild` if Vite misbehaves.
+- npm's `allow-scripts` can block dependency postinstall scripts on fresh
+  installs; inspect the current lockfile and approve only the exact package
+  npm reports (for example `npm approve-scripts <pkg> && npm rebuild <pkg>`).
 - Git identity is repo-local: `lucianhanga` + GitHub noreply email. Every
   PR bumps root/web/server `package.json` patch version, even doc-only
   fixes — and PRs get merged (not just opened), branch deleted after.
