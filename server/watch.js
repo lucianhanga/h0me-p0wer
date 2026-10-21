@@ -203,6 +203,15 @@ export function registerWatchRoute(app, deps) {
     }
 
     try {
+      const url = deps.statsOverviewUrl.replace("/api/stats/overview", "/api/stats/consumers?type=day&offset=0");
+      const consumers = await fetchJson(url, { headers: internalAuthHeaders() }).catch(() => null);
+      out.consumersToday = (consumers?.data?.plugs ?? []).map((p) => ({ name: p.name, kwh: p.kwh }));
+      out.consumersRestToday = consumers?.data?.restKwh ?? null;
+    } catch (err) {
+      console.warn(`[watch] consumers fetch failed (${err.message})`);
+    }
+
+    try {
       Object.assign(out, await recentHistory(deps.timeseriesUrl));
     } catch (err) {
       console.warn(`[watch] timeseries fetch failed (${err.message})`);

@@ -7468,3 +7468,13 @@ Root causes, all proven against production data:
   the prominent odometer but hides the meaningless chart, span buttons and
   provider-timeseries fetches; it switches to the full chart card when the
   E220 reports nonzero Power (PIN-locked extended dataset).
+
+## Watch consumersToday (2026-10-21, leftover WIP port)
+
+- The old wip/watch-consumers-today branch read raw plug_daily rows, which
+  would have missed estimated routers, HmIP, meter aggregates and named
+  groups. /api/watch/status now reuses /api/stats/consumers?type=day via the
+  existing internal loopback, exposing optional consumersToday [{name,kwh}]
+  and consumersRestToday exactly equal to the web Consume breakdown.
+- Verified against the live stats endpoint: 18 consumers, rest 0.3 kWh;
+  Garmin's flat optional-field contract remains backward compatible.
