@@ -7,6 +7,8 @@ import UpdatedStamp from "../components/UpdatedStamp.jsx";
 import Hint from "../components/Hint.jsx";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { readCached, writeCached, periodImmutable } from "../historyCache.js";
+import { usePeriodSwipe } from "../components/usePeriodSwipe.js";
+import PeriodNavTitle from "../components/PeriodNavTitle.jsx";
 
 // Overview dashboard: consumption-by-source cards (today/week/month/year ×
 // house/grid/battery/PV + €), all from the byPeriod block of a single
@@ -192,25 +194,12 @@ export const SourceCard = forwardRef(function SourceCard({ type, title, data, fo
   const [offset, setOffset] = useState(0); // 0 = current period (overview data)
   const [past, setPast] = useState(null); // /api/stats/period response (offset ≥ 1)
   const [blocked, setBlocked] = useState(false); // no data further back
-  const swipeStart = useRef(null);
 
   // Swipe left/right on the card navigates its history (2026-09-29, user
   // request — replaces the removed global swipe-to-switch-tabs): swipe
   // left = older (the ‹ button), right = newer (›). Horizontal must
   // dominate 1.5×, 50px minimum; taps and vertical scrolls untouched.
-  const onTouchStart = (e) => {
-    if (e.target.closest("button")) return;
-    swipeStart.current = [e.touches[0].clientX, e.touches[0].clientY];
-  };
-  const onTouchEnd = (e) => {
-    const s = swipeStart.current;
-    swipeStart.current = null;
-    if (!s) return;
-    const dx = e.changedTouches[0].clientX - s[0];
-    const dy = e.changedTouches[0].clientY - s[1];
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    go(dx < 0 ? 1 : -1);
-  };
+  const { onTouchStart, onTouchEnd } = usePeriodSwipe(go);
 
   async function go(dir) {
     const next = offset + dir;
@@ -264,15 +253,14 @@ export const SourceCard = forwardRef(function SourceCard({ type, title, data, fo
       {/* Outside the FlipTile so ‹ › period nav stays usable on the flipped
           (bar-chart) side too — it used to live inside the front face and
           vanish once the card was flipped (2026-09-19, user request). */}
-      <div className="tile-title src-title">
-        <button className="src-nav" onClick={() => go(1)} disabled={blocked} aria-label={t("dashboard.olderPeriod")}>
-          ‹
-        </button>
-        <span>{offset === 0 ? title : (past?.label ?? title)}</span>
-        <button className="src-nav" onClick={() => go(-1)} disabled={offset === 0} aria-label={t("dashboard.newerPeriod")}>
-          ›
-        </button>
-      </div>
+      <PeriodNavTitle
+        label={offset === 0 ? title : (past?.label ?? title)}
+        onOlder={() => go(1)}
+        onNewer={() => go(-1)}
+        olderDisabled={blocked}
+        newerDisabled={offset === 0}
+        t={t}
+      />
       <FlipTile back={<BackBars rows={active.bars} formatLabel={formatLabel} />}>
         <div className="src-card-body">
           <div className="src-home">{active.homeKwh} kWh</div>

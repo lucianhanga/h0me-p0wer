@@ -7486,3 +7486,17 @@ Root causes, all proven against production data:
   Dependabot rebases after their paired PRs landed; every final CI run passed.
 - npm run setup + full Vite build pass with 0 vulnerabilities. Open PRs and
   unmerged branches are now empty; local has only main.
+
+## Safety-first frontend cleanup (2026-10-21, deep review PR 1)
+
+- Generic controls/helpers extracted without behavior changes: chart color
+  constants, SpanButtons+shared spans, PeriodNavTitle, usePeriodSwipe,
+  forwardHoldBridge and mergeRowsByT. Graph/Consume/Dashboard/Live/ROI use
+  the shared controls; duplicated ECharts theme literals removed.
+- usePolledResource's dead envelope:false branch removed after grep showed
+  no callers. 14 verified-unused i18n keys removed from all languages;
+  translation parity remains 470 keys. Stale allowScripts.esbuild entry
+  removed (no esbuild package remains in the lockfile).
+- Verified with helper dry-run assertions, i18n parity script, Vite build,
+  headless simple/advanced Consume, Graph expected-face, and Dashboard
+  period-controls browser checks (zero browser exceptions).

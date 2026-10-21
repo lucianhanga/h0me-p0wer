@@ -24,9 +24,7 @@ export const en = {
     updated: "updated {time}",
     loading: "loading…",
     updating: "updating…",
-    error: "Something went wrong",
     noData: "no data yet",
-    live: "live",
   },
   view: {
     simpleTip: "Simple view — one calm screen",
@@ -60,8 +58,6 @@ export const en = {
     },
   },
   header: {
-    voiceCommand: "Voice command",
-    voiceUnsupported: "Voice commands are not supported in this browser",
     language: "App language",
     languageTip: "App, read-aloud and voice-input language",
   },
@@ -279,9 +275,6 @@ export const en = {
       min: "min {pct}%",
       floor: "floor {pct}%",
       max: "max {pct}%",
-      minTip: "account discharge floor {pct}%",
-      floorTip: "controller won't discharge below {floor}% ({min}% floor + {margin}% safety margin)",
-      maxTip: "max charge {pct}%",
     },
     modules: {
       mainUnit: "Main unit",
@@ -303,7 +296,7 @@ export const en = {
     tempWarn: {
       cold: "Battery is cold (≤ 3 °C) — charging may be limited until it warms up.",
       hot: "Battery is hot (≥ 35 °C) — sustained heat reduces performance and lifetime.",
-    },    liveOnlyNote: "live monitoring only — not part of the house system, no control or history",
+    },
     memberNote: "part of the battery system — per-unit live view",
     details: {
       capacityTitle: "Capacity",
@@ -363,7 +356,6 @@ export const en = {
     thisWeek: "This week",
     thisMonth: "This month",
     thisYear: "This year",
-    consumers: { title: "Consumers" },
     producedKwh: "{kwh} kWh produced",
     coverage: "⚠ {pct}% of today covered, even after recovering what we could from Anker's cloud — actual totals may still be higher than shown",
     stored: "stored",
@@ -426,7 +418,6 @@ export const en = {
   provider: {
     title: "Provider meter",
     official: "official grid meter",
-    sourceLabel: "Power source",
     source: { meter: "meter", derived: "derived", unavailable: "waiting for counter delta" },
     meterReading: "Meter reading",
     power: "Power",
@@ -559,15 +550,11 @@ export const en = {
     },
   },
   ask: {
-    title: "Ask",
-    placeholder: "Ask about your energy…",
     listening: "Listening…",
-    thinking: "Thinking…",
     micDenied: "Microphone access was denied — check the browser permission.",
     noSpeech: "I didn't catch that — try again.",
     unsupported: "Voice input is not supported in this browser.",
     close: "Close",
-    corrected: "You asked:",
     stop: "Stop listening",
     byVoice: "Ask a question by voice",
     failed: "Speech recognition failed ({error})",

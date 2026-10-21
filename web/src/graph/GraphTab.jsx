@@ -7,6 +7,13 @@ import { pvExpectedAt, toPvExpectedRows } from "./pvExpected.js";
 import { immutableBeforeMs, readCached, writeCached } from "../historyCache.js";
 import { fetchOnce } from "../fetchDedupe.js";
 import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
+import SpanButtons from "../components/SpanButtons.jsx";
+import { CHART_COLORS } from "../components/chartTheme.js";
+import { forwardHoldBridge } from "./forwardHold.js";
+import { mergeRowsByT } from "./mergeRowsByT.js";
+import { SHORTCUTS } from "./spans.js";
+
+export { SHORTCUTS };
 
 // Three focused graphs on Apache ECharts, each with its OWN window controls:
 //   1. Home Power Usage — consumption coverage (Grid / PV→home / Battery↔home,
@@ -16,14 +23,6 @@ import { TEMP_COLD_MAX_C, TEMP_HOT_MIN_C } from "../tempLimits.js";
 // Span buttons and zoom/pan are PER GRAPH (independent windows). No range
 // sliders for now. Exported for the Plugs tab (2026-10-06) — its cards use
 // the same resolution choices, don't fork the list.
-export const SHORTCUTS = [
-  { labelKey: "graph.span.1h", ms: 3600 * 1000 },
-  { labelKey: "graph.span.6h", ms: 6 * 3600 * 1000 },
-  { labelKey: "graph.span.12h", ms: 12 * 3600 * 1000 },
-  { labelKey: "graph.span.24h", ms: 24 * 3600 * 1000 },
-  { labelKey: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
-  { labelKey: "graph.span.30d", ms: 30 * 24 * 3600 * 1000 },
-];
 
 const LIVE_EDGE_MS = 2 * 60 * 1000; // consider "live" when right edge within 2 min of now
 
@@ -123,17 +122,7 @@ const STAR_PATH =
 // outage). Dense buckets (≥ 108 s spans) have no nulls to bridge.
 const MODULE_BRIDGE_MS = 150 * 1000;
 function bridgeModuleSeries(data) {
-  let lastT = null;
-  let lastV = null;
-  return data.map(([t, v]) => {
-    if (v != null) {
-      lastT = t;
-      lastV = v;
-      return [t, v];
-    }
-    if (lastT != null && t - lastT <= MODULE_BRIDGE_MS) return [t, lastV];
-    return [t, null];
-  });
+  return forwardHoldBridge(data, MODULE_BRIDGE_MS);
 }
 
 export default function GraphTab() {
@@ -262,15 +251,15 @@ export default function GraphTab() {
         tooltip: {
           trigger: "axis",
           valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} ${def.unit ?? "W"}`),
-          backgroundColor: "#1a2128",
-          borderColor: "#2a3238",
-          textStyle: { color: "#e8ecef", fontSize: 12 },
+          backgroundColor: CHART_COLORS.tooltipBg,
+          borderColor: CHART_COLORS.border,
+          textStyle: { color: CHART_COLORS.text, fontSize: 12 },
         },
         xAxis: {
           type: "time",
-          axisLine: { lineStyle: { color: "#2a3238" } },
+          axisLine: { lineStyle: { color: CHART_COLORS.border } },
           axisLabel: {
-            color: "#8b98a5",
+            color: CHART_COLORS.muted,
             fontSize: 11,
             hideOverlap: true,
             formatter: (ts) => {
@@ -303,12 +292,12 @@ export default function GraphTab() {
           // The signed Battery graph still extends below zero as needed.
           splitNumber: 3, // fewer gridlines/labels — keeps it readable at a glance
           axisLabel: {
-            color: "#8b98a5",
+            color: CHART_COLORS.muted,
             fontSize: 11,
             formatter: (v) => `${Math.round(v)} ${def.unit ?? "W"}`,
             inside: isPhone,
           },
-          splitLine: { lineStyle: { color: "#2a323866" } },
+          splitLine: { lineStyle: { color: CHART_COLORS.split } },
         },
         // Inside zoom only — no range sliders for now.
         // preventDefaultMouseMove: false (2026-10-07, user report from the
@@ -367,7 +356,7 @@ export default function GraphTab() {
           top: 0,
           left: 0,
           type: "scroll",
-          textStyle: { color: "#8b98a5", fontSize: 11 },
+          textStyle: { color: CHART_COLORS.muted, fontSize: 11 },
           icon: "roundRect",
           itemWidth: 12,
           itemHeight: 8,
@@ -757,10 +746,7 @@ export default function GraphTab() {
           setLastLiveAt(Date.now());
           if (payload && payload.data.length) {
             const cutoff = Date.now() - width * 1.5;
-            const byT = new Map();
-            for (const r of rowsRef.rows) if (r.t >= cutoff) byT.set(r.t, r);
-            for (const r of payload.data) byT.set(r.t, r);
-            rowsRef.rows = [...byT.values()].sort((a, b) => a.t - b.t);
+            rowsRef.rows = mergeRowsByT(rowsRef.rows, payload.data, cutoff, (r) => r.t);
             applyRows(rowsRef.rows);
             updateStats(rowsRef.rows, rowsRef.bucketMs);
           }
@@ -810,15 +796,7 @@ export default function GraphTab() {
         <section key={def.titleKey}>
           <h4>{def.title}</h4>
           <div className="controls">
-            {SHORTCUTS.map((s) => (
-              <button
-                key={s.labelKey}
-                className={activeArr[i] === s.ms ? "span-active" : ""}
-                onClick={() => apiRefs.current[i]?.setSpan(s.ms)}
-              >
-                {t(s.labelKey)}
-              </button>
-            ))}
+            <SpanButtons active={activeArr[i]} onSelect={(ms) => apiRefs.current[i]?.setSpan(ms)} t={t} />
             {i === 1 && (
               <button
                 className={activeArr[i] === "expected" ? "span-active" : ""}

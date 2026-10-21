@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import echarts from "../echarts.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
+import { CHART_COLORS } from "../components/chartTheme.js";
 
 // Stacked per-bucket kWh bars (grid/battery/PV) for a tile's flip side.
 // Hover/touch a bar for that bucket's split (ECharts axis tooltip).
@@ -17,22 +18,22 @@ export default function BackBars({ rows, formatLabel }) {
       grid: { top: 8, right: 4, bottom: 4, left: 4, containLabel: true },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a2128",
-        borderColor: "#2a3238",
-        textStyle: { color: "#e8ecef", fontSize: 11 },
+        backgroundColor: CHART_COLORS.tooltipBg,
+        borderColor: CHART_COLORS.border,
+        textStyle: { color: CHART_COLORS.text, fontSize: 11 },
         valueFormatter: (v) => `${v} kWh`,
       },
       xAxis: {
         type: "category",
         data: rows.map((r) => formatLabel(r.label)),
-        axisLabel: { color: "#8b98a5", fontSize: 9, hideOverlap: true },
-        axisLine: { lineStyle: { color: "#2a3238" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 9, hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_COLORS.border } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b98a5", fontSize: 9 },
-        splitLine: { lineStyle: { color: "#2a323866" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 9 },
+        splitLine: { lineStyle: { color: CHART_COLORS.split } },
       },
       series: [
         { name: t("dashboard.bars.grid"), type: "bar", stack: "s", itemStyle: { color: "#f7a44f" }, data: rows.map((r) => r.grid) },

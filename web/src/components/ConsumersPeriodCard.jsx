@@ -5,6 +5,9 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import { readCached, writeCached, periodImmutable } from "../historyCache.js";
 import { plugColor, REST_COLOR } from "../plugs/PlugsTab.jsx";
 import { consumerListRows } from "./consumerRows.js";
+import { CHART_COLORS } from "./chartTheme.js";
+import { usePeriodSwipe } from "./usePeriodSwipe.js";
+import PeriodNavTitle from "./PeriodNavTitle.jsx";
 import { PERIOD_FORMAT } from "../dashboard/periodFormats.js";
 
 // Per-period consumer breakdown tile (2026-10-07, user request) — shared by
@@ -46,9 +49,9 @@ export function RingFace({ data, t }) {
       backgroundColor: "transparent",
       tooltip: {
         trigger: "item",
-        backgroundColor: "#1a2128",
-        borderColor: "#2a3238",
-        textStyle: { color: "#e8ecef", fontSize: 12 },
+        backgroundColor: CHART_COLORS.tooltipBg,
+        borderColor: CHART_COLORS.border,
+        textStyle: { color: CHART_COLORS.text, fontSize: 12 },
         formatter: (p) => `${p.name}: ${p.value} kWh (${p.percent} %)`,
       },
       series: [
@@ -104,9 +107,9 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
       grid: { top: 8, right: 4, bottom: 4, left: 4, containLabel: true },
       tooltip: {
         trigger: "axis",
-        backgroundColor: "#1a2128",
-        borderColor: "#2a3238",
-        textStyle: { color: "#e8ecef", fontSize: 11 },
+        backgroundColor: CHART_COLORS.tooltipBg,
+        borderColor: CHART_COLORS.border,
+        textStyle: { color: CHART_COLORS.text, fontSize: 11 },
         valueFormatter: (v) => `${v} kWh`,
         // Read top-of-stack first (2026-10-10, user request): seriesAsc
         // (default) lists rest FIRST while it sits at the BOTTOM of the
@@ -117,14 +120,14 @@ export function ConsumerBars({ bars, plugs, t, formatLabel }) {
       xAxis: {
         type: "category",
         data: bars.map((b) => labelOf(b.label)),
-        axisLabel: { color: "#8b98a5", fontSize: 9, hideOverlap: true },
-        axisLine: { lineStyle: { color: "#2a3238" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 9, hideOverlap: true },
+        axisLine: { lineStyle: { color: CHART_COLORS.border } },
         axisTick: { show: false },
       },
       yAxis: {
         type: "value",
-        axisLabel: { color: "#8b98a5", fontSize: 9 },
-        splitLine: { lineStyle: { color: "#2a323866" } },
+        axisLabel: { color: CHART_COLORS.muted, fontSize: 9 },
+        splitLine: { lineStyle: { color: CHART_COLORS.split } },
       },
       series: [
         { name: t("plugs.rest"), type: "bar", stack: "s", itemStyle: { color: REST_COLOR }, data: bars.map((b) => b.rest) },
@@ -190,7 +193,6 @@ export default function ConsumersPeriodCard({ type, title }) {
   const [past, setPast] = useState(null);
   const [blocked, setBlocked] = useState(false);
   const [faceIdx, setFaceIdx] = useState(0);
-  const swipeStart = useRef(null);
 
   async function load(off) {
     const url = `/api/stats/consumers?type=${type}&offset=${off}`;
@@ -242,19 +244,7 @@ export default function ConsumersPeriodCard({ type, title }) {
 
   // Swipe left/right navigates periods — same gesture contract as
   // SourceCard (left = older, right = newer, 50 px min, 1.5× dominance).
-  const onTouchStart = (e) => {
-    if (e.target.closest("button")) return;
-    swipeStart.current = [e.touches[0].clientX, e.touches[0].clientY];
-  };
-  const onTouchEnd = (e) => {
-    const s = swipeStart.current;
-    swipeStart.current = null;
-    if (!s) return;
-    const dx = e.changedTouches[0].clientX - s[0];
-    const dy = e.changedTouches[0].clientY - s[1];
-    if (Math.abs(dx) < 50 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
-    go(dx < 0 ? 1 : -1);
-  };
+  const { onTouchStart, onTouchEnd } = usePeriodSwipe(go);
 
   async function go(dir) {
     const next = offset + dir;
@@ -293,15 +283,14 @@ export default function ConsumersPeriodCard({ type, title }) {
     <div className="src-card" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
       {/* Arrows outside the flip tile so period nav works on every face
           (same lesson as SourceCard, 2026-09-19). */}
-      <div className="tile-title src-title">
-        <button className="src-nav" onClick={() => go(1)} disabled={blocked} aria-label={t("dashboard.olderPeriod")}>
-          ‹
-        </button>
-        <span>{offset === 0 ? title : (data.label ?? title)}</span>
-        <button className="src-nav" onClick={() => go(-1)} disabled={offset === 0} aria-label={t("dashboard.newerPeriod")}>
-          ›
-        </button>
-      </div>
+      <PeriodNavTitle
+        label={offset === 0 ? title : (data.label ?? title)}
+        onOlder={() => go(1)}
+        onNewer={() => go(-1)}
+        olderDisabled={blocked}
+        newerDisabled={offset === 0}
+        t={t}
+      />
       {/* No face-name title (2026-10-07, user request) — the box alone
           flips through ring → bars → list. */}
       <QuadFlipTile
