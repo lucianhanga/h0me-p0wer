@@ -7514,3 +7514,14 @@ Root causes, all proven against production data:
   and fixed-window API fixtures for consumers day/month plus all four member
   endpoints (unchanged after restart; cooking2 reappeared after account sync,
   proving the initial diff was timing, not a refactor regression).
+
+## Healthcheck + current docs (2026-10-21, deep review PR 3)
+
+- docker-compose healthcheck now calls /api/health with
+  Authorization: Bearer $$API_TOKEN instead of unauthenticated /api/live —
+  real API check without weakening token auth (fail-open still applies when
+  no token is configured). docker compose config validates.
+- README intro/tab tour refreshed for the dock-era system (Power Dock, SB4,
+  SB2, 12×500 W PV, smart plugs, Consume/provider meter). AGENTS.md current
+  state moved to 2026-10-21/v1.5.310, Node 22+, completed watch WIP removed,
+  and the stale esbuild allow-scripts note generalized.

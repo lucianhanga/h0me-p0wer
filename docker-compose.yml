@@ -17,7 +17,7 @@ services:
       - h0me-p0wer-data:/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/live"]
+      test: ["CMD-SHELL", "wget -qO- --header=\"Authorization: Bearer $$API_TOKEN\" http://localhost:3001/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
