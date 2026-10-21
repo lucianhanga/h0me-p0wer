@@ -27,6 +27,7 @@ import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
 import { plugGroupForName, PLUG_GROUPS } from "./plug-groups.js";
+import { estimatedCategories, estimatedKwhForSpan } from "./estimated-consumers.js";
 
 // /api/stats/* — Dashboard + top-days: today's live profile, week/month/
 // year rollups, single-period time navigation, and production leaderboards.
@@ -817,6 +818,8 @@ export function registerStatsRoute(app, deps) {
     const dayStart = new Date();
     dayStart.setHours(0, 0, 0, 0);
     const todayStr = localDate(dayStart);
+    const estimated = estimatedCategories();
+    const estimatedBySn = new Map(estimated.map((c) => [c.sn, c]));
 
     // Period bounds [startStr, endStr] inclusive (end clamped to today for
     // the current week/month — future days have no data) + the bar days.
@@ -895,8 +898,8 @@ export function registerStatsRoute(app, deps) {
       membersOf.get(g.sn).push(sn);
     }
     const keyOf = (sn) => groupOf.get(sn) ?? sn;
-    const nameOf = (sn) => groupNames.get(sn) ?? names.get(sn) ?? sn;
-    const sns = [...new Set([...names.keys()].map(keyOf))].sort((a, b) =>
+    const nameOf = (sn) => groupNames.get(sn) ?? names.get(sn) ?? estimatedBySn.get(sn)?.name ?? sn;
+    const sns = [...new Set([...[...names.keys()].map(keyOf), ...estimatedBySn.keys()])].sort((a, b) =>
       nameOf(a).localeCompare(nameOf(b)),
     );
     // Stable color assignment (2026-10-10): covers plug_daily-only SNs the
@@ -913,6 +916,13 @@ export function registerStatsRoute(app, deps) {
           perSn.set(key, (perSn.get(key) ?? 0) + (kwh ?? 0));
           any = true;
         }
+      }
+      const fromMs = new Date(`${from}T00:00:00`).getTime();
+      const toMs = new Date(`${to}T00:00:00`).getTime() + dayMs;
+      for (const c of estimated) {
+        const kwh = estimatedKwhForSpan(c, fromMs, toMs);
+        perSn.set(c.sn, (perSn.get(c.sn) ?? 0) + kwh);
+        if (kwh > 0) any = true;
       }
       return { perSn, any };
     };
@@ -954,6 +964,11 @@ export function registerStatsRoute(app, deps) {
       // Group SNs hold no samples themselves — sum the members' hourly
       // means (mean watts over the hour = Wh per member).
       const hourlyKwh = (sn, h) => {
+        const estimatedConsumer = estimatedBySn.get(sn);
+        if (estimatedConsumer) {
+          const from = dayStartMs + h * 3600000;
+          return estimatedKwhForSpan(estimatedConsumer, from, from + 3600000);
+        }
         const ms = membersOf.get(sn);
         if (!ms) {
           const cell = plugWH.get(sn)?.[h];
@@ -1002,6 +1017,11 @@ export function registerStatsRoute(app, deps) {
       for (let m = 1; m <= 12; m++) {
         const ym = `${y}-${String(m).padStart(2, "0")}`;
         const pd = plugByMonth.get(ym) ?? new Map();
+        for (const c of estimated) {
+          const from = new Date(Number(y), m - 1, 1).getTime();
+          const to = new Date(Number(y), m, 1).getTime();
+          pd.set(c.sn, estimatedKwhForSpan(c, from, to));
+        }
         const home = homeByMonth.get(ym) ?? 0;
         const sum = [...pd.values()].reduce((a, v) => a + v, 0);
         const bar = { label: ym, rest: r2(Math.max(0, home - sum)) };
@@ -1016,6 +1036,10 @@ export function registerStatsRoute(app, deps) {
         for (const [sn, kwh] of pdRaw) {
           const key = keyOf(sn);
           pd.set(key, (pd.get(key) ?? 0) + (kwh ?? 0));
+        }
+        for (const c of estimated) {
+          const from = new Date(`${d}T00:00:00`).getTime();
+          pd.set(c.sn, estimatedKwhForSpan(c, from, from + dayMs));
         }
         const home = homeByDate.get(d) ?? 0;
         const sum = [...pd.values()].reduce((a, v) => a + (v ?? 0), 0);

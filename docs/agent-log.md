@@ -7383,3 +7383,18 @@ Root causes, all proven against production data:
   the refresh fetch, while immutable periods still use forever cache.
 - Verified in headless Chrome with API requests delayed 1.5 s: simple Consume
   and advanced Consume both render instantly from cache; cacheEntries=21.
+
+## Estimated consumers via category config (2026-10-21, user request)
+
+- `server/estimated-consumers.js` parses ESTIMATED_CONSUMERS_JSON entries
+  `{name,count,averageWatts,category,since?}` (watts PER DEVICE). Same-category
+  entries collapse into one synthetic aggregate. Defaults: FritzPoE 5×10 W +
+  Netgear Orbi 2×20 W = routers 90 W; .env.example documents the one-line JSON
+  override. Optional since clamps the estimate; omitted applies historically.
+- The aggregate rides the existing consumer paths: /api/plugs card (Estimate,
+  90 W), constant /api/plugs/timeseries values, members flip endpoint
+  (FritzPoE 50 W, Netgear Orbi 40 W), and /api/stats/consumers period/bars.
+  Rest-of-home subtracts the estimate instead of hiding it there.
+- Verified red/green parser/energy arithmetic, live API day/week/month/year
+  totals, chart and member endpoints, and headless browser card + flipped
+  member list with zero browser exceptions.
