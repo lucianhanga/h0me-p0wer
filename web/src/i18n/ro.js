@@ -447,6 +447,8 @@ export const ro = {
     tracked: "de la urmărire",
     accuracy: "Comparație contoare",
     accuracySub: "furnizor vs Smart Meter Gen 2",
+    waitingChange: "aștept prima modificare a contorului oficial",
+    waitingPower: "graficul apare când contorul raportează puterea",
     windows: { "1h": "1 h", "24h": "24 h", tracked: "de la urmărire" },
   },
   welcome: {

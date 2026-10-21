@@ -3637,6 +3637,11 @@ pre {
   border-radius: 6px;
 }
 
+.provider-waiting {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.8rem;
+}
+
 .provider-advanced-reading span,
 .provider-odometer span,
 .provider-metric span {

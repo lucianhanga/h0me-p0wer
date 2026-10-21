@@ -7457,3 +7457,14 @@ Root causes, all proven against production data:
   at 2026-10-21; year routers drop to 1.88 kWh (0.7%) and rest recovers.
 - Production backup: .env.backup-estimated-since-20261021-205536; container
   recreated and verified 90 W with since on both members.
+
+## Accuracy baseline from the first counter change (2026-10-21, user request)
+
+- Provider/Gen 2 accuracy no longer starts at the poller's first sample. It
+  waits for the first ImportActive increment and anchors at that CHANGED
+  reading (9656 kWh) — anchoring before the jump would falsely inject 1 kWh
+  and show −100%. Until then APIs/UI report waiting-official-change.
+- Advanced Provider meter: while Power is derived/unavailable the card keeps
+  the prominent odometer but hides the meaningless chart, span buttons and
+  provider-timeseries fetches; it switches to the full chart card when the
+  E220 reports nonzero Power (PIN-locked extended dataset).

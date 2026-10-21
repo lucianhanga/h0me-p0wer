@@ -434,6 +434,8 @@ export const en = {
     tracked: "tracked",
     accuracy: "Meter check",
     accuracySub: "provider vs Smart Meter Gen 2",
+    waitingChange: "waiting for the first official-meter change",
+    waitingPower: "chart appears when the meter reports power",
     windows: { "1h": "1 h", "24h": "24 h", tracked: "tracked" },
   },
   welcome: {

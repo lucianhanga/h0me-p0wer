@@ -120,13 +120,14 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null, chartless = false }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
   const [restWatts, setRestWatts] = useState(null);
 
   useEffect(() => {
+    if (chartless) return undefined;
     // No width/height at init — the pinned-size rotation bug (2026-09-12).
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption(chartOption(color));
@@ -358,7 +359,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
       chart.dispose();
       apiRef.current = null;
     };
-  }, [cardKey, sn, isRest, color, provider]);
+  }, [cardKey, sn, isRest, color, provider, chartless]);
 
   const displayWatts = isRest ? restWatts : watts;
   const cardBody = (
@@ -384,21 +385,27 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           <small>{meterSourceLabel}</small>
         </div>
       )}
-      {/* Span buttons + chart must not toggle the aggregate flip
-          (2026-10-12): FlipTile flips on any inner click — only the header
-          area is meant to flip. */}
-      <div className="controls" onClick={(e) => e.stopPropagation()}>
-        {SHORTCUTS.map((s) => (
-          <button
-            key={s.labelKey}
-            className={activeSpan === s.ms ? "span-active" : ""}
-            onClick={() => apiRef.current?.setSpan(s.ms)}
-          >
-            {t(s.labelKey)}
-          </button>
-        ))}
-      </div>
-      <div className="plug-chart" ref={ref} onClick={(e) => aggregate && e.stopPropagation()} />
+      {chartless ? (
+        <p className="provider-waiting muted">{t("provider.waitingPower")}</p>
+      ) : (
+        <>
+          {/* Span buttons + chart must not toggle the aggregate flip
+              (2026-10-12): FlipTile flips on any inner click — only the header
+              area is meant to flip. */}
+          <div className="controls" onClick={(e) => e.stopPropagation()}>
+            {SHORTCUTS.map((s) => (
+              <button
+                key={s.labelKey}
+                className={activeSpan === s.ms ? "span-active" : ""}
+                onClick={() => apiRef.current?.setSpan(s.ms)}
+              >
+                {t(s.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className="plug-chart" ref={ref} onClick={(e) => aggregate && e.stopPropagation()} />
+        </>
+      )}
     </div>
   );
 
@@ -459,7 +466,7 @@ function AggregateBack({ activeSpanMs, visible, membersUrl, t }) {
 }
 
 function ProviderAccuracyCard({ accuracy, t }) {
-  const rows = (accuracy ?? []).filter((r) => r.available);
+  const rows = accuracy ?? [];
   if (!rows.length) return null;
   return (
     <div className="card plug-card provider-accuracy">
@@ -474,10 +481,16 @@ function ProviderAccuracyCard({ accuracy, t }) {
           <div className="src-row" key={r.key}>
             <span className="src-label">{t(`provider.windows.${r.key}`)}</span>
             <span className="src-value">
-              <span className="muted">{r.providerImportKwh.toFixed(3)} / {r.gen2ImportKwh.toFixed(3)} kWh</span>
-              <span className={r.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
-                {r.deviationKwh >= 0 ? "+" : ""}{r.deviationKwh.toFixed(3)} kWh · {r.deviationPct != null ? `${r.deviationPct >= 0 ? "+" : ""}${r.deviationPct}%` : "—"}
-              </span>
+              {r.available ? (
+                <>
+                  <span className="muted">{r.providerImportKwh.toFixed(3)} / {r.gen2ImportKwh.toFixed(3)} kWh</span>
+                  <span className={r.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
+                    {r.deviationKwh >= 0 ? "+" : ""}{r.deviationKwh.toFixed(3)} kWh · {r.deviationPct != null ? `${r.deviationPct >= 0 ? "+" : ""}${r.deviationPct}%` : "—"}
+                  </span>
+                </>
+              ) : (
+                <span className="muted">{t("provider.waitingChange")}</span>
+              )}
             </span>
           </div>
         ))}
@@ -549,6 +562,7 @@ export default function PlugsTab() {
             meterReadingKwh={provider.importKwh}
             meterReadingLabel={t("provider.meterReading")}
             meterSourceLabel={t(`provider.source.${provider.powerSource}`)}
+            chartless={provider.powerSource !== "meter"}
             offline={false}
             t={t}
           />

@@ -147,28 +147,37 @@ export function providerTimeseries(fromMs, toMs, bucketMs) {
   return out;
 }
 
+export function counterIncreaseBaseline(rows) {
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].importKwh > rows[i - 1].importKwh) return rows[i];
+  }
+  return null;
+}
+
 function providerDelta(fromMs, toMs) {
   const rows = getProviderMeterSamples(fromMs, toMs);
-  if (rows.length < 2) return null;
-  const first = rows[0];
+  const baseline = counterIncreaseBaseline(rows);
+  if (!baseline) return null;
   const last = rows[rows.length - 1];
   return {
-    from: first.ts,
+    from: baseline.ts,
     to: last.ts,
-    providerImportKwh: r3(last.importKwh - first.importKwh),
-    providerExportKwh: r3(last.exportKwh - first.exportKwh),
+    baselineImportKwh: baseline.importKwh,
+    providerImportKwh: r3(last.importKwh - baseline.importKwh),
+    providerExportKwh: r3(last.exportKwh - baseline.exportKwh),
   };
 }
 
 function accuracyForWindow(key, fromMs, toMs) {
   const delta = providerDelta(fromMs, toMs);
-  if (!delta) return { key, available: false };
+  if (!delta) return { key, available: false, reason: "waiting-official-change" };
   const gen2ImportKwh = integrateGridImportKwh(delta.from, delta.to, 3);
   return {
     key,
     available: true,
     from: delta.from,
     to: delta.to,
+    baselineImportKwh: delta.baselineImportKwh,
     providerExportKwh: delta.providerExportKwh,
     ...accuracyDelta({ providerImportKwh: delta.providerImportKwh, gen2ImportKwh }),
   };

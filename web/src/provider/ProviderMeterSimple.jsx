@@ -15,6 +15,7 @@ export default function ProviderMeterSimple() {
   });
   if (!provider?.available) return null;
   const check = (accuracy ?? []).find((r) => r.available && r.key === "24h") ?? (accuracy ?? []).find((r) => r.available);
+  const waiting = !check && (accuracy ?? []).some((r) => r.reason === "waiting-official-change");
   return (
     <div className="card provider-meter-simple">
       <div className="provider-simple-head">
@@ -38,13 +39,22 @@ export default function ProviderMeterSimple() {
           <strong>{provider.trackedImportKwh.toFixed(3)} kWh</strong>
           <small>{t("provider.sinceTracking")}</small>
         </div>
-        {check && (
+        {(check || waiting) && (
           <div className="provider-metric">
             <span>{t("provider.accuracy")}</span>
-            <strong className={check.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
-              {check.deviationKwh >= 0 ? "+" : ""}{check.deviationKwh.toFixed(3)} kWh
-            </strong>
-            <small>{check.deviationPct != null ? `${check.deviationPct >= 0 ? "+" : ""}${check.deviationPct}%` : "—"}</small>
+            {check ? (
+              <>
+                <strong className={check.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
+                  {check.deviationKwh >= 0 ? "+" : ""}{check.deviationKwh.toFixed(3)} kWh
+                </strong>
+                <small>{check.deviationPct != null ? `${check.deviationPct >= 0 ? "+" : ""}${check.deviationPct}%` : "—"}</small>
+              </>
+            ) : (
+              <>
+                <strong>—</strong>
+                <small>{t("provider.waitingChange")}</small>
+              </>
+            )}
           </div>
         )}
       </div>
