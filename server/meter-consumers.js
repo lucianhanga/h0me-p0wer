@@ -29,8 +29,6 @@ const MEMBERS = [
   { sn: "meter-multi-l3", name: "district heating", phase: 2 },
 ];
 
-export { MEMBERS as METER_MULTI_MEMBERS };
-
 const DAY_MS = 86400000;
 
 export class MeterConsumers {

@@ -7500,3 +7500,17 @@ Root causes, all proven against production data:
 - Verified with helper dry-run assertions, i18n parity script, Vite build,
   headless simple/advanced Consume, Graph expected-face, and Dashboard
   period-controls browser checks (zero browser exceptions).
+
+## Safety-first server cleanup (2026-10-21, deep review PR 2)
+
+- Extracted parseSpan for the seven from/to route preambles and
+  respondMembers for the four aggregate flip-face routes; specialized member
+  lookups/kWh functions remain at the call sites. stats.js now has one
+  monthRowsFor helper and reuses hourlyKwhFromRows for consumer day bars.
+- localDate is canonical in welcome-sources.js and imported by index/stats/roi
+  (no behavior change; avoids four copies). Removed unused
+  METER_MULTI_MEMBERS and dead BATTERY_IP env example.
+- Verified by parseSpan dry-run, node --check on all touched server files,
+  and fixed-window API fixtures for consumers day/month plus all four member
+  endpoints (unchanged after restart; cooking2 reappeared after account sync,
+  proving the initial diff was timing, not a refactor regression).

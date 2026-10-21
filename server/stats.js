@@ -28,6 +28,7 @@ import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
 import { plugGroupForName, PLUG_GROUPS } from "./plug-groups.js";
 import { estimatedCategories, estimatedKwhForSpan } from "./estimated-consumers.js";
+import { localDate } from "./welcome-sources.js";
 
 // /api/stats/* — Dashboard + top-days: today's live profile, week/month/
 // year rollups, single-period time navigation, and production leaderboards.
@@ -36,17 +37,6 @@ import { estimatedCategories, estimatedKwhForSpan } from "./estimated-consumers.
 // roi.js/battery-params.js) verbatim except for the deps substitutions
 // noted at each site below; see AGENTS.md for the before/after behavior-
 // preservation verification.
-
-// Cloud period dates are interpreted by Anker as ACCOUNT-LOCAL days, so
-// they must come from local components — toISOString() is UTC and shifts
-// the day for the first 1–2 h after local midnight. Local copy (not
-// imported from index.js) for the same reason roi.js keeps its own: index.js
-// has top-level side effects (starting the server, background jobs) that
-// would run on import, so nothing extracted out of it imports back into it.
-function localDate(d = new Date()) {
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 // Monday (local midnight) of the calendar week containing d.
 function mondayOf(d) {
@@ -69,6 +59,15 @@ function hourlyKwhFromRows(rows) {
     sums[hour] += (Math.max(r.power, 0) * (20 / 60)) / 1000;
   }
   return sums;
+}
+
+function monthRowsFor(meterSns, yearMonth) {
+  if (!meterSns.length) return [];
+  return getCloudTrendMulti(meterSns, "month", yearMonth).rows.map((r) => ({
+    label: r.time,
+    importKwh: r.import_energy ?? 0,
+    exportKwh: r.export_energy ?? 0,
+  }));
 }
 
 // Stored PV totals over a date range (finished days only; today is added
@@ -261,17 +260,9 @@ export function registerStatsRoute(app, deps) {
     }
   
     // --- Week (last 7 days) & month: daily kWh from cloud_history month rows.
-    function monthKwh(yearMonth) {
-      if (!meterSns.length) return [];
-      return getCloudTrendMulti(meterSns, "month", yearMonth).rows.map((r) => ({
-        label: r.time,
-        importKwh: r.import_energy ?? 0,
-        exportKwh: r.export_energy ?? 0,
-      }));
-    }
     const ym = localDate().slice(0, 7);
     const prevYm = localDate(new Date(dayStartMs - 7 * 86400000)).slice(0, 7);
-    const monthRows = prevYm === ym ? monthKwh(ym) : [...monthKwh(prevYm), ...monthKwh(ym)];
+    const monthRows = prevYm === ym ? monthRowsFor(meterSns, ym) : [...monthRowsFor(meterSns, prevYm), ...monthRowsFor(meterSns, ym)];
     // Attach per-day battery kWh (from the battery's cloud day trends).
     for (const r of monthRows) {
       const b = dayBattery(battSns, r.label);
@@ -673,14 +664,6 @@ export function registerStatsRoute(app, deps) {
       const imp = r2(gridH.reduce((a, v) => a + v, 0));
       return { imp, bars };
     }
-    function monthRows(ym) {
-      if (!meterSns.length) return [];
-      return getCloudTrendMulti(meterSns, "month", ym).rows.map((r) => ({
-        label: r.time,
-        importKwh: r.import_energy ?? 0,
-        exportKwh: r.export_energy ?? 0,
-      }));
-    }
     const dayBars = (rows) =>
       rows.map((r) => ({ label: r.label, grid: r.importKwh, batt: battKwh(r.label), pv: pvKwhDay(r.label) }));
   
@@ -705,7 +688,7 @@ export function registerStatsRoute(app, deps) {
       pvKwhSum = pvKwhDay(dateStr);
       pvProducedKwhSum = pvProducedDay(dateStr);
       exportKwhSum = r2(
-        exportKwhDay(dateStr, monthRows(dateStr.slice(0, 7)).find((r) => r.label === dateStr)?.exportKwh ?? 0),
+        exportKwhDay(dateStr, monthRowsFor(meterSns, dateStr.slice(0, 7)).find((r) => r.label === dateStr)?.exportKwh ?? 0),
       );
     } else if (type === "week") {
       // Calendar week (Monday..Sunday), offset whole weeks back from the
@@ -722,7 +705,7 @@ export function registerStatsRoute(app, deps) {
       for (let d = new Date(start); d < end; d.setDate(d.getDate() + 1)) {
         const ds = localDate(d);
         const ym = ds.slice(0, 7);
-        const row = monthRows(ym).find((r) => r.label === ds);
+        const row = monthRowsFor(meterSns, ym).find((r) => r.label === ds);
         rows.push({ label: ds, importKwh: row?.importKwh ?? 0, exportKwh: row?.exportKwh ?? 0 });
       }
       gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
@@ -736,7 +719,7 @@ export function registerStatsRoute(app, deps) {
       const ym = localDate(d).slice(0, 7);
       periodStart = `${ym}-01`;
       label = d.toLocaleDateString("en", { month: "long", year: "numeric" });
-      const rows = monthRows(ym);
+      const rows = monthRowsFor(meterSns, ym);
       gridKwh = r2(rows.reduce((a, r) => a + r.importKwh, 0));
       bars = dayBars(rows);
       battKwhSum = r2(bars.reduce((a, b) => a + b.batt, 0));
@@ -756,7 +739,7 @@ export function registerStatsRoute(app, deps) {
       gridKwh = r2(yearRows.reduce((a, r) => a + r.importKwh, 0));
       exportKwhSum = r2(
         yearRows.reduce(
-          (a, r) => a + monthRows(r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh), 0),
+          (a, r) => a + monthRowsFor(meterSns, r.label).reduce((x, d) => x + exportKwhDay(d.label, d.exportKwh), 0),
           0,
         ),
       );
@@ -948,10 +931,7 @@ export function registerStatsRoute(app, deps) {
       // intraday plug history, so days past plug_samples' 7-day retention
       // render home-only (rest) bars.
       const dayStartMs = new Date(`${startStr}T00:00:00`).getTime();
-      const homeH = new Array(24).fill(0);
-      for (const r of getCloudHomeDayPower(startStr, endStr)) {
-        homeH[new Date(r.ts).getHours()] += (Math.max(r.power ?? 0, 0) * (20 / 60)) / 1000;
-      }
+      const homeH = hourlyKwhFromRows(getCloudHomeDayPower(startStr, endStr));
       const plugWH = new Map(); // sn -> 24 × {s, c}
       for (const r of getPlugSamples(dayStartMs, dayStartMs + dayMs - 1)) {
         if (r.watts == null) continue;

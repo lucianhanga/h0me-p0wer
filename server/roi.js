@@ -12,7 +12,7 @@ import {
 } from "./db.js";
 import { buildBomPdf } from "./roi-pdf.js";
 import { getBaseline, computeBaseline } from "./roi-baseline.js";
-import { parseWelcomeConfig, fetchJson } from "./welcome-sources.js";
+import { parseWelcomeConfig, fetchJson, localDate } from "./welcome-sources.js";
 import { savedEur } from "./savings.js";
 import { dayBattery } from "./energy-day.js";
 import { getTariff } from "./env.js";
@@ -36,12 +36,6 @@ const MAX_FORECAST_DAYS = 25 * 365;
 const POST_PAYBACK_MONTHS = 6;
 
 const r2 = (v) => Math.round(v * 100) / 100;
-
-// Same local-day rule as index.js (account-local dates, never toISOString).
-function localDate(d = new Date()) {
-  const p = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
-}
 
 function loadBom() {
   try {
