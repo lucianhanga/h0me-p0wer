@@ -125,7 +125,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null, chartless = false, flipBack = null }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null, chartless = false, flipBack = null, flipClassName = "" }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -401,7 +401,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
   // check (change-anchored accuracy windows), so Consume has ONE provider
   // tile instead of two.
   if (flipBack) {
-    return <FlipTile back={flipBack}>{cardBody}</FlipTile>;
+    return <FlipTile back={flipBack} className={flipClassName}>{cardBody}</FlipTile>;
   }
   return cardBody;
 }
@@ -563,6 +563,7 @@ export default function PlugsTab() {
             chartless={provider.powerSource !== "meter"}
             offline={false}
             flipBack={() => <MeterCheckBack accuracy={accuracy} t={t} />}
+            flipClassName="plug-card-wide"
             t={t}
           />
         )}

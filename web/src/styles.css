@@ -4036,3 +4036,10 @@ pre {
 .backup-tier {
   margin-left: 0.5rem;
 }
+
+/* Provider Meter tile (2026-10-22, user request): always alone on the last
+   row of the Consume grid, expanded to full width. Rendered last, so
+   grid-column: 1/-1 pins it to its own final row. */
+.flip-tile.plug-card-wide {
+  grid-column: 1 / -1;
+}
