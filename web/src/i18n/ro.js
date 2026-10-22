@@ -49,6 +49,7 @@ export const ro = {
     periods: "Totaluri",
     pvStrings: "PV-uri",
     pvTotal: "Total",
+    runningNow: "Rulează acum",
     brief: {
       forecastPv: "așteptat azi · {kwp} kWp",
       houseTotal: "consumul casei azi",

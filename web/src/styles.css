@@ -4043,3 +4043,39 @@ pre {
 .flip-tile.plug-card-wide {
   grid-column: 1 / -1;
 }
+
+/* "Running now" big-consumer line (2026-10-22) — the tail of the simple
+   view's first section, visually attached to the day briefing above. */
+.running-now {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.6rem;
+  margin: -0.4rem 0 1rem;
+  padding: 0 0.2rem;
+}
+
+.running-now-icon {
+  color: #8b98a5;
+  flex: none;
+}
+
+.running-now-text {
+  color: #c8d0d8;
+  font-size: 0.9rem;
+}
+
+.running-now-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.running-now-chip {
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 999px;
+  color: #8b98a5;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.55rem;
+}

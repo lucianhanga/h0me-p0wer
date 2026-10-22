@@ -7623,3 +7623,22 @@ Root causes, all proven against production data:
   /api routes. The header count's native tooltip lists them, one per
   line. activeVisitorCount/visitorKeyFromUpgradeRequest folded into
   activeVisitors/visitorInfoFromUpgradeRequest.
+
+## "Running now" big-consumer report (2026-10-22, user request)
+
+- Simple view, tail of the first (day-briefing) section: one AI-written
+  sentence naming the big appliances currently running + live-watt chips.
+  New server/big-consumers.js: BigConsumerTracker samples mergedPlugs()
+  every 10 s; start at ≥100 W, end only after <30 W for a continuous
+  20-min grace (washer/dishwasher start-pause-restart cycles must not
+  read as ended — user: "don't see them as ending because they had 15 min
+  low consume"); 30–100 W is a hysteresis band. Consumer list from
+  BIG_CONSUMERS env (default waschmaschine/trockner/spüler/cooking/…),
+  matched case-insensitive substring — "cooking" covers the aggregate.
+- AI (same OpenAI-compatible config as the briefing) is called ONLY on
+  start/end transitions, min 60 s apart (bursts collapse into one delayed
+  regeneration); end-with-nothing-running clears the line without a call.
+  Template fallback when the AI fails. Served via /api/big-consumers; the
+  sentence is cached between transitions, live watts refresh per read.
+  Dry-run verified: 10-min pause keeps the session, 21-min pause ends it,
+  60 W band never triggers, one event per real transition.

@@ -49,6 +49,7 @@ export const de = {
     periods: "Summen",
     pvStrings: "PVs",
     pvTotal: "Gesamt",
+    runningNow: "Läuft gerade",
     brief: {
       forecastPv: "heute erwartet · {kwp} kWp",
       houseTotal: "Hausverbrauch heute",
