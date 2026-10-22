@@ -24,13 +24,22 @@ const normIp = (ip) => {
   return v || null;
 };
 
+// Real client IP (2026-10-22): production sits behind the Cloudflare
+// tunnel (BIND_IP=127.0.0.1) and docker NAT — req.ip/socket address is
+// then 127.0.0.1 / ::1 / the docker gateway for EVERYONE, while the actual
+// client IP arrives in CF-Connecting-IP. Direct LAN hits have no such
+// header and fall through to the socket address.
+function clientIp(req) {
+  return req.headers?.["cf-connecting-ip"] ?? req.headers?.["x-real-ip"] ?? req.ip ?? req.socket?.remoteAddress ?? null;
+}
+
 export function touchVisitor(key, ip = null) {
   const k = key || "unknown";
   seen.set(k, { ip: normIp(ip) ?? seen.get(k)?.ip ?? null, lastSeen: Date.now() });
 }
 
 export function trackVisitor(req, res, next) {
-  touchVisitor(req.query?.visitor || req.ip, req.ip);
+  touchVisitor(req.query?.visitor || clientIp(req), clientIp(req));
   next();
 }
 
@@ -43,8 +52,8 @@ export function trackVisitor(req, res, next) {
 export function visitorInfoFromUpgradeRequest(req) {
   const url = new URL(req.url, "http://localhost");
   return {
-    key: url.searchParams.get("visitor") || req.socket?.remoteAddress || "unknown",
-    ip: req.socket?.remoteAddress ?? null,
+    key: url.searchParams.get("visitor") || clientIp(req) || "unknown",
+    ip: clientIp(req),
   };
 }
 
