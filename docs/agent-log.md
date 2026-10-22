@@ -7602,3 +7602,14 @@ Root causes, all proven against production data:
 - Verified locally: /api/plugs entry watts 40 (live trickle), timeseries
   121/121 buckets, unfiltered column present for Rest, day bars 8h=0.04
   kWh, week bar yesterday 0.06 kWh.
+
+## native_mode activity logged once per CHANGE (2026-10-22, user report)
+
+- "Native self-consumption active" appeared on every process start:
+  nativeMode was a memory-only flag (constructor false), so each
+  deploy/restart re-discovered mode_type=1 and re-logged. It now persists
+  in .power-plan-state.json (saved on both transitions, restored in the
+  constructor) — the entry means a CHANGE, not a rediscovery. Simulated:
+  first process logs on:true once; restarted process with the device still
+  native logs nothing; leaving native logs on:false once; restart while
+  off logs nothing.
