@@ -7655,3 +7655,13 @@ Root causes, all proven against production data:
   (gpt-5.6-luna) rejects. Now mirrors welcome-ai.js's verified body
   (reasoning_effort: "low", no sampling params). Reporter also tolerates
   a missing ai config object.
+
+## floorPct strategy-aware (2026-10-22, user request)
+
+- /api/flow's battery.floorPct (the "Usable now (to X%)" floor, Live-tab
+  ETA, watch endpoint) added DISCHARGE_TOLERANCE_PCT unconditionally — but
+  in native self-consumption (house_priority + auto) and anker_app mode
+  the controller never writes presets and nothing enforces the margin,
+  so "usable now" was understated by 3% × capacity. The tolerance now
+  applies only where the controller actually writes (battery_priority or
+  manual trigger); native/anker_app show the bare account cutoff (11%).
