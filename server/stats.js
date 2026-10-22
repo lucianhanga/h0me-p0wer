@@ -27,6 +27,7 @@ import { savedEur } from "./savings.js";
 import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
 import { plugGroupForName, PLUG_GROUPS } from "./plug-groups.js";
+import { BATT_GRID_SN } from "./battery-params.js";
 import { estimatedCategories, estimatedKwhForSpan } from "./estimated-consumers.js";
 import { localDate } from "./welcome-sources.js";
 
@@ -941,9 +942,23 @@ export function registerStatsRoute(app, deps) {
         cell.s += r.watts;
         cell.c++;
       }
+      // Battery grid charge holds no plug_samples either — its watts are
+      // derived per battery snapshot (max(0, charge − pv)); mean watts over
+      // the hour = Wh, same math as the plugs.
+      const battWH = Array.from({ length: 24 }, () => ({ s: 0, c: 0 }));
+      for (const r of getBatteryHistory(dayStartMs, dayStartMs + dayMs - 1)) {
+        const w = Math.max(0, (r.charge_w ?? 0) - Math.min(r.pv_w ?? 0, r.charge_w ?? 0));
+        const cell = battWH[new Date(r.ts).getHours()];
+        cell.s += w;
+        cell.c++;
+      }
       // Group SNs hold no samples themselves — sum the members' hourly
       // means (mean watts over the hour = Wh per member).
       const hourlyKwh = (sn, h) => {
+        if (sn === BATT_GRID_SN) {
+          const cell = battWH[h];
+          return cell.c ? r2(cell.s / cell.c / 1000) : 0;
+        }
         const estimatedConsumer = estimatedBySn.get(sn);
         if (estimatedConsumer) {
           const from = dayStartMs + h * 3600000;

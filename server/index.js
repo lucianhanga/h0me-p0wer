@@ -14,7 +14,7 @@ import { AnkerMqtt } from "./mqtt.js";
 import { registerWelcomeRoute } from "./welcome.js";
 import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
-import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh } from "./battery-params.js";
+import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh, BATT_GRID_SN, BATT_GRID_NAME } from "./battery-params.js";
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
@@ -87,6 +87,8 @@ import {
   getPlugDaily,
   plugDayKwhFromSamples,
   upsertPlugDailyRow,
+  battGridChargeKwh,
+  getBattGridChargeBucketed,
   logActivity,
   getActivity,
   deleteActivity,
@@ -1415,7 +1417,8 @@ app.get("/api/plugs", (req, res) => {
   for (const c of estimated) {
     todayKwh[c.sn] = Math.round(estimatedKwhForSpan(c, dayStart.getTime(), Date.now()) * 100) / 100;
   }
-  ensurePlugColors(estimated.map((c) => c.sn));
+  todayKwh[BATT_GRID_SN] = battGridChargeKwh(dayStart.getTime(), Date.now());
+  ensurePlugColors([...estimated.map((c) => c.sn), BATT_GRID_SN]);
   const colorIdx = getPlugColorIdx();
   res.json({
     ok: true,
@@ -1580,10 +1583,13 @@ app.get("/api/plugs/timeseries", (req, res) => {
   // offline, i.e. 0 W).
   const onlyGroup = onlySn ? plugGroupForSn(onlySn) : null;
   const onlyEstimated = onlySn ? findEstimatedConsumer(onlySn) : null;
+  const onlyBattGrid = onlySn === BATT_GRID_SN;
   if (onlyEstimated) sns.add(onlyEstimated.sn);
   let bucketed;
   if (onlyEstimated) {
     bucketed = [];
+  } else if (onlyBattGrid) {
+    bucketed = getBattGridChargeBucketed(from, to, bucketMs);
   } else if (onlyGroup) {
     const sums = new Map(); // bt -> w
     for (const m of plugGroupMembers(onlyGroup.sn)) {
@@ -1610,6 +1616,14 @@ app.get("/api/plugs/timeseries", (req, res) => {
     sns.add(rSn);
     if (!acc.has(r.bt)) acc.set(r.bt, new Map());
     acc.get(r.bt).set(rSn, Math.round(r.w));
+  }
+  // Unfiltered (Rest card) only: merge the battery grid-charge series so
+  // home − Σplugs also subtracts what the solarbanks pulled from the grid.
+  if (!onlySn) {
+    for (const r of getBattGridChargeBucketed(from, to, bucketMs)) {
+      if (!acc.has(r.bt)) acc.set(r.bt, new Map());
+      acc.get(r.bt).set(BATT_GRID_SN, Math.round(r.w));
+    }
   }
   const estimated = onlyEstimated ? [onlyEstimated] : estimatedCategories();
   const estimatedBySn = new Map(estimated.map((c) => [c.sn, c]));
@@ -2865,6 +2879,19 @@ function mergedPlugs() {
       external: true,
       membersUrl: `/api/estimated-consumers/${encodeURIComponent(c.name)}/members`,
     })),
+    // Battery grid charging as a consumer (2026-10-22, user request — the
+    // SB4 sometimes pulls from the grid): watts = the live aggregate
+    // gridChargeW; history comes from battery_snapshots, daily kWh from
+    // plug_daily (rollup below).
+    {
+      sn: BATT_GRID_SN,
+      name: BATT_GRID_NAME,
+      tag: "Battery",
+      typeTag: "Battery",
+      watts: Math.round(deriveBatteryFlow(latestBattery ?? {}).gridChargeW),
+      online: true,
+      ts: Date.now(),
+    },
   ];
 }
 
@@ -3448,6 +3475,29 @@ poller.start();
 hmipPoller.start();
 meterConsumers.start();
 providerMeter.start();
+// Battery grid-charge daily rollup (2026-10-22): battery_snapshots keeps
+// only 48 h, so the consumer's daily kWh lands in plug_daily (kept
+// forever) — from there every consumers surface (Consume tiles, Dashboard
+// rows, rest-of-home) reads it like any plug.
+function rollupBattGridChargeDaily() {
+  try {
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const yesterdayStart = new Date(dayStart.getTime() - 86400000);
+    upsertPlugDailyRow(
+      localDate(dayStart), BATT_GRID_SN, BATT_GRID_NAME,
+      battGridChargeKwh(dayStart.getTime(), Date.now()),
+    );
+    upsertPlugDailyRow(
+      localDate(yesterdayStart), BATT_GRID_SN, BATT_GRID_NAME,
+      battGridChargeKwh(yesterdayStart.getTime(), dayStart.getTime() - 1),
+    );
+  } catch (err) {
+    console.warn("[db] failed to persist battery grid-charge daily kWh:", err.message);
+  }
+}
+rollupBattGridChargeDaily();
+setInterval(rollupBattGridChargeDaily, 60 * 1000).unref();
 startBackupScheduler(); // Azure GFS backup, daily 03:17 when AZURE_BACKUP_URL is set
 // PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
 // weather data, refreshed on a relaxed cadence; first call right away.

@@ -441,6 +441,40 @@ export function getPvStringKwhForDay(dateStr) {
   return { pv1Kwh, pv2Kwh };
 }
 
+// --- Battery grid charging (2026-10-22, user request — the SB4 pulls from
+// the grid at times): the share of charging NOT covered by PV, per
+// aggregate battery sample max(0, charge_w − min(pv_w, charge_w)) — the
+// same definition as deriveBatteryFlow's gridChargeW. battery_snapshots
+// has only 48 h retention, so the daily kWh is rolled up into plug_daily
+// (kept forever) by the caller; the bucketed series feeds the Consume tile
+// chart and the rest-of-home subtraction in /api/plugs/timeseries.
+const battGridChargeW = (r) =>
+  Math.max(0, (r.charge_w ?? 0) - Math.min(r.pv_w ?? 0, r.charge_w ?? 0));
+
+export function battGridChargeKwh(fromMs, toMs) {
+  const rows = selectBatteryBetween.all(fromMs, toMs + 1);
+  let wh = 0;
+  for (let i = 1; i < rows.length; i++) {
+    // Same 15-min gap clamp as plugDayKwhFromSamples.
+    const dtH = Math.min(rows[i].ts - rows[i - 1].ts, 15 * 60 * 1000) / 3600000;
+    wh += ((battGridChargeW(rows[i - 1]) + battGridChargeW(rows[i])) / 2) * dtH;
+  }
+  return Math.round(wh / 10) / 100; // Wh → kWh, 2 decimals
+}
+
+const selectBattGridChargeBucketed = db.prepare(`
+  SELECT (ts - (ts % CAST(? AS INTEGER))) AS bt,
+         AVG(MAX(0, COALESCE(charge_w, 0) - MIN(COALESCE(pv_w, 0), COALESCE(charge_w, 0)))) AS w
+  FROM battery_snapshots
+  WHERE ts >= ? AND ts <= ?
+  GROUP BY bt
+`);
+
+export function getBattGridChargeBucketed(fromMs, toMs, bucketMs) {
+  return selectBattGridChargeBucketed.all(bucketMs, fromMs, toMs);
+}
+
+
 // Per-module SOC/temperature history has NO cloud equivalent (MQTT 0405/
 // 040a is realtime-only) — pruning it at the 48 h live-sample retention
 // destroyed the only copy and capped the Graph tab's module charts at 2
