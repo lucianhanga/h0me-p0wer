@@ -473,6 +473,14 @@ export class AnkerMqtt {
         if (process.env.MQTT_DEBUG) console.log(`[mqtt] non-telemetry msgtype ${msg.msgtype}`);
         return;
       }
+      if (process.env.MQTT_DEBUG) {
+        const raw = {};
+        for (const [k, f] of Object.entries(msg.fields)) {
+          const v = decodeValue(f);
+          raw[k] = typeof v === "number" ? v : `?${f?.type ?? "?"}`;
+        }
+        console.log(`[mqtt] raw ${this.pn} ${this.sn.slice(-4)} 0405:`, JSON.stringify(raw));
+      }
 
       const out = { ts: Date.now() };
       for (const [hexName, def] of Object.entries(fields0405For(this.pn))) {
