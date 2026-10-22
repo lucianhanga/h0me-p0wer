@@ -7552,3 +7552,22 @@ Root causes, all proven against production data:
   charts stay unsmoothed. Dry-run on the captured production window: Rest
   max 824→168 W, oscillation band 0-824→80-170 W; daily kWh math is energy-
   based and untouched.
+
+## Provider Meter tile absorbs Meter check (2026-10-22, user request)
+
+- Consume tab (advanced): the standalone Meter check tile is gone; the
+  Provider Meter tile moved to LAST position and is flippable — front keeps
+  reading/power/today, back shows the check rows (deviation prominent,
+  official / gen2 kWh muted in brackets). PlugCard gained a flipBack prop
+  (same FlipTile wrapper as aggregates, click-stop on the chart included).
+- accuracyWindows() is now CHANGE-ANCHORED instead of clock-anchored. The
+  official meter reports whole kWh only, so every counter increment is an
+  exactly-known 1 kWh reference: windows are "lastChange" (previous →
+  latest increment), "24h" (last change ≤ now−24h → latest change, ≈24 h),
+  "tracked" (first sample → latest change). Clock windows chopped
+  fractional kWh at both ends and showed meaningless deviations
+  ("4.000 vs 4.573 kWh"). The simple view keeps working — it already looks
+  up the "24h" key.
+- Verified by dry-run against the live DB (lastChange span 2.9 h official
+  1 kWh; gen2 0 locally only because the meter is production-connected) and
+  /api/provider-meter/accuracy over HTTP after restart.

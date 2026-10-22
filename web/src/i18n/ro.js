@@ -435,7 +435,7 @@ export const ro = {
     accuracySub: "furnizor vs Smart Meter Gen 2",
     waitingChange: "aștept prima modificare a contorului oficial",
     waitingPower: "graficul apare când contorul raportează puterea",
-    windows: { "1h": "1 h", "24h": "24 h", tracked: "de la urmărire" },
+    windows: { lastChange: "ultimul kWh", "24h": "≈24 h", tracked: "de la urmărire" },
   },
   welcome: {
     loadError: "Bun venit — {error}",
