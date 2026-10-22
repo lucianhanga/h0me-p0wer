@@ -7642,3 +7642,16 @@ Root causes, all proven against production data:
   sentence is cached between transitions, live watts refresh per read.
   Dry-run verified: 10-min pause keeps the session, 21-min pause ends it,
   60 W band never triggers, one event per real transition.
+
+## Visitor real IPs + big-consumer AI 400 (2026-10-22, post-deploy review)
+
+- /api/visitors/active returned 127.0.0.1/::1/172.19.0.1 for tunneled
+  users: production is behind the Cloudflare tunnel (BIND_IP=127.0.0.1)
+  and docker NAT, so the socket address is the same for everyone. The
+  real client IP now comes from CF-Connecting-IP (then X-Real-IP, then
+  socket) in both the REST touch and the WS upgrade.
+- The running-now AI call 400'd on production: the body sent
+  max_tokens/temperature, which the configured reasoning model
+  (gpt-5.6-luna) rejects. Now mirrors welcome-ai.js's verified body
+  (reasoning_effort: "low", no sampling params). Reporter also tolerates
+  a missing ai config object.

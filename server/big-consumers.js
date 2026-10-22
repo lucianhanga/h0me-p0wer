@@ -95,7 +95,7 @@ export class BigConsumerTracker {
 // MIN_AI_GAP_MS (a start/end burst regenerates once, after the gap).
 export class BigConsumerReporter {
   constructor({ ai }) {
-    this.ai = ai; // { apiKey, baseUrl, model, language } — parseWelcomeConfig().ai
+    this.ai = ai ?? { apiKey: "", baseUrl: "", model: "", language: "en" };
     this.report = null; // { text, active, generatedAt, ai }
     this.lastAiAt = 0;
     this.pendingTimer = null;
@@ -113,6 +113,10 @@ export class BigConsumerReporter {
       .join("; ");
     const body = {
       model: this.ai.model,
+      // Same body conventions as welcome-ai.js (verified against the
+      // configured endpoint): reasoning models 400 on max_tokens and on an
+      // explicit temperature — reasoning_effort is the accepted knob.
+      reasoning_effort: "low",
       messages: [
         {
           role: "system",
@@ -123,8 +127,6 @@ export class BigConsumerReporter {
         },
         { role: "user", content: `Currently running: ${list}` },
       ],
-      max_tokens: 80,
-      temperature: 0.4,
     };
     const j = await fetchJson(`${this.ai.baseUrl}/chat/completions`, {
       timeoutMs: 20000,
