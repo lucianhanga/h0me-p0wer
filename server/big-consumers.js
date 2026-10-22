@@ -102,8 +102,10 @@ export class BigConsumerReporter {
   }
 
   templateText(active) {
-    const parts = active.map((c) => `${c.name} (${c.watts >= 1000 ? `${(c.watts / 1000).toFixed(1)} kW` : `${c.watts} W`})`);
-    return `Running now: ${parts.join(", ")}`;
+    // Names only — the live watt chips right next to the sentence carry
+    // the numbers (2026-10-22, user request: the sentence must not repeat
+    // them, and a cached sentence's numbers go stale anyway).
+    return `Running now: ${active.map((c) => c.name).join(", ")}`;
   }
 
   async callAi(active) {
@@ -121,9 +123,11 @@ export class BigConsumerReporter {
         {
           role: "system",
           content:
-            `You annotate a home-energy dashboard. Write ONE short sentence (max 18 words) ` +
-            `telling the user which big appliances are running right now — factual, friendly, ` +
-            `no greeting, no emoji, no advice. Reply in language code "${lang}".`,
+            `You annotate a home-energy dashboard. Write ONE short sentence (max 15 words) ` +
+            `saying WHICH big appliances are running right now — factual, friendly, no greeting, ` +
+            `no emoji, no advice. NEVER include numbers, watts, percentages or durations — the ` +
+            `live values are displayed separately right next to your sentence. ` +
+            `Reply in language code "${lang}".`,
         },
         { role: "user", content: `Currently running: ${list}` },
       ],
