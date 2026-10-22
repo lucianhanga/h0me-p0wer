@@ -511,7 +511,14 @@ async function computeFlowPayload() {
     () => latestBattery ?? getLatestBattery(),
   );
   const ppState = powerPlan.getState();
-  const dischargeTolerancePct = ppState.dischargeTolerancePct ?? 0;
+  // The +3 margin only exists where the CONTROLLER writes presets
+  // (battery_priority, or the manual trigger). In native self-consumption
+  // (house_priority + auto) and anker_app mode the device's own account
+  // cutoff is the whole story — padding the displayed floor would
+  // understate "usable now" by a margin nothing enforces (2026-10-22,
+  // user request: "don't show it in the simple view when not the case").
+  const presetWriting = ppState.strategy === "battery_priority" || ppState.trigger === "manual";
+  const dischargeTolerancePct = presetWriting ? (ppState.dischargeTolerancePct ?? 0) : 0;
   // The floor for the COVERAGE display figures (diagram node's timeToEmptyH
   // + the params route's coverH via getFloorPct): the DEVICE's own account
   // cutoff, WITHOUT the controller's +3 margin (2026-10-02, user report:
