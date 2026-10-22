@@ -11,6 +11,7 @@ import SpanButtons from "../components/SpanButtons.jsx";
 import { CHART_COLORS } from "../components/chartTheme.js";
 import { forwardHoldBridge } from "../graph/forwardHold.js";
 import { mergeRowsByT } from "../graph/mergeRowsByT.js";
+import { restOfHomeSeries } from "../graph/restOfHome.js";
 
 // Smart plugs tab (2026-10-06): one card per A17X8 plug with a power chart,
 // plus a derived "rest of home" chart (home − Σ plugs, floored at 0 — plug
@@ -177,15 +178,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
         if (hr?.ok) for (const r of hr.data) homeByT.set(r.t, homeOf(r));
         result = {
           bucketMs: pr.bucketMs,
-          data: pr.data.map((r) => {
-            let sum = 0;
-            for (const s of pr.plugs) {
-              const v = r[`plug__${s}`];
-              if (v != null) sum += v;
-            }
-            const home = homeByT.get(r.t);
-            return [r.t, home == null ? null : Math.max(0, Math.round(home - sum))];
-          }),
+          data: restOfHomeSeries(pr.data, homeByT, pr.plugs, pr.bucketMs),
         };
       }
       if (spanCache) writeCached(url, result);
