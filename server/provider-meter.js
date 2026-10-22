@@ -154,41 +154,81 @@ export function counterIncreaseBaseline(rows) {
   return null;
 }
 
-function providerDelta(fromMs, toMs) {
-  const rows = getProviderMeterSamples(fromMs, toMs);
-  const baseline = counterIncreaseBaseline(rows);
-  if (!baseline) return null;
-  const last = rows[rows.length - 1];
-  return {
-    from: baseline.ts,
-    to: last.ts,
-    baselineImportKwh: baseline.importKwh,
-    providerImportKwh: r3(last.importKwh - baseline.importKwh),
-    providerExportKwh: r3(last.exportKwh - baseline.exportKwh),
-  };
+// Samples where the official counter incremented. The meter reports whole
+// kWh only, so every event is an EXACTLY known reference quantity — the
+// right anchor for accuracy windows (2026-10-22, user request): clock-based
+// windows chop fractional kWh at both ends and showed a meaningless
+// "4.000 vs 4.573 kWh" deviation; change-anchored windows compare the two
+// meters over exactly the same energy.
+function changeEvents(rows) {
+  const events = [];
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i].importKwh > rows[i - 1].importKwh) events.push(rows[i]);
+  }
+  return events;
 }
 
-function accuracyForWindow(key, fromMs, toMs) {
-  const delta = providerDelta(fromMs, toMs);
-  if (!delta) return { key, available: false, reason: "waiting-official-change" };
-  const gen2ImportKwh = integrateGridImportKwh(delta.from, delta.to, 3);
+function accuracyForSpan(key, from, to, providerImportKwh) {
+  const gen2ImportKwh = integrateGridImportKwh(from, to, 3);
   return {
     key,
     available: true,
-    from: delta.from,
-    to: delta.to,
-    baselineImportKwh: delta.baselineImportKwh,
-    providerExportKwh: delta.providerExportKwh,
-    ...accuracyDelta({ providerImportKwh: delta.providerImportKwh, gen2ImportKwh }),
+    from,
+    to,
+    ...accuracyDelta({ providerImportKwh, gen2ImportKwh }),
   };
 }
 
 export function accuracyWindows(nowMs = Date.now()) {
-  const windows = [
-    ["1h", nowMs - 3600000],
-    ["24h", nowMs - 86400000],
-  ];
   const first = getFirstProviderMeterSample();
-  if (first) windows.push(["tracked", first.ts]);
-  return windows.map(([key, from]) => accuracyForWindow(key, from, nowMs));
+  if (!first) {
+    return ["lastChange", "24h", "tracked"].map((key) => ({
+      key,
+      available: false,
+      reason: "waiting-official-change",
+    }));
+  }
+  const events = changeEvents(getProviderMeterSamples(first.ts, nowMs));
+  const lastChange = events[events.length - 1];
+  const prevChange = events[events.length - 2];
+  const waiting = { available: false, reason: "waiting-official-change" };
+
+  // Last official increment: previous change → latest change (official
+  // delta is exactly one counter step, normally 1 kWh).
+  const lastChangeWin =
+    lastChange && prevChange
+      ? accuracyForSpan(
+          "lastChange",
+          prevChange.ts,
+          lastChange.ts,
+          r3(lastChange.importKwh - prevChange.importKwh),
+        )
+      : { key: "lastChange", ...waiting };
+
+  // ≈24 h, but bounded by official changes: from the last change at or
+  // before now−24h (fallback: the first sample) to the latest change.
+  const dayWin = (() => {
+    if (!lastChange) return { key: "24h", ...waiting };
+    const boundary = [...events].reverse().find((e) => e.ts <= nowMs - 86400000) ?? first;
+    if (boundary.ts >= lastChange.ts) return { key: "24h", ...waiting };
+    return accuracyForSpan(
+      "24h",
+      boundary.ts,
+      lastChange.ts,
+      r3(lastChange.importKwh - boundary.importKwh),
+    );
+  })();
+
+  // Since tracking started: first sample → latest change.
+  const trackedWin =
+    lastChange && first.ts < lastChange.ts
+      ? accuracyForSpan(
+          "tracked",
+          first.ts,
+          lastChange.ts,
+          r3(lastChange.importKwh - first.importKwh),
+        )
+      : { key: "tracked", ...waiting };
+
+  return [lastChangeWin, dayWin, trackedWin];
 }

@@ -125,7 +125,7 @@ function chartOption(color) {
   };
 }
 
-function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null, chartless = false }) {
+function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh, offline, t, aggregate = false, membersUrl = null, provider = false, energyLabel = null, meterReadingKwh = null, meterReadingLabel = null, meterSourceLabel = null, chartless = false, flipBack = null }) {
   const ref = useRef(null);
   const apiRef = useRef(null);
   const [activeSpan, setActiveSpan] = useState(savedSpanMs[cardKey] ?? 24 * 3600 * 1000);
@@ -379,7 +379,7 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
           <div className="controls" onClick={(e) => e.stopPropagation()}>
             <SpanButtons active={activeSpan} onSelect={(ms) => apiRef.current?.setSpan(ms)} t={t} />
           </div>
-          <div className="plug-chart" ref={ref} onClick={(e) => aggregate && e.stopPropagation()} />
+          <div className="plug-chart" ref={ref} onClick={(e) => (aggregate || flipBack) && e.stopPropagation()} />
         </>
       )}
     </div>
@@ -396,6 +396,12 @@ function PlugCard({ cardKey, sn, isRest, title, subtitle, color, watts, todayKwh
         {cardBody}
       </FlipTile>
     );
+  }
+  // Provider Meter (2026-10-22): flippable too — the back face is the Meter
+  // check (change-anchored accuracy windows), so Consume has ONE provider
+  // tile instead of two.
+  if (flipBack) {
+    return <FlipTile back={flipBack}>{cardBody}</FlipTile>;
   }
   return cardBody;
 }
@@ -441,17 +447,16 @@ function AggregateBack({ activeSpanMs, visible, membersUrl, t }) {
   );
 }
 
-function ProviderAccuracyCard({ accuracy, t }) {
+// Back face of the Provider Meter card (2026-10-22, user request — Meter
+// check folded INTO the Provider Meter tile as its flip side): the three
+// change-anchored accuracy windows, deviation prominent with the official /
+// Smart Meter Gen 2 readings in brackets.
+function MeterCheckBack({ accuracy, t }) {
   const rows = accuracy ?? [];
-  if (!rows.length) return null;
+  if (!rows.length) return <p className="muted">{t("common.loading")}</p>;
   return (
-    <div className="card plug-card provider-accuracy">
-      <div className="plug-card-head">
-        <div className="plug-card-title">
-          <span className="plug-name">{t("provider.accuracy")}</span>
-          <span className="plug-sub">{t("provider.accuracySub")}</span>
-        </div>
-      </div>
+    <div className="aggregate-back">
+      <p className="aggregate-back-title muted">{t("provider.accuracySub")}</p>
       <div className="src-rows">
         {rows.map((r) => (
           <div className="src-row" key={r.key}>
@@ -459,9 +464,12 @@ function ProviderAccuracyCard({ accuracy, t }) {
             <span className="src-value">
               {r.available ? (
                 <>
-                  <span className="muted">{r.providerImportKwh.toFixed(3)} / {r.gen2ImportKwh.toFixed(3)} kWh</span>
                   <span className={r.deviationKwh >= 0 ? "wx-c-grid" : "wx-c-pv"}>
-                    {r.deviationKwh >= 0 ? "+" : ""}{r.deviationKwh.toFixed(3)} kWh · {r.deviationPct != null ? `${r.deviationPct >= 0 ? "+" : ""}${r.deviationPct}%` : "—"}
+                    {r.deviationKwh >= 0 ? "+" : ""}{r.deviationKwh.toFixed(3)} kWh
+                    {r.deviationPct != null ? ` · ${r.deviationPct >= 0 ? "+" : ""}${r.deviationPct}%` : ""}
+                  </span>
+                  <span className="muted">
+                    ({r.providerImportKwh.toFixed(3)} / {r.gen2ImportKwh.toFixed(3)} kWh)
                   </span>
                 </>
               ) : (
@@ -524,6 +532,20 @@ export default function PlugsTab() {
             t={t}
           />
         ))}
+        <PlugCard
+          cardKey="rest"
+          isRest={true}
+          title={t("plugs.rest")}
+          subtitle={t("plugs.restSub")}
+          color={REST_COLOR}
+          watts={null}
+          todayKwh={todayConsumers?.restKwh}
+          offline={false}
+          t={t}
+        />
+        {/* Provider Meter LAST (2026-10-22, user request): one tile whose
+            flip side is the Meter check — the standalone accuracy tile is
+            gone. */}
         {provider?.available && (
           <PlugCard
             cardKey="provider-meter"
@@ -540,21 +562,10 @@ export default function PlugsTab() {
             meterSourceLabel={t(`provider.source.${provider.powerSource}`)}
             chartless={provider.powerSource !== "meter"}
             offline={false}
+            flipBack={() => <MeterCheckBack accuracy={accuracy} t={t} />}
             t={t}
           />
         )}
-        <PlugCard
-          cardKey="rest"
-          isRest={true}
-          title={t("plugs.rest")}
-          subtitle={t("plugs.restSub")}
-          color={REST_COLOR}
-          watts={null}
-          todayKwh={todayConsumers?.restKwh}
-          offline={false}
-          t={t}
-        />
-        <ProviderAccuracyCard accuracy={accuracy} t={t} />
       </div>
       <p className="plug-note">{t("plugs.note")}</p>
     </section>

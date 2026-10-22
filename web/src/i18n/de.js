@@ -439,7 +439,7 @@ export const de = {
     accuracySub: "Versorger vs. Smart Meter Gen 2",
     waitingChange: "warte auf die erste Änderung am Versorgerzähler",
     waitingPower: "Diagramm erscheint, sobald der Zähler Leistung meldet",
-    windows: { "1h": "1 h", "24h": "24 h", tracked: "seit Tracking" },
+    windows: { lastChange: "letzte kWh", "24h": "≈24 h", tracked: "seit Tracking" },
   },
   welcome: {
     loadError: "Willkommen — {error}",
