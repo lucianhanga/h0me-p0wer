@@ -7533,3 +7533,22 @@ Root causes, all proven against production data:
   HTTP 500 from /api/stats/overview. Replaced it with monthRowsFor and
   verified /api/stats/overview ok:true plus Dashboard cards render again.
   v1.5.310 was therefore never tagged; release proceeds as v1.5.311.
+
+## Rest-of-home pulse aliasing fix (2026-10-22, user report)
+
+- User ran the coffee machine and saw its ~1.4 kW spike duplicated in the
+  "Rest of home" consumer chart with nothing else running. Production data
+  (5 s buckets, 06:43-06:46 CEST) showed home and the coffee plug reading
+  OUT OF PHASE: the machine's thermoblock duty-cycles at ~6 s (1.4 kW on /
+  ~0 off), the plug reports only every ~3 s via MQTT (arrival-time ts), so a
+  5 s plug bucket holds 1-2 samples and aliases the pulse phase, while the
+  meter's 1 s samples make its bucket a true mean. home − Σplugs then
+  compared out-of-phase values (live: home 1299 W with plug bucket 0 W →
+  phantom 824 W Rest; max Rest 824 W during the session vs ~110 W baseline).
+- Fix: web/src/graph/restOfHome.js — restOfHomeSeries() smooths BOTH home
+  and the plug sum with the same centered moving average (±~17 s window)
+  before subtracting, only for buckets ≤30 s (larger buckets already hold
+  ≥10 plug samples = true means). PlugsTab's Rest card uses it; per-plug
+  charts stay unsmoothed. Dry-run on the captured production window: Rest
+  max 824→168 W, oscillation band 0-824→80-170 W; daily kWh math is energy-
+  based and untouched.
