@@ -295,6 +295,11 @@ export class PowerPlanController {
       this.originalRaw = saved.originalRaw ?? null;
       this.lastWrittenPower = saved.lastWrittenPower ?? null;
       this.lastWriteAt = saved.lastWriteAt ?? 0;
+      // Persisted so a restart doesn't re-log "native_mode on" when the
+      // device simply STAYED in self-consumption across the restart — the
+      // activity entry should mean a CHANGE, not a rediscovery (2026-10-22,
+      // user report: the notification appeared on every deploy/restart).
+      this.nativeMode = saved.nativeMode === true;
       // Remap older strategy/trigger models (2026-09-16 had two revisions
       // the same day) onto the current one, so an upgrade never silently
       // lands on an invalid enum value:
@@ -340,6 +345,7 @@ export class PowerPlanController {
           strategy: this.strategy,
           trigger: this.trigger,
           manualDischarge: this.manualDischarge,
+          nativeMode: this.nativeMode,
         }),
       );
       chmodSync(this.stateFile, 0o600);
@@ -708,8 +714,13 @@ export class PowerPlanController {
             reason = "switching to native self-consumption — waiting (min write gap)";
           }
         } else {
-          if (!this.nativeMode) this.logActivity("native_mode", { on: true });
-          this.nativeMode = true;
+          if (!this.nativeMode) {
+            this.logActivity("native_mode", { on: true });
+            this.nativeMode = true;
+            // Persist the transition — a restart must not re-log "on" when
+            // the device simply STAYED in native mode across it.
+            this.saveState();
+          }
           this.nativeSwitchAttempts = 0;
           this.nextNativeSwitchAt = 0;
         }
@@ -742,6 +753,7 @@ export class PowerPlanController {
         // custom-rate-plan value the device wasn't following while in mode 1.
         this.logActivity("native_mode", { on: false });
         this.nativeMode = false;
+        this.saveState();
         this.lastWrittenPower = null;
         this.template = null;
       }
