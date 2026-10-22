@@ -7613,3 +7613,13 @@ Root causes, all proven against production data:
   first process logs on:true once; restarted process with the device still
   native logs nothing; leaving native logs on:false once; restart while
   off logs nothing.
+
+## Visitor IPs on hover (2026-10-22, user request)
+
+- visitors.js now tracks each active visitor's last-seen IP (REST touch
+  and WS upgrade both supply it; broadcast keep-alive touches preserve
+  it). /api/visitors/active returns {count, ips} — unique, sorted,
+  ::ffff:-normalized; the endpoint stays behind the shared token like all
+  /api routes. The header count's native tooltip lists them, one per
+  line. activeVisitorCount/visitorKeyFromUpgradeRequest folded into
+  activeVisitors/visitorInfoFromUpgradeRequest.

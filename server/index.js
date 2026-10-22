@@ -18,7 +18,7 @@ import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, system
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
-import { trackVisitor, activeVisitorCount, touchVisitor, visitorKeyFromUpgradeRequest } from "./visitors.js";
+import { trackVisitor, activeVisitors, touchVisitor, visitorInfoFromUpgradeRequest } from "./visitors.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures, localDate } from "./welcome-sources.js";
 import { parseSpan } from "./http-span.js";
@@ -175,7 +175,7 @@ app.use(express.json());
 app.use("/api", requireAuth, trackVisitor);
 
 app.get("/api/visitors/active", (req, res) => {
-  res.json({ ok: true, data: { count: activeVisitorCount() } });
+  res.json({ ok: true, data: activeVisitors() });
 });
 
 // Display smoothing for the grid reading (2026-09-22, user report: "the
@@ -2187,8 +2187,9 @@ const wss = new WebSocketServer({
   },
 });
 wss.on("connection", (ws, req) => {
-  ws.visitorKey = visitorKeyFromUpgradeRequest(req);
-  touchVisitor(ws.visitorKey);
+  const v = visitorInfoFromUpgradeRequest(req);
+  ws.visitorKey = v.key;
+  touchVisitor(v.key, v.ip);
   buildLiveMessage()
     .then((msg) => ws.send(msg))
     .catch(() => {});

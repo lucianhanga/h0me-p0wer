@@ -11,8 +11,11 @@ import { usePolledResource } from "../usePolledResource.js";
 export default function ActiveVisitors() {
   const { data } = usePolledResource("/api/visitors/active", { intervalMs: 30000, keepLastGoodOnError: true });
   if (data?.count == null) return null;
+  // Hover reveals the visitors' IPs (2026-10-22, user request). Native
+  // title tooltip: one line of explanation + one line per active IP.
+  const title = ["Active in the last minute", ...(data.ips ?? [])].join("\n");
   return (
-    <span className="active-visitors" title="Active in the last minute">
+    <span className="active-visitors" title={title}>
       {data.count} online
     </span>
   );
