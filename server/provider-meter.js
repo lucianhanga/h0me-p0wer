@@ -205,11 +205,16 @@ export function accuracyWindows(nowMs = Date.now()) {
         )
       : { key: "lastChange", ...waiting };
 
-  // ≈24 h, but bounded by official changes: from the last change at or
-  // before now−24h (fallback: the first sample) to the latest change.
+  // ≈24 h, bounded by official changes on BOTH ends (2026-10-22, user
+  // catch): starting at the first SAMPLE instead of the first change
+  // credited a whole official kWh whose energy was mostly consumed BEFORE
+  // the window opened (gen2 rightly measured only the tail — a fake −0.918
+  // kWh "deviation"; every complete change→change block matches gen2 within
+  // ±0.001). So: last change at or before now−24h (fallback: the FIRST
+  // CHANGE, never the first sample) → latest change.
   const dayWin = (() => {
-    if (!lastChange) return { key: "24h", ...waiting };
-    const boundary = [...events].reverse().find((e) => e.ts <= nowMs - 86400000) ?? first;
+    if (!lastChange || !prevChange) return { key: "24h", ...waiting };
+    const boundary = [...events].reverse().find((e) => e.ts <= nowMs - 86400000) ?? events[0];
     if (boundary.ts >= lastChange.ts) return { key: "24h", ...waiting };
     return accuracyForSpan(
       "24h",
@@ -219,14 +224,15 @@ export function accuracyWindows(nowMs = Date.now()) {
     );
   })();
 
-  // Since tracking started: first sample → latest change.
+  // Since tracking started: first observed official change → latest change
+  // (change-anchored on both ends — same reason as the 24h window above).
   const trackedWin =
-    lastChange && first.ts < lastChange.ts
+    lastChange && prevChange
       ? accuracyForSpan(
           "tracked",
-          first.ts,
+          events[0].ts,
           lastChange.ts,
-          r3(lastChange.importKwh - first.importKwh),
+          r3(lastChange.importKwh - events[0].importKwh),
         )
       : { key: "tracked", ...waiting };
 

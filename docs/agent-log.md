@@ -7571,3 +7571,16 @@ Root causes, all proven against production data:
 - Verified by dry-run against the live DB (lastChange span 2.9 h official
   1 kWh; gen2 0 locally only because the meter is production-connected) and
   /api/provider-meter/accuracy over HTTP after restart.
+
+## Meter-check window START anchor fix (2026-10-22, user catch)
+
+- The 24h/tracked windows still showed −0.918 kWh after the first fix:
+  they ended at the last official change but STARTED at the first sample,
+  crediting a whole official kWh whose energy was mostly consumed BEFORE
+  the window opened (the official counter had crossed that kWh boundary
+  earlier; gen2 rightly measured only the tail). Verified per-block on
+  production: every complete change→change kWh block matches gen2 within
+  ±0.001 kWh. Both windows now anchor change→change on BOTH ends (24h
+  fallback = first observed CHANGE, never the first sample; tracked =
+  first change → latest change). Result on production data: 4.000 vs
+  3.999 kWh → −0.001.
