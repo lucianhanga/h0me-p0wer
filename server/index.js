@@ -21,6 +21,7 @@ import { requireAuth, wsTokenValid } from "./auth.js";
 import { trackVisitor, activeVisitors, touchVisitor, visitorInfoFromUpgradeRequest } from "./visitors.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures, localDate } from "./welcome-sources.js";
+import { BigConsumerTracker, BigConsumerReporter, bigConsumerPatterns } from "./big-consumers.js";
 import { parseSpan } from "./http-span.js";
 import { respondMembers } from "./member-routes.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -3499,6 +3500,47 @@ function rollupBattGridChargeDaily() {
 }
 rollupBattGridChargeDaily();
 setInterval(rollupBattGridChargeDaily, 60 * 1000).unref();
+
+// Big-consumer "running now" report (2026-10-22, user request): 10 s
+// sampling of the merged consumer list feeds the tracker's pause-tolerant
+// state machine; the AI sentence regenerates ONLY on start/end
+// transitions (see big-consumers.js).
+// parseWelcomeConfig() returns null without HOME_ADDRESS (the CI smoke
+// test runs exactly that way) — the reporter then template-falls back.
+const bigConsumerReporter = new BigConsumerReporter({
+  ai: parseWelcomeConfig()?.ai ?? { apiKey: "", baseUrl: "", model: "", language: "en" },
+});
+const bigConsumerTracker = new BigConsumerTracker({
+  patterns: bigConsumerPatterns(),
+  onTransition: (kind) => {
+    bigConsumerReporter.onTransition(kind, bigConsumerTracker.activeList()).catch(() => {});
+  },
+});
+setInterval(() => {
+  try {
+    bigConsumerTracker.sample(Date.now(), mergedPlugs());
+  } catch (err) {
+    console.warn("[big-consumers] sample failed:", err.message);
+  }
+}, 10 * 1000).unref();
+
+// The report the simple view's first section shows. The AI TEXT is cached
+// between transitions; the active list (live watts) refreshes per read.
+app.get("/api/big-consumers", (req, res) => {
+  const active = bigConsumerTracker.activeList();
+  const report = bigConsumerReporter.report;
+  res.json({
+    ok: true,
+    data: {
+      available: active.length > 0,
+      text: active.length ? (report?.text ?? null) : null,
+      generatedAt: report?.generatedAt ?? null,
+      ai: report?.ai ?? false,
+      active,
+    },
+  });
+});
+
 startBackupScheduler(); // Azure GFS backup, daily 03:17 when AZURE_BACKUP_URL is set
 // PV curtailment potential (GHI-based ghost bars on the PV tiles) — hourly
 // weather data, refreshed on a relaxed cadence; first call right away.
