@@ -7665,3 +7665,11 @@ Root causes, all proven against production data:
   so "usable now" was understated by 3% × capacity. The tolerance now
   applies only where the controller actually writes (battery_priority or
   manual trigger); native/anker_app show the bare account cutoff (11%).
+
+## Running-now sentence drops the numbers (2026-10-22, user request)
+
+- The AI sentence repeated wattages ("The dryer is currently running at
+  524 W") although the live chips right beside it already show them — and
+  the cached sentence's numbers go stale between transitions. Prompt now
+  forbids numbers/watts/durations outright; the template fallback lists
+  names only. The chips keep carrying the live values.
