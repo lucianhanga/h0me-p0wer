@@ -112,6 +112,13 @@ export function deriveBatteryFlow({ pvW = 0, chargeW = 0, outputW = 0 }) {
   return { pvToBattery, pvToHome, cellsW, gridChargeW };
 }
 
+// Synthetic consumer identity for battery grid charging (2026-10-22, user
+// request — track the solarbanks' grid draw like any other consumer). Not
+// a plug: watts derive from battery_snapshots, daily kWh rolls up into
+// plug_daily under this SN so every consumers surface picks it up.
+export const BATT_GRID_SN = "batt-grid-charge";
+export const BATT_GRID_NAME = "Battery grid charge";
+
 async function ensureSiteId(anker, getLiveBattery) {
   if (anker.siteId) return anker.siteId;
   const live = getLiveBattery();

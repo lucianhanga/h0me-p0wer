@@ -7584,3 +7584,21 @@ Root causes, all proven against production data:
   fallback = first observed CHANGE, never the first sample; tracked =
   first change → latest change). Result on production data: 4.000 vs
   3.999 kWh → −0.001.
+
+## Battery grid charging as a consumer (2026-10-22, user request)
+
+- The SB4 periodically pulls from the grid; that energy used to land in
+  "rest of home". New synthetic consumer "Battery grid charge"
+  (BATT_GRID_SN): watts = max(0, charge − min(pv, charge)) per aggregate
+  battery snapshot — the existing deriveBatteryFlow gridChargeW
+  definition. Wired like the est-* consumers: live entry in mergedPlugs
+  (tile with chart), bucketed series from battery_snapshots in
+  /api/plugs/timeseries (sn-filtered AND merged into the unfiltered
+  response so Rest subtracts it), today's kWh via battGridChargeKwh
+  (trapezoid, 15-min gap clamp), hourly day bars in stats.js (mean watts
+  per hour = Wh), and a 60 s rollup of today+yesterday into plug_daily
+  (battery_snapshots has only 48 h retention; plug_daily is forever) so
+  week/month/year bars and every consumers surface get full history.
+- Verified locally: /api/plugs entry watts 40 (live trickle), timeseries
+  121/121 buckets, unfiltered column present for Rest, day bars 8h=0.04
+  kWh, week bar yesterday 0.06 kWh.
