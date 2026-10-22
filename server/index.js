@@ -3505,7 +3505,11 @@ setInterval(rollupBattGridChargeDaily, 60 * 1000).unref();
 // sampling of the merged consumer list feeds the tracker's pause-tolerant
 // state machine; the AI sentence regenerates ONLY on start/end
 // transitions (see big-consumers.js).
-const bigConsumerReporter = new BigConsumerReporter({ ai: parseWelcomeConfig().ai });
+// parseWelcomeConfig() returns null without HOME_ADDRESS (the CI smoke
+// test runs exactly that way) — the reporter then template-falls back.
+const bigConsumerReporter = new BigConsumerReporter({
+  ai: parseWelcomeConfig()?.ai ?? { apiKey: "", baseUrl: "", model: "", language: "en" },
+});
 const bigConsumerTracker = new BigConsumerTracker({
   patterns: bigConsumerPatterns(),
   onTransition: (kind) => {
