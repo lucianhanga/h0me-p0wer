@@ -7705,3 +7705,13 @@ Root causes, all proven against production data:
   sessions (washer + dryer + 2× dishwasher + cooking): no text collisions.
   Empty days still render (continuity), with a short "nothing ran" note.
   Desktop unchanged (B1 Gantt).
+
+## Devices tab: one centered timeline on all screens (2026-10-23, user request)
+
+- The M2 vertical timeline now renders on desktop too (the B1 Gantt and
+  its Bar component are gone). The line is exactly CENTERED with symmetric
+  left/right label lanes; hour labels sit ON the line behind a
+  card-colored punch-through rect, so lane text can never overlap an hour
+  label (previously left-lane long labels could reach the hour column).
+  Lane collision algorithm unchanged (verified collision-free with 5
+  overlapping sessions).
