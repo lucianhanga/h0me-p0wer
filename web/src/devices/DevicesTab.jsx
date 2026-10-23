@@ -4,13 +4,18 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import { PLUG_COLORS } from "../plugs/PlugsTab.jsx";
 
 // Devices tab (2026-10-23, user request — advanced view): usage-session
-// history of the big consumers as a Gantt (the "B1" prototype choice):
-// day strips × device rows, start–end times at the bar edges and kWh
-// inside wide bars, full values (period · avg W · peak W · kWh) in the
-// hover tooltip. Sessions come from /api/big-consumers/sessions, which
-// replays plug_samples through the same pause-tolerant state machine as
-// the simple view's "Running now" (so washer phase pauses never split a
-// session). plug_samples retention (7 days) is the reach.
+// history of the big consumers as a vertical timeline (prototype pick
+// "M2", extended to ALL screens — phone and desktop render identically).
+// Per day, time flows down a CENTERED line; sessions are blocks on it
+// with a 3-line label (name / times·duration·kWh / avg·peak) in
+// alternating side lanes that never collide (preferred lane blocked →
+// other lane → slide below). Hour labels sit ON the line with a
+// card-colored punch-through so lane text never touches them. Full
+// values also in the hover tooltip. Sessions come from
+// /api/big-consumers/sessions, which replays plug_samples through the
+// same pause-tolerant state machine as the simple view's "Running now"
+// (washer phase pauses never split a session). plug_samples retention
+// (7 days) is the reach.
 
 const DAY_MS = 86400000;
 const SPANS = [
@@ -33,61 +38,12 @@ const minutesOf = (ts) => {
   return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
 };
 
-const W = 900;
-const LEFT = 116;
-const RIGHT = W - 16;
-const ROW_H = 32;
-const x = (m) => LEFT + (m / 1440) * (RIGHT - LEFT);
-
-function Bar({ s, ry, color }) {
-  const x1 = x(minutesOf(s.start));
-  const x2 = s.ongoing ? x(1440) : x(minutesOf(s.end));
-  const w = Math.max(5, x2 - x1);
-  const title = [
-    `${s.device}`,
-    `${fmtTime(s.start)} – ${s.ongoing ? "…" : fmtTime(s.end)} (${fmtDur(s.start, s.end)})`,
-    `avg ${s.avgW} W · peak ${s.peakW} W`,
-    `${s.kwh.toFixed(2)} kWh`,
-  ].join("\n");
-  return (
-    <g>
-      <rect x={x1} y={ry + 3} width={w} height={26} rx={6} fill={color} opacity={0.88}>
-        <title>{title}</title>
-      </rect>
-      {w > 120 ? (
-        <>
-          <text x={x1 + 6} y={ry + 20} fill="#0d1117" fontSize={9.5} fontWeight={700} pointerEvents="none">
-            {fmtTime(s.start)}
-          </text>
-          <text x={x2 - 6} y={ry + 20} textAnchor="end" fill="#0d1117" fontSize={9.5} fontWeight={700} pointerEvents="none">
-            {s.ongoing ? "…" : fmtTime(s.end)}
-          </text>
-          <text x={(x1 + x2) / 2} y={ry + 20} textAnchor="middle" fill="#0d1117" fontSize={10} fontWeight={800} pointerEvents="none">
-            {s.kwh.toFixed(2)} kWh
-          </text>
-        </>
-      ) : (
-        <text x={x2 + 5} y={ry + 20} fill={color} fontSize={9.5} pointerEvents="none">
-          {fmtTime(s.start)}–{s.ongoing ? "…" : fmtTime(s.end)} · {s.kwh.toFixed(2)} kWh
-        </text>
-      )}
-    </g>
-  );
-}
-
-// Mobile rendering (prototype pick "M2", 2026-10-23): per day a vertical
-// timeline — time flows down, sessions are blocks on a center line with a
-// 3-line label (name / times·duration·kWh / avg·peak) beside it. Labels
-// alternate between the two sides ("lanes"); when a lane's previous label
-// would collide vertically, the other lane is tried, and only then the
-// label slides down past the previous one — overlapping sessions (washer +
-// dryer at once) never stack text on text.
-const MW = 366;
-const CX = 150; // timeline x — left of center, leaving room for hour ticks
+const MW = 420;
+const CX = MW / 2; // timeline exactly centered — symmetric label lanes
 const LANE_LABEL_H = 36;
 const LANE_GAP = 6;
 
-function MobileDayStrip({ dayLabelText, sessions, colorOf, emptyLabel }) {
+function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
   const minS = sessions.length ? Math.min(...sessions.map((s) => minutesOf(s.start))) - 45 : 0;
   const maxE = sessions.length ? Math.max(...sessions.map((s) => (s.ongoing ? 1440 : minutesOf(s.end)))) + 30 : 0;
   const H = Math.max(200, (maxE - minS) * 1.1);
@@ -126,11 +82,15 @@ function MobileDayStrip({ dayLabelText, sessions, colorOf, emptyLabel }) {
             { length: Math.floor(maxE / 60) - Math.ceil(minS / 60) + 1 },
             (_, k) => Math.ceil(minS / 60) + k,
           ).map((h) => (
+            // Hour labels sit ON the centered line: a card-colored rect
+            // punches a hole in the line so the label stays readable and —
+            // more importantly — no lane text can ever overlap an hour
+            // label (they live on the axis, not in the lanes).
             <g key={h}>
-              <text x={6} y={y(h * 60) + 3} fill="#6b7684" fontSize={9.5}>
+              <rect x={CX - 18} y={y(h * 60) - 6} width={36} height={12} rx={4} fill="#1a2128" />
+              <text x={CX} y={y(h * 60) + 3.5} textAnchor="middle" fill="#6b7684" fontSize={9}>
                 {String(h).padStart(2, "0")}:00
               </text>
-              <line x1={CX - 5} x2={CX + 5} y1={y(h * 60)} y2={y(h * 60)} stroke="#444c56" strokeWidth={1.5} />
             </g>
           ))}
           <line x1={CX} x2={CX} y1={24} y2={H - 12} stroke="#444c56" strokeWidth={4} strokeLinecap="round" />
@@ -138,7 +98,7 @@ function MobileDayStrip({ dayLabelText, sessions, colorOf, emptyLabel }) {
             const y1 = y(minutesOf(s.start));
             const y2 = y(s.ongoing ? 1440 : minutesOf(s.end));
             const color = colorOf.get(s.device);
-            const tx = lane === 0 ? CX + 16 : CX - 16;
+            const tx = lane === 0 ? CX + 18 : CX - 18;
             const anchor = lane === 0 ? "start" : "end";
             const title = tipOf(s);
             return (
@@ -180,14 +140,6 @@ export default function DevicesTab() {
   });
   const sessions = data?.sessions ?? [];
 
-  // Device rows: every device with a session in the window, biggest energy
-  // first; stable across days so the eye can track one appliance down the
-  // strips.
-  const devices = useMemo(() => {
-    const kwh = new Map();
-    for (const s of sessions) kwh.set(s.device, (kwh.get(s.device) ?? 0) + s.kwh);
-    return [...kwh.entries()].sort((a, b) => b[1] - a[1]).map(([d]) => d);
-  }, [sessions]);
   const colorOf = useMemo(() => {
     const m = new Map();
     for (const s of sessions) {
@@ -208,9 +160,6 @@ export default function DevicesTab() {
     }));
   }, [from, to, sessions]);
 
-  // Phones render the vertical timeline (prototype pick "M2"), desktops
-  // the Gantt ("B1") — same data, two layouts (2026-10-23, user request).
-  const isPhone = window.matchMedia("(max-width: 640px)").matches;
   const dayLabelText = (key) =>
     new Date(`${key}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
 
@@ -228,48 +177,15 @@ export default function DevicesTab() {
         ))}
       </div>
       {data && !sessions.length && <p className="muted">{t("devices.empty")}</p>}
-      {isPhone
-        ? days.map(({ key, sessions: daySessions }) => (
-            <MobileDayStrip
-              key={key}
-              dayLabelText={dayLabelText(key)}
-              sessions={daySessions}
-              colorOf={colorOf}
-              emptyLabel={t("devices.emptyDay")}
-            />
-          ))
-        : days.map(({ key, sessions: daySessions }) => {
-        const stripH = 24 + devices.length * ROW_H + 6;
-        return (
-          <div key={key} className="card devices-day">
-            <div className="devices-day-label muted">
-              {new Date(`${key}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}
-            </div>
-            <svg width="100%" viewBox={`0 0 ${W} ${stripH}`} role="img">
-              {[0, 4, 8, 12, 16, 20, 24].map((h) => (
-                <g key={h}>
-                  <line x1={x(h * 60)} x2={x(h * 60)} y1={14} y2={14 + devices.length * ROW_H} stroke="#21262d" />
-                  <text x={x(h * 60)} y={9} textAnchor="middle" className="axis" fontSize={10} fill="#6b7684">
-                    {String(h).padStart(2, "0")}h
-                  </text>
-                </g>
-              ))}
-              {devices.map((dev, j) => (
-                <g key={dev}>
-                  <text x={LEFT - 10} y={14 + j * ROW_H + ROW_H / 2 + 4} textAnchor="end" fill={colorOf.get(dev)} fontSize={11}>
-                    {dev}
-                  </text>
-                  {daySessions
-                    .filter((s) => s.device === dev)
-                    .map((s) => (
-                      <Bar key={s.start} s={s} ry={14 + j * ROW_H} color={colorOf.get(dev)} />
-                    ))}
-                </g>
-              ))}
-            </svg>
-          </div>
-        );
-      })}
+      {days.map(({ key, sessions: daySessions }) => (
+        <DayTimeline
+          key={key}
+          dayLabelText={dayLabelText(key)}
+          sessions={daySessions}
+          colorOf={colorOf}
+          emptyLabel={t("devices.emptyDay")}
+        />
+      ))}
       <p className="plug-note">{t("devices.note")}</p>
     </section>
   );
