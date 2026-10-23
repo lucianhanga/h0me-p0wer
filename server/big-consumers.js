@@ -11,6 +11,8 @@
 // END_W for END_GRACE_MS — a short dip never closes a session.
 
 import { fetchJson } from "./welcome-sources.js";
+import { getAllPlugNames, getPlugSamplesForSn, getPlugColorIdx } from "./db.js";
+import { plugGroupForName } from "./plug-groups.js";
 
 const START_W = 100; // draw that means "this appliance is working"
 const END_W = 30; // below this the appliance is paused/idle
@@ -179,4 +181,83 @@ export class BigConsumerReporter {
     }
     this.report = { text, active, generatedAt: Date.now(), ai };
   }
+}
+
+// --- Usage-session history (2026-10-23, user request — advanced-view
+// "Devices" tab): replays plug_samples through the SAME pause-tolerant
+// state machine as the live tracker (start ≥ START_W, end only after
+// END_W held for END_GRACE_MS) and returns per session: start/end, avg
+// power, peak power and consumed energy (trapezoid over the raw samples,
+// 15-min gap clamp like plugDayKwhFromSamples). Patterns group member
+// plugs exactly like the live tracker ("cooking" = cooking + cooking2).
+export function extractSessions(fromMs, toMs, patterns = bigConsumerPatterns()) {
+  const names = getAllPlugNames(); // Map sn -> display name
+  const byPattern = new Map(); // pattern -> Set(sn)
+  for (const [sn, name] of names) {
+    const pattern = patterns.find((pt) => (name ?? "").toLowerCase().includes(pt));
+    if (!pattern) continue;
+    if (!byPattern.has(pattern)) byPattern.set(pattern, new Set());
+    byPattern.get(pattern).add(sn);
+  }
+  const sessions = [];
+  const colorIdx = getPlugColorIdx();
+  for (const [pattern, sns] of byPattern) {
+    const rows = [];
+    // getPlugSamplesForSn returns bare {ts, watts} — tag each row with its
+    // member sn so the combined timeline can sum members correctly and the
+    // session gets a display name.
+    for (const sn of sns) for (const r of getPlugSamplesForSn(sn, fromMs, toMs)) rows.push({ ts: r.ts, watts: r.watts, sn });
+    rows.sort((a, b) => a.ts - b.ts);
+    const displayName = (sn) => {
+      const n = names.get(sn) ?? sn;
+      return plugGroupForName(n)?.name ?? n;
+    };
+    // Color keyed to the same SN the Consume tiles use (group SN for
+    // aggregates like cooking, member SN otherwise).
+    const repSn = (sn) => plugGroupForName(names.get(sn) ?? "")?.sn ?? sn;
+    const lastW = new Map(); // sn -> last watts (member plugs interleave)
+    let cur = null; // open session
+    const flush = (endTs) => {
+      const durH = (endTs - cur.startTs) / 3600000;
+      const kwh = Math.round(cur.wh / 10) / 100; // Wh → kWh, 2 decimals
+      sessions.push({
+        device: cur.device,
+        colorIdx: colorIdx.get(repSn(cur.repSn)) ?? colorIdx.get(cur.repSn) ?? null,
+        start: cur.startTs,
+        end: endTs,
+        avgW: durH > 0.001 ? Math.round(cur.wh / durH) : Math.round(cur.peakW),
+        peakW: Math.round(cur.peakW),
+        kwh,
+        ongoing: endTs === cur.prevTs && cur.belowSince == null,
+      });
+    };
+    for (const r of rows) {
+      if (r.watts == null) continue;
+      lastW.set(r.sn, r.watts);
+      let sumW = 0;
+      for (const v of lastW.values()) sumW += v;
+      if (!cur) {
+        if (sumW >= START_W) {
+          cur = { device: displayName(r.sn), repSn: r.sn, startTs: r.ts, belowSince: null, peakW: sumW, wh: 0, prevTs: r.ts, prevW: sumW };
+        }
+        continue;
+      }
+      const dtH = Math.min(r.ts - cur.prevTs, 15 * 60 * 1000) / 3600000;
+      cur.wh += ((cur.prevW + sumW) / 2) * dtH;
+      cur.prevTs = r.ts;
+      cur.prevW = sumW;
+      cur.peakW = Math.max(cur.peakW, sumW);
+      if (sumW >= START_W) {
+        cur.belowSince = null;
+      } else if (sumW < END_W) {
+        cur.belowSince ??= r.ts;
+        if (r.ts - cur.belowSince >= END_GRACE_MS) {
+          flush(r.ts);
+          cur = null;
+        }
+      }
+    }
+    if (cur) flush(cur.prevTs); // still running at the window edge
+  }
+  return sessions.sort((a, b) => a.start - b.start);
 }

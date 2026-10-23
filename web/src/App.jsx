@@ -3,6 +3,7 @@ import LiveTab from "./live/LiveTab.jsx";
 import StrategyTab from "./strategy/StrategyTab.jsx";
 import GraphTab from "./graph/GraphTab.jsx";
 import PlugsTab from "./plugs/PlugsTab.jsx";
+import DevicesTab from "./devices/DevicesTab.jsx";
 import Dashboard from "./dashboard/Dashboard.jsx";
 import RoiTab from "./roi/RoiTab.jsx";
 import WelcomeTab from "./welcome/WelcomeTab.jsx";
@@ -22,6 +23,7 @@ const PAGES = [
   { key: "strategy", labelKey: "nav.strategy" },
   { key: "graph", labelKey: "nav.graph" },
   { key: "plugs", labelKey: "nav.plugs" },
+  { key: "devices", labelKey: "nav.devices" },
   { key: "dashboard", labelKey: "nav.dashboard" },
   { key: "roi", labelKey: "nav.roi" },
 ];
@@ -111,6 +113,8 @@ function Shell() {
           <GraphTab />
         ) : page === "plugs" ? (
           <PlugsTab />
+        ) : page === "devices" ? (
+          <DevicesTab />
         ) : page === "roi" ? (
           <RoiTab />
         ) : (
