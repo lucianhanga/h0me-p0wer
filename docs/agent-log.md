@@ -7693,3 +7693,15 @@ Root causes, all proven against production data:
 - Verified against the production DB in-container: washer 3.3 h cycle
   (incl. phase pauses) = ONE session 446 W avg / 2314 W peak / 1.48 kWh;
   dishwasher, dryer, two cooking sessions equally plausible.
+
+## Devices tab mobile layout (2026-10-23, user request)
+
+- Phones (≤640 px) render the vertical timeline (prototype pick "M2")
+  instead of the Gantt: time flows down a center line, hour ticks left,
+  sessions as blocks with a 3-line label (name / times·duration·kWh /
+  avg·peak). Labels alternate left/right lanes with collision avoidance —
+  if the preferred lane is occupied the other is tried, else the label
+  slides below the previous one; verified with 5 mutually overlapping
+  sessions (washer + dryer + 2× dishwasher + cooking): no text collisions.
+  Empty days still render (continuity), with a short "nothing ran" note.
+  Desktop unchanged (B1 Gantt).

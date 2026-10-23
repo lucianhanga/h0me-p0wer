@@ -75,6 +75,97 @@ function Bar({ s, ry, color }) {
   );
 }
 
+// Mobile rendering (prototype pick "M2", 2026-10-23): per day a vertical
+// timeline — time flows down, sessions are blocks on a center line with a
+// 3-line label (name / times·duration·kWh / avg·peak) beside it. Labels
+// alternate between the two sides ("lanes"); when a lane's previous label
+// would collide vertically, the other lane is tried, and only then the
+// label slides down past the previous one — overlapping sessions (washer +
+// dryer at once) never stack text on text.
+const MW = 366;
+const CX = 150; // timeline x — left of center, leaving room for hour ticks
+const LANE_LABEL_H = 36;
+const LANE_GAP = 6;
+
+function MobileDayStrip({ dayLabelText, sessions, colorOf, emptyLabel }) {
+  const minS = sessions.length ? Math.min(...sessions.map((s) => minutesOf(s.start))) - 45 : 0;
+  const maxE = sessions.length ? Math.max(...sessions.map((s) => (s.ongoing ? 1440 : minutesOf(s.end)))) + 30 : 0;
+  const H = Math.max(200, (maxE - minS) * 1.1);
+  const y = (m) => 26 + ((m - minS) / (maxE - minS)) * (H - 40);
+  const lanes = [{ bottom: -1e9 }, { bottom: -1e9 }]; // 0 = right, 1 = left
+  const placed = [...sessions]
+    .sort((a, b) => a.start - b.start)
+    .map((s, i) => {
+      const midY = (y(minutesOf(s.start)) + y(s.ongoing ? 1440 : minutesOf(s.end))) / 2;
+      let top = midY - LANE_LABEL_H / 2;
+      let lane = i % 2;
+      if (lanes[lane].bottom + LANE_GAP > top) {
+        const other = 1 - lane;
+        if (lanes[other].bottom + LANE_GAP <= top) lane = other;
+        else {
+          lane = lanes[0].bottom <= lanes[1].bottom ? 0 : 1;
+          top = lanes[lane].bottom + LANE_GAP; // both blocked — slide down
+        }
+      }
+      lanes[lane].bottom = top + LANE_LABEL_H;
+      return { s, top, lane };
+    });
+  const tipOf = (s) =>
+    [
+      s.device,
+      `${fmtTime(s.start)} – ${s.ongoing ? "…" : fmtTime(s.end)} (${fmtDur(s.start, s.end)})`,
+      `avg ${s.avgW} W · peak ${s.peakW} W · ${s.kwh.toFixed(2)} kWh`,
+    ].join("\n");
+  return (
+    <div className="card devices-day">
+      <div className="devices-day-label muted">{dayLabelText}</div>
+      {!sessions.length && <p className="muted" style={{ margin: "2px 0", fontSize: 12 }}>{emptyLabel}</p>}
+      {sessions.length > 0 && (
+        <svg width="100%" viewBox={`0 0 ${MW} ${H}`} role="img">
+          {Array.from(
+            { length: Math.floor(maxE / 60) - Math.ceil(minS / 60) + 1 },
+            (_, k) => Math.ceil(minS / 60) + k,
+          ).map((h) => (
+            <g key={h}>
+              <text x={6} y={y(h * 60) + 3} fill="#6b7684" fontSize={9.5}>
+                {String(h).padStart(2, "0")}:00
+              </text>
+              <line x1={CX - 5} x2={CX + 5} y1={y(h * 60)} y2={y(h * 60)} stroke="#444c56" strokeWidth={1.5} />
+            </g>
+          ))}
+          <line x1={CX} x2={CX} y1={24} y2={H - 12} stroke="#444c56" strokeWidth={4} strokeLinecap="round" />
+          {placed.map(({ s, top, lane }) => {
+            const y1 = y(minutesOf(s.start));
+            const y2 = y(s.ongoing ? 1440 : minutesOf(s.end));
+            const color = colorOf.get(s.device);
+            const tx = lane === 0 ? CX + 16 : CX - 16;
+            const anchor = lane === 0 ? "start" : "end";
+            const title = tipOf(s);
+            return (
+              <g key={s.start}>
+                <rect x={CX - 8} y={y1} width={16} height={Math.max(6, y2 - y1)} rx={7} fill={color} opacity={0.92}>
+                  <title>{title}</title>
+                </rect>
+                <text x={tx} y={top + 9} textAnchor={anchor} fill={color} fontSize={11.5} fontWeight={600}>
+                  <title>{title}</title>
+                  {s.device}
+                </text>
+                <text x={tx} y={top + 22} textAnchor={anchor} fill="#8b98a5" fontSize={9.5}>
+                  {fmtTime(s.start)}–{s.ongoing ? "…" : fmtTime(s.end)} · {fmtDur(s.start, s.end)} · {s.kwh.toFixed(2)} kWh
+                </text>
+                <text x={tx} y={top + 34} textAnchor={anchor} fill="#6b7684" fontSize={9}>
+                  avg {s.avgW} W · peak {s.peakW} W
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      )}
+    </div>
+  );
+}
+
+
 export default function DevicesTab() {
   const t = useT();
   const [spanMs, setSpanMs] = useState(SPANS[0].ms);
@@ -117,6 +208,12 @@ export default function DevicesTab() {
     }));
   }, [from, to, sessions]);
 
+  // Phones render the vertical timeline (prototype pick "M2"), desktops
+  // the Gantt ("B1") — same data, two layouts (2026-10-23, user request).
+  const isPhone = window.matchMedia("(max-width: 640px)").matches;
+  const dayLabelText = (key) =>
+    new Date(`${key}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+
   return (
     <section>
       <div className="controls" style={{ marginBottom: 8 }}>
@@ -131,7 +228,17 @@ export default function DevicesTab() {
         ))}
       </div>
       {data && !sessions.length && <p className="muted">{t("devices.empty")}</p>}
-      {days.map(({ key, sessions: daySessions }) => {
+      {isPhone
+        ? days.map(({ key, sessions: daySessions }) => (
+            <MobileDayStrip
+              key={key}
+              dayLabelText={dayLabelText(key)}
+              sessions={daySessions}
+              colorOf={colorOf}
+              emptyLabel={t("devices.emptyDay")}
+            />
+          ))
+        : days.map(({ key, sessions: daySessions }) => {
         const stripH = 24 + devices.length * ROW_H + 6;
         return (
           <div key={key} className="card devices-day">

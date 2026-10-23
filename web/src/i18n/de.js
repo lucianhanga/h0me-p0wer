@@ -15,6 +15,7 @@ export const de = {
     span3: "3 Tage",
     span7: "7 Tage",
     empty: "Keine Großverbraucher-Sitzungen in diesem Zeitraum.",
+    emptyDay: "Keine Großverbraucher aktiv.",
     note: "Sitzungen kommen aus der Leistungshistorie der Steckdosen (7 Tage) — Start ab ≥ 100 W, Ende erst nach 20 Minuten unter 30 W, damit Programmpausen einen Wasch- oder Trockengang nie teilen.",
   },
   plugs: {
