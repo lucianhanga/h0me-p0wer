@@ -21,7 +21,7 @@ import { requireAuth, wsTokenValid } from "./auth.js";
 import { trackVisitor, activeVisitors, touchVisitor, visitorInfoFromUpgradeRequest } from "./visitors.js";
 import { pvKwhForDay } from "./welcome-ai.js";
 import { parseWelcomeConfig, geocode, fetchHourlyTemperatures, localDate } from "./welcome-sources.js";
-import { BigConsumerTracker, BigConsumerReporter, bigConsumerPatterns } from "./big-consumers.js";
+import { BigConsumerTracker, BigConsumerReporter, bigConsumerPatterns, extractSessions } from "./big-consumers.js";
 import { parseSpan } from "./http-span.js";
 import { respondMembers } from "./member-routes.js";
 import { PowerPlanController } from "./power-plan.js";
@@ -3545,6 +3545,17 @@ app.get("/api/big-consumers", (req, res) => {
       ai: report?.ai ?? false,
       active,
     },
+  });
+});
+
+// Usage-session history for the advanced view's Devices tab (Gantt).
+// plug_samples holds 7 days of intraday detail — that is the reach.
+app.get("/api/big-consumers/sessions", (req, res) => {
+  const span = parseSpan(req, res);
+  if (!span) return;
+  res.json({
+    ok: true,
+    data: { sessions: extractSessions(span.from, span.to, bigConsumerPatterns()) },
   });
 });
 

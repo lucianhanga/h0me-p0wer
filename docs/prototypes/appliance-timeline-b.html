@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Appliance timeline — Gantt refinements</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { background: #0d1117; color: #e8ecef; font: 14px/1.45 system-ui, sans-serif; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: #8b98a5; margin: 0 0 18px; font-size: 13px; }
+  .variant { border: 1px solid #30363d; border-radius: 10px; padding: 18px; margin-bottom: 28px; background: #131820; }
+  .variant h3 { margin: 0 0 2px; font-size: 16px; }
+  .variant .desc { color: #8b98a5; font-size: 12.5px; margin-bottom: 16px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin: 12px 0 4px; font-size: 12px; color: #9fb0bd; }
+  .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; background: var(--c); }
+  .tip { position: fixed; pointer-events: none; background: #1c2128; border: 1px solid #444c56; border-radius: 8px; padding: 8px 10px; font-size: 12px; color: #c8d0d8; display: none; z-index: 9; max-width: 280px; box-shadow: 0 6px 24px #000a; }
+  .tip b { color: #fff; }
+  svg text { font-family: system-ui, sans-serif; }
+  .axis { fill: #6b7684; font-size: 10px; }
+  .daylab { fill: #9fb0bd; font-size: 11px; font-weight: 600; }
+  .pick { float: right; background: #238636; color: #fff; border: 0; border-radius: 6px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
+  .pick:hover { background: #2ea043; }
+  .detail { border: 1px solid #30363d; border-radius: 8px; background: #0d1117; padding: 10px 14px; font-size: 13px; color: #c8d0d8; min-height: 46px; margin-top: 12px; }
+  .detail b { color: #fff; }
+</style>
+</head>
+<body>
+<h1>Gantt — 4 refined options</h1>
+<p class="sub">Same mock data. Full values (period · avg W · peak W · kWh) are in the hover tooltip everywhere; the options differ in how much is written directly on the chart. Click “Choose this one”.</p>
+<div class="legend" id="legend"></div>
+<div id="app"></div>
+<div class="tip" id="tip"></div>
+
+<script>
+const DEVICES = {
+  waschmaschine: "#5fdddd",
+  trockner:      "#dd8e5f",
+  "spüler":      "#9edd5f",
+  cooking:       "#dd5f5f",
+};
+const DAYS = ["2026-10-20", "2026-10-21", "2026-10-22"];
+const SESSIONS = [
+  { day: 0, device: "spüler",       start: 7*60+10,  end: 8*60+55,  avgW: 1050, peakW: 1980, kwh: 1.85 },
+  { day: 0, device: "waschmaschine",start: 9*60+20,  end: 11*60+40, avgW: 480,  peakW: 2050, kwh: 1.10 },
+  { day: 0, device: "cooking",      start: 12*60+5,  end: 12*60+50, avgW: 1400, peakW: 2200, kwh: 1.05 },
+  { day: 0, device: "cooking",      start: 18*60+30, end: 19*60+25, avgW: 1200, peakW: 2100, kwh: 0.92 },
+  { day: 1, device: "waschmaschine",start: 8*60+5,   end: 10*60+35, avgW: 510,  peakW: 2100, kwh: 1.28 },
+  { day: 1, device: "trockner",     start: 10*60+45, end: 12*60+15, avgW: 780,  peakW: 1900, kwh: 1.17 },
+  { day: 1, device: "cooking",      start: 12*60+40, end: 13*60+20, avgW: 1350, peakW: 2050, kwh: 0.90 },
+  { day: 1, device: "spüler",       start: 20*60+15, end: 22*60+5,  avgW: 980,  peakW: 1950, kwh: 1.80 },
+  { day: 2, device: "trockner",     start: 7*60+55,  end: 9*60+30,  avgW: 810,  peakW: 1850, kwh: 1.26 },
+  { day: 2, device: "waschmaschine",start: 9*60+40,  end: 12*60+0,  avgW: 495,  peakW: 2150, kwh: 1.16 },
+  { day: 2, device: "cooking",      start: 12*60+15, end: 13*60+0,  avgW: 1500, peakW: 2300, kwh: 1.13 },
+  { day: 2, device: "cooking",      start: 18*60+45, end: 19*60+35, avgW: 1250, peakW: 2000, kwh: 1.04 },
+];
+// per-session power profile (for B3) — synthetic wiggle around avg
+const profile = (s, n = 24) => Array.from({length: n}, (_, i) => {
+  const p = Math.min(1, Math.max(0.08, s.avgW * (0.55 + 0.9 * Math.abs(Math.sin(i * 1.7 + s.start)))));
+  return Math.min(p, s.peakW);
+});
+
+const fmtTime = (m) => `${String(Math.floor(m/60)).padStart(2,"0")}:${String(Math.round(m%60)).padStart(2,"0")}`;
+const fmtDur = (a,b) => { const d=b-a; return d>=60 ? `${Math.floor(d/60)}h ${String(Math.round(d%60)).padStart(2,"0")}m` : `${Math.round(d)} min`; };
+const tipHtml = (s) => `<b style="color:${DEVICES[s.device]}">${s.device}</b> · ${DAYS[s.day]}<br>` +
+  `period <b>${fmtTime(s.start)} – ${fmtTime(s.end)}</b> (${fmtDur(s.start,s.end)})<br>` +
+  `avg <b>${s.avgW} W</b> · peak <b>${s.peakW} W</b> · energy <b>${s.kwh.toFixed(2)} kWh</b>`;
+
+const tip = document.getElementById("tip");
+function bindTip(el, s) {
+  el.addEventListener("mousemove", (e) => {
+    tip.innerHTML = tipHtml(s); tip.style.display = "block";
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 300) + "px";
+    tip.style.top = (e.clientY + 14) + "px";
+  });
+  el.addEventListener("mouseleave", () => (tip.style.display = "none"));
+}
+document.getElementById("legend").innerHTML =
+  Object.entries(DEVICES).map(([d,c]) => `<span style="--c:${c}">${d}</span>`).join("");
+
+const SVGNS = "http://www.w3.org/2000/svg";
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(SVGNS, tag);
+  for (const [k,v] of Object.entries(attrs)) e.setAttribute(k, v);
+  parent.appendChild(e); return e;
+}
+function variantShell(title, desc) {
+  const d = document.createElement("div"); d.className = "variant";
+  d.innerHTML = `<button class="pick">Choose this one</button><h3>${title}</h3><div class="desc">${desc}</div>`;
+  d.querySelector(".pick").onclick = () => { alert(`You picked: ${title}`); };
+  document.getElementById("app").appendChild(d);
+  return d;
+}
+const dayLabel = (d) => new Date(d + "T12:00").toLocaleDateString("en", { weekday: "short", month: "short", day: "numeric" });
+
+function ganttBase(host, { rowH = 30, devs = Object.keys(DEVICES) }) {
+  const W = 900, left = 116, right = W - 16, dayH = devs.length * rowH + 30;
+  const H = 20 + DAYS.length * dayH + 10;
+  const x = (m) => left + (m / 1440) * (right - left);
+  const svg = el("svg", { width: "100%", viewBox: `0 0 ${W} ${H}` }, host);
+  DAYS.forEach((d, i) => {
+    const oy = 20 + i * dayH;
+    const dl = el("text", { x: left - 10, y: oy + 6, "text-anchor": "end", class: "daylab" }, svg);
+    dl.textContent = dayLabel(d);
+    for (let h = 0; h <= 24; h += 4) {
+      el("line", { x1: x(h*60), x2: x(h*60), y1: oy + 12, y2: oy + 12 + devs.length * rowH, stroke: "#21262d" }, svg);
+      if (i === 0) { const t = el("text", { x: x(h*60), y: oy + 7, "text-anchor": "middle", class: "axis" }, svg); t.textContent = `${String(h).padStart(2,"0")}h`; }
+    }
+    devs.forEach((dev, j) => {
+      const t = el("text", { x: left - 10, y: oy + 12 + j * rowH + rowH / 2 + 4, "text-anchor": "end", fill: DEVICES[dev], "font-size": 11 }, svg);
+      t.textContent = dev;
+    });
+  });
+  return { svg, x, rowY: (i, j) => 20 + i * dayH + 12 + j * rowH };
+}
+
+/* ===== B1 — times on the bar, kWh inside, tooltip with everything ===== */
+(function () {
+  const host = variantShell("B1 — times + kWh on the bar",
+    "Start–end times sit at the bar edges, energy inside the bar. Hover still gives avg/peak. Zero extra chrome.");
+  const { svg, x, rowY } = ganttBase(host, { rowH: 32 });
+  const devs = Object.keys(DEVICES);
+  DAYS.forEach((d, i) => devs.forEach((dev, j) => {
+    SESSIONS.filter(s => s.day === i && s.device === dev).forEach((s) => {
+      const ry = rowY(i, j), x1 = x(s.start), x2 = x(s.end), w = Math.max(5, x2 - x1);
+      const r = el("rect", { x: x1, y: ry + 3, width: w, height: 26, rx: 6, fill: DEVICES[dev], opacity: 0.88 }, svg);
+      bindTip(r, s);
+      if (w > 120) {
+        const t1 = el("text", { x: x1 + 6, y: ry + 20, fill: "#0d1117", "font-size": 9.5, "font-weight": 700 }, svg);
+        t1.textContent = fmtTime(s.start);
+        const t2 = el("text", { x: x2 - 6, y: ry + 20, "text-anchor": "end", fill: "#0d1117", "font-size": 9.5, "font-weight": 700 }, svg);
+        t2.textContent = fmtTime(s.end);
+        const k = el("text", { x: (x1+x2)/2, y: ry + 20, "text-anchor": "middle", fill: "#0d1117", "font-size": 10, "font-weight": 800 }, svg);
+        k.textContent = `${s.kwh.toFixed(2)} kWh`;
+      } else {
+        const t = el("text", { x: x2 + 5, y: ry + 20, fill: DEVICES[dev], "font-size": 9.5 }, svg);
+        t.textContent = `${fmtTime(s.start)}–${fmtTime(s.end)} · ${s.kwh.toFixed(2)} kWh`;
+      }
+    });
+  }));
+})();
+
+/* ===== B2 — compact bars + right-hand day totals per device ===== */
+(function () {
+  const host = variantShell("B2 — bars + per-device day totals",
+    "Clean bars (tooltip carries the numbers), and a right-hand column sums each appliance's day: count × energy.");
+  const devs = Object.keys(DEVICES);
+  const { svg, x, rowY } = ganttBase(host, { rowH: 28 });
+  DAYS.forEach((d, i) => devs.forEach((dev, j) => {
+    const dayS = SESSIONS.filter(s => s.day === i && s.device === dev);
+    dayS.forEach((s) => {
+      const ry = rowY(i, j);
+      const r = el("rect", { x: x(s.start), y: ry + 5, width: Math.max(5, x(s.end) - x(s.start)), height: 18, rx: 5, fill: DEVICES[dev], opacity: 0.9 }, svg);
+      bindTip(r, s);
+    });
+    if (dayS.length) {
+      const ry = rowY(i, j);
+      const tot = dayS.reduce((a, s) => a + s.kwh, 0);
+      const t = el("text", { x: 884, y: ry + 19, "text-anchor": "end", fill: DEVICES[dev], "font-size": 10.5, "font-weight": 600 }, svg);
+      t.textContent = `${dayS.length > 1 ? dayS.length + "× " : ""}${tot.toFixed(2)} kWh`;
+    }
+  }));
+})();
+
+/* ===== B3 — power profile inside the bar (sparkline) ===== */
+(function () {
+  const host = variantShell("B3 — power profile inside the bar",
+    "Each bar is a mini power chart of the session (washer phases, cooking pulses visible at a glance). Peak marked with a tick. Hover for exact values.");
+  const devs = Object.keys(DEVICES);
+  const { svg, x, rowY } = ganttBase(host, { rowH: 34 });
+  DAYS.forEach((d, i) => devs.forEach((dev, j) => {
+    SESSIONS.filter(s => s.day === i && s.device === dev).forEach((s) => {
+      const ry = rowY(i, j), x1 = x(s.start), x2 = x(s.end), w = Math.max(6, x2 - x1), h = 26;
+      const prof = profile(s);
+      const pts = prof.map((p, k) => [x1 + (k / (prof.length - 1)) * w, ry + 4 + h - (p / 2400) * h]);
+      const path = pts.map((p, k) => `${k ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+      const clip = el("clipPath", { id: `c${i}${j}${s.start}` }, svg);
+      el("rect", { x: x1, y: ry + 3, width: w, height: h + 4, rx: 6 }, clip);
+      const g = el("g", { "clip-path": `url(#c${i}${j}${s.start})` }, svg);
+      el("rect", { x: x1, y: ry + 3, width: w, height: h + 4, fill: DEVICES[dev], opacity: 0.35 }, g);
+      const area = el("path", { d: path + ` L${x1+w},${ry+4+h} L${x1},${ry+4+h} Z`, fill: DEVICES[dev], opacity: 0.95 }, g);
+      // peak tick
+      const pk = prof.indexOf(Math.max(...prof));
+      el("line", { x1: pts[pk][0], x2: pts[pk][0], y1: pts[pk][1] - 4, y2: pts[pk][1] + 2, stroke: "#fff", "stroke-width": 1.4 }, g);
+      bindTip(area, s);
+    });
+  }));
+})();
+
+/* ===== B4 — click a bar: full detail panel below the chart ===== */
+(function () {
+  const host = variantShell("B4 — click for the full detail panel",
+    "For the phone (no hover): tap a bar and the complete values appear in the panel under the chart. Mouse still gets the tooltip.");
+  const devs = Object.keys(DEVICES);
+  const { svg, x, rowY } = ganttBase(host, { rowH: 32 });
+  const panel = document.createElement("div");
+  panel.className = "detail";
+  panel.innerHTML = `<span style="color:#6b7684">Tap a session bar…</span>`;
+  host.appendChild(panel);
+  DAYS.forEach((d, i) => devs.forEach((dev, j) => {
+    SESSIONS.filter(s => s.day === i && s.device === dev).forEach((s) => {
+      const ry = rowY(i, j);
+      const r = el("rect", { x: x(s.start), y: ry + 4, width: Math.max(6, x(s.end) - x(s.start)), height: 24, rx: 6,
+        fill: DEVICES[dev], opacity: 0.85, style: "cursor:pointer" }, svg);
+      bindTip(r, s);
+      r.addEventListener("click", () => {
+        svg.querySelectorAll("rect[data-sel]").forEach((q) => { q.removeAttribute("stroke"); q.removeAttribute("stroke-width"); });
+        r.setAttribute("stroke", "#fff"); r.setAttribute("stroke-width", "1.5"); r.setAttribute("data-sel", "1");
+        panel.innerHTML = `<b style="color:${DEVICES[s.device]}">${s.device}</b> — ${dayLabel(DAYS[s.day])}<br>` +
+          `period <b>${fmtTime(s.start)} – ${fmtTime(s.end)}</b> (${fmtDur(s.start, s.end)}) &nbsp;·&nbsp; ` +
+          `avg <b>${s.avgW} W</b> &nbsp;·&nbsp; peak <b>${s.peakW} W</b> &nbsp;·&nbsp; energy <b>${s.kwh.toFixed(2)} kWh</b>`;
+      });
+    });
+  }));
+})();
+</script>
+</body>
+</html>

@@ -9,6 +9,13 @@ export const ro = {
     dashboard: "Sumar",
     roi: "ROI",
     plugs: "Consum",
+    devices: "Aparate",
+  },
+  devices: {
+    span3: "3 zile",
+    span7: "7 zile",
+    empty: "Nicio sesiune a consumatorilor mari în acest interval.",
+    note: "Sesiunile provin din istoricul de putere al prizelor (7 zile) — încep la ≥ 100 W și se termină abia după 20 de minute sub 30 W, astfel pauzele de program nu divid niciodată un ciclu de spălare sau uscare.",
   },
   plugs: {
     rest: "Restul casei",

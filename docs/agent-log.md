@@ -7673,3 +7673,23 @@ Root causes, all proven against production data:
   the cached sentence's numbers go stale between transitions. Prompt now
   forbids numbers/watts/durations outright; the template fallback lists
   names only. The chips keep carrying the live values.
+
+## Devices tab — appliance usage timeline (2026-10-23, user request)
+
+- New advanced-view tab (nav: Devices/Geräte/Aparate) with the usage
+  history of the big consumers as a Gantt (prototype choice "B1"): day
+  strips × device rows, start–end times at the bar edges, kWh inside wide
+  bars (side caption for narrow ones), full values (period · avg W ·
+  peak W · kWh) in the hover tooltip, 3d/7d spans, colors matched to the
+  Consume tiles via the shared colorIdx.
+- Server: extractSessions() in big-consumers.js replays plug_samples
+  through the same pause-tolerant state machine as Running-now (start ≥
+  100 W, end after < 30 W for 20 min), integrating kWh by trapezoid
+  (15-min gap clamp) and tracking peak W; /api/big-consumers/sessions
+  serves it (7-day plug_samples retention is the reach). Patterns group
+  members like the live tracker (cooking = cooking + cooking2). Bare
+  {ts,watts} rows from getPlugSamplesForSn get tagged with their member
+  sn for correct multi-member summing.
+- Verified against the production DB in-container: washer 3.3 h cycle
+  (incl. phase pauses) = ONE session 446 W avg / 2314 W peak / 1.48 kWh;
+  dishwasher, dryer, two cooking sessions equally plausible.

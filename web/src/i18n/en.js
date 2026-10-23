@@ -9,6 +9,13 @@ export const en = {
     dashboard: "Dashboard",
     roi: "ROI",
     plugs: "Consume",
+    devices: "Devices",
+  },
+  devices: {
+    span3: "3 days",
+    span7: "7 days",
+    empty: "No big-appliance sessions in this window.",
+    note: "Sessions come from the smart-plug power history (7 days) — a session starts at ≥ 100 W and ends only after 20 minutes below 30 W, so program pauses never split a wash or drying cycle.",
   },
   plugs: {
     rest: "Rest of home",
