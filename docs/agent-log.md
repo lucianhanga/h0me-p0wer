@@ -7751,3 +7751,22 @@ Root causes, all proven against production data:
   counter reset, and lockout on both endpoints. Headless Chrome confirmed
   both buttons send the PIN and restore still sends its backup name. Vite
   build and node --check pass.
+
+## Simple Trends: combined battery capacity over time (2026-11-02, user design choice)
+
+- After browser mockups, the user chose ONE combined stored-energy series —
+  no per-battery lines or stacks — in the existing Simple Trends flip-tile
+  style. The capacity tile cycles 12h → 24h → 7d → 30d (other tiles keep
+  their existing 6h default and spans).
+- server/battery-capacity.js converts the existing 93-day module_snapshots
+  SOC rows to kWh using base-pack capacity for MQTT-mapped units, whole-unit
+  capacity for REST-only units, and expansion-pack capacity for packs;
+  unknown/legacy module keys are skipped. /api/timeseries emits their sum as
+  battStoredKwh per bucket, so all four spans work without a new
+  high-frequency table or the 48 h battery_snapshots limit.
+- SimpleCharts adds the kWh area chart with kWh tooltip/axis formatting and
+  translated Battery capacity titles in en/de/ro. .superpowers/ is ignored
+  for local browser-design artifacts.
+- Verified capacity conversion fixtures (including REST-only semantics), Vite
+  build/server syntax, and a real-timing headless-Chrome CDP run that clicked
+  the tile through 12h/24h/7d/30d and checked every requested view window.

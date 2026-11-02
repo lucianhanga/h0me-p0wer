@@ -405,6 +405,7 @@ export const ro = {
       battery: "Baterie",
       battTemp: "Temperatura bateriei",
       battSoc: "Încărcarea bateriei pe modul",
+      battCapacity: "Capacitatea bateriei",
     },
     series: {
       grid: "Rețea",
