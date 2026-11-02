@@ -2,7 +2,7 @@ import { resolveConstants } from "./battery-params.js";
 
 const MQTT_KNOWN_PN = new Set(["A17C0", "A17C1", "A17C2", "A17C3", "AE103"]);
 
-function moduleCapacitiesKwh(members) {
+export function moduleCapacitiesKwh(members) {
   const capacities = new Map();
   for (const member of members) {
     if (!member?.sn) continue;
@@ -21,14 +21,18 @@ export function systemModuleCapacityKwh(members) {
   return [...moduleCapacitiesKwh(members).values()].reduce((sum, capacity) => sum + capacity, 0);
 }
 
-export function storedKwhByBucket(rows, members) {
+export function storedKwhByBucket(rows, members, initialSoc = {}) {
   const capacities = moduleCapacitiesKwh(members);
+  const lastSoc = new Map(Object.entries(initialSoc));
   const stored = new Map();
   for (const row of rows) {
-    const capacity = capacities.get(row.module);
-    if (capacity == null || row.soc == null) continue;
-    const kwh = (row.soc / 100) * capacity;
-    stored.set(row.bt, (stored.get(row.bt) ?? 0) + kwh);
+    if (!capacities.has(row.module)) continue;
+    if (row.soc != null) lastSoc.set(row.module, row.soc);
+    let total = 0;
+    for (const [module, capacity] of capacities) {
+      if (lastSoc.has(module)) total += (lastSoc.get(module) / 100) * capacity;
+    }
+    stored.set(row.bt, total);
   }
   return stored;
 }

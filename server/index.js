@@ -15,7 +15,7 @@ import { registerWelcomeRoute } from "./welcome.js";
 import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh, BATT_GRID_SN, BATT_GRID_NAME } from "./battery-params.js";
-import { storedKwhByBucket, systemModuleCapacityKwh } from "./battery-capacity.js";
+import { moduleCapacitiesKwh, storedKwhByBucket, systemModuleCapacityKwh } from "./battery-capacity.js";
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
@@ -52,6 +52,7 @@ import {
   getBatteryHistory,
   getBatteryBuckets,
   getModuleBuckets,
+  getLatestModuleSocBefore,
   getPvStringKwhForDay,
   saveCloudPvTrend,
   getStoredPvPeriodStarts,
@@ -842,8 +843,15 @@ async function timeseriesInner(req, res) {
   // (2026-10-15, user report: this exact chart lagged — 365k raw rows per
   // 7d were merged in JS on every request).
   const seenModules = new Set();
-  const moduleBuckets = getModuleBuckets(from - CLOUD_INTERVAL_MS, to, bucketMs);
-  const storedByBucket = storedKwhByBucket(moduleBuckets, [...latestBatteries.values()]);
+  const moduleMembers = [...latestBatteries.values()];
+  const moduleFrom = from - CLOUD_INTERVAL_MS;
+  const moduleBuckets = getModuleBuckets(moduleFrom, to, bucketMs);
+  const initialSoc = {};
+  for (const module of moduleCapacitiesKwh(moduleMembers).keys()) {
+    const soc = getLatestModuleSocBefore(module, moduleFrom);
+    if (soc != null) initialSoc[module] = soc;
+  }
+  const storedByBucket = storedKwhByBucket(moduleBuckets, moduleMembers, initialSoc);
   for (const r of moduleBuckets) {
     if (r.soc != null) add(r.bt, `soc__${r.module}`, r.soc);
     if (r.temp != null) add(r.bt, `temp__${r.module}`, r.temp);
