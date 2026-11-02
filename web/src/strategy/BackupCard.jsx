@@ -4,20 +4,43 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 
 // Azure backup card on the Strategy tab (2026-10-17, user request): last
 // backup status, "back up now", and the blob list with its GFS tier
-// (7 daily · 4 weekly · 12 monthly · 1/year). Restore is PIN-gated — it
-// REPLACES the live DB and restarts the server (the browser reloads itself
-// ~20 s later to meet the fresh process).
+// (7 daily · 4 weekly · 12 monthly · 1/year). Both manual actions share the
+// Strategy PIN flow; restore also confirms before replacing the live DB.
 export default function BackupCard() {
   const t = useT();
   const { data, refresh } = usePolledResource("/api/backup/status", { intervalMs: 60000 });
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(null);
 
+  async function postWithPin(path, payload = {}) {
+    let pin = sessionStorage.getItem("strategyPin");
+    if (pin == null) {
+      pin = window.prompt(t("pin.body"));
+      if (pin == null) return null;
+    }
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...payload, pin }),
+    });
+    const s = await r.json();
+    if (r.status === 403) {
+      sessionStorage.removeItem("strategyPin");
+      const wrong = `${t("pin.wrong")}${s.attemptsLeft != null ? ` — ${t("pin.attemptsLeft", { n: s.attemptsLeft })}` : ""}`;
+      window.alert(s.locked ? t("pin.locked") : wrong);
+      return null;
+    }
+    sessionStorage.setItem("strategyPin", pin);
+    return { r, s };
+  }
+
   async function backUpNow() {
     setBusy(true);
     try {
-      const r = await fetch("/api/backup/now", { method: "POST" }).then((x) => x.json());
-      if (!r.ok) window.alert(r.error ?? t("backup.failed"));
+      const result = await postWithPin("/api/backup/now");
+      if (!result) return;
+      const { r, s } = result;
+      if (!r.ok || !s.ok) window.alert(s.error ?? t("backup.failed"));
       refresh();
     } finally {
       setBusy(false);
@@ -26,29 +49,15 @@ export default function BackupCard() {
 
   async function restore(name) {
     if (!window.confirm(t("backup.restoreConfirm", { date: name.slice(11, 21) }))) return;
-    let pin = sessionStorage.getItem("strategyPin");
-    if (pin == null) {
-      pin = window.prompt(t("pin.body"));
-      if (pin == null) return;
-    }
     setRestoring(name);
     try {
-      const r = await fetch("/api/backup/restore", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, pin }),
-      });
-      const s = await r.json();
-      if (r.status === 403) {
-        sessionStorage.removeItem("strategyPin");
-        window.alert(s.locked ? t("pin.locked") : t("pin.wrong"));
-        return;
-      }
+      const result = await postWithPin("/api/backup/restore", { name });
+      if (!result) return;
+      const { r, s } = result;
       if (!r.ok || !s.ok) {
         window.alert(s.error ?? t("backup.failed"));
         return;
       }
-      sessionStorage.setItem("strategyPin", pin);
       window.alert(t("backup.restoreStarted"));
       setTimeout(() => window.location.reload(), 20000);
     } finally {
