@@ -7818,3 +7818,11 @@ Root causes, all proven against production data:
 - Verified red/green carry-forward fixtures, history-seed lookup, production
   bucket replay, real-browser span cycle and hourly request params, and a
   full-page screenshot showing the bars. Vite build/server syntax pass.
+
+## Softer capacity-bar color (2026-11-02, user request)
+
+- Hourly capacity bars now use the same translucent purple as the Battery
+  chart's area fill (#c084fc44) instead of solid #c084fc. Scale, tooltips,
+  hourly buckets, spans, and SOC-limit lines are unchanged.
+- Verified the softer rendering with a full-page headless-Chrome screenshot
+  and a clean Vite build.
