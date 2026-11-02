@@ -42,7 +42,7 @@ const DEFS = [
     titleKey: "graph.title.battCapacity",
     unit: "kWh",
     series: [
-      { key: "battStoredKwh", nameKey: "graph.title.battCapacity", color: "#c084fc", area: true, width: 2 },
+      { key: "battStoredKwh", nameKey: "graph.title.battCapacity", color: "#c084fc", type: "bar" },
     ],
   },
 ];
@@ -59,7 +59,6 @@ const SPANS = [
 ];
 
 const CAPACITY_SPANS = [
-  { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
   { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
   { key: "graph.span.30d", ms: 30 * 24 * 3600 * 1000 },
@@ -173,13 +172,14 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
       legend: { show: false }, // the title button carries the tile's identity
       series: series.map((s, si) => ({
         name: s.name,
-        type: "line",
+        type: s.type ?? "line",
         showSymbol: false,
         connectNulls: false,
         stack: s.stack,
         lineStyle: { color: s.color, width: s.width ?? 1, type: s.dashed ? "dashed" : "solid" },
         itemStyle: { color: s.color },
-        areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
+        areaStyle: s.type !== "bar" && (s.stack || s.area) ? { color: `${s.color}44` } : undefined,
+        barMaxWidth: s.type === "bar" ? 32 : undefined,
         emphasis: { disabled: true },
         data: seriesData[si],
         markLine: si === 0 && capacityLimits.length

@@ -7801,3 +7801,20 @@ Root causes, all proven against production data:
 - Verified a deliberate params=26.6 / timeseries=21.6 mismatch: browser
   tooltip reads 10.50 kWh · 49% (never 39%), request carries bucket=3600000,
   and an isolated API smoke confirms bucketMs=3600000 and capacity metadata.
+
+## Capacity: missing-module carry-forward + hourly bars (2026-11-02, user report)
+
+- Root cause of the remaining 18:00→19:00 jump: storedKwhByBucket summed only
+  modules PRESENT in each hourly bucket. SB4 main had no rows at 18:00, so its
+  5 kWh capacity vanished (8.31 kWh / 38%); at 19:00 its ~52% SOC returned and
+  added ~2.6 kWh (10.6 / 49%). Advanced per-module charts only gap that
+  module's line, so they never had this aggregate jump.
+- storedKwhByBucket now carries each known module's last SOC into missing
+  buckets. getLatestModuleSocBefore seeds every known module before the window
+  (indexed per-module lookup), then hourly rows update it. Replaying the actual
+  production buckets now decreases 11.21 → 10.60 kWh instead of jumping.
+- Capacity visualization is hourly BARS (not a line/area), with 24h → 7d → 30d
+  spans only; 12h removed. Full scale, percentages, and dotted SOC limits stay.
+- Verified red/green carry-forward fixtures, history-seed lookup, production
+  bucket replay, real-browser span cycle and hourly request params, and a
+  full-page screenshot showing the bars. Vite build/server syntax pass.

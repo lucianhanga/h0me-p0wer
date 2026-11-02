@@ -533,6 +533,14 @@ const selectModuleRows = db.prepare(`
   SELECT ts, module, soc, temperature_c FROM module_snapshots
   WHERE ts >= ? AND ts <= ? ORDER BY ts ASC
 `);
+const selectLatestModuleSocBefore = db.prepare(`
+  SELECT soc FROM module_snapshots
+  WHERE module = ? AND ts < ? AND soc IS NOT NULL ORDER BY ts DESC LIMIT 1
+`);
+
+export function getLatestModuleSocBefore(module, beforeMs) {
+  return selectLatestModuleSocBefore.get(module, beforeMs)?.soc ?? null;
+}
 
 export function getModuleHistory(fromMs, toMs) {
   return selectModuleRows.all(fromMs, toMs);
