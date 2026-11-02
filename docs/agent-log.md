@@ -7736,3 +7736,18 @@ Root causes, all proven against production data:
   idempotent, and the next counter change continues from the checkpoint.
   Headless Chrome with distinct 24 h/tracked fixtures confirmed the simple
   view renders only tracked. Vite build and node --check pass.
+
+## Strategy PIN for both Azure backup actions (2026-11-02, user request)
+
+- /api/backup/now previously ran with token auth alone; restore compared
+  STRATEGY_PIN but bypassed the Strategy lockout. Both endpoints now call
+  the shared pinGate: 3 wrong attempts blacklist the client IP, responses
+  report attemptsLeft, and a correct PIN resets the counter. The scheduled
+  daily backup is unchanged.
+- BackupCard's backup-now and restore buttons share one session-cached PIN
+  helper (strategyPin), including wrong-PIN attempts-left and locked
+  messages. Restore keeps its destructive-action confirmation.
+- Verified against isolated runtime routes: missing/wrong/correct PIN,
+  counter reset, and lockout on both endpoints. Headless Chrome confirmed
+  both buttons send the PIN and restore still sends its backup name. Vite
+  build and node --check pass.

@@ -2111,8 +2111,8 @@ app.get("/api/pv/forecast", async (req, res) => {
 });
 
 // Azure Blob backup (2026-10-17, user request — daily GFS backups + a way
-// to recover from the advanced view). Status/list is token-auth only;
-// restore is PIN-gated (it REPLACES the live DB and restarts the process).
+// to recover from the advanced view). Status/list is token-auth only; both
+// manual actions use the Strategy PIN gate and its shared IP lockout rules.
 app.get("/api/backup/status", async (req, res) => {
   try {
     const backups = backupEnabled() ? await listBackups() : [];
@@ -2130,6 +2130,7 @@ app.get("/api/backup/status", async (req, res) => {
   }
 });
 app.post("/api/backup/now", async (req, res) => {
+  if (!pinGate(req, res)) return;
   if (!backupEnabled()) return res.status(400).json({ ok: false, error: "AZURE_BACKUP_URL not configured" });
   try {
     res.json({ ok: true, data: await backupNow() });
@@ -2139,10 +2140,7 @@ app.post("/api/backup/now", async (req, res) => {
   }
 });
 app.post("/api/backup/restore", async (req, res) => {
-  const pin = req.body?.pin ?? null;
-  if (pin !== (process.env.STRATEGY_PIN ?? "0000")) {
-    return res.status(403).json({ ok: false, error: "wrong PIN" });
-  }
+  if (!pinGate(req, res)) return;
   const name = String(req.body?.name ?? "");
   try {
     const data = await restoreFromBackup(name);
