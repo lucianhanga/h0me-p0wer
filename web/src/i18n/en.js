@@ -397,6 +397,7 @@ export const en = {
       battery: "Battery",
       battTemp: "Battery temperature",
       battSoc: "Battery charge per module",
+      battCapacity: "Battery capacity",
     },
     series: {
       grid: "Grid",

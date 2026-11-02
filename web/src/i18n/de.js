@@ -409,6 +409,7 @@ export const de = {
       battery: "Akku",
       battTemp: "Akku-Temperatur",
       battSoc: "Akkuladung pro Modul",
+      battCapacity: "Akku-Kapazität",
     },
     series: {
       grid: "Netz",

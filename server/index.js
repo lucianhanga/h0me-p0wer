@@ -15,6 +15,7 @@ import { registerWelcomeRoute } from "./welcome.js";
 import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh, BATT_GRID_SN, BATT_GRID_NAME } from "./battery-params.js";
+import { storedKwhByBucket } from "./battery-capacity.js";
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
@@ -834,14 +835,16 @@ async function timeseriesInner(req, res) {
   }
 
   // Source 1d: per-module battery data (MQTT 0405/040a — SOC + temperature
-  // per physical module, 2026-09-27) for the Graph tab's module charts. No
-  // cloud fallback exists for these (040a is realtime-only) — retention is
+  // per physical module) for the Graph tab's module charts and the combined
+  // stored-kWh series. No cloud fallback exists (040a is realtime-only) — retention is
   // 93 days with a 60 s write throttle (raised from the 48 h live-sample
   // default that capped these charts at 2 days, 2026-10-10). SQL-bucketed
   // (2026-10-15, user report: this exact chart lagged — 365k raw rows per
   // 7d were merged in JS on every request).
   const seenModules = new Set();
-  for (const r of getModuleBuckets(from - CLOUD_INTERVAL_MS, to, bucketMs)) {
+  const moduleBuckets = getModuleBuckets(from - CLOUD_INTERVAL_MS, to, bucketMs);
+  const storedByBucket = storedKwhByBucket(moduleBuckets, [...latestBatteries.values()]);
+  for (const r of moduleBuckets) {
     if (r.soc != null) add(r.bt, `soc__${r.module}`, r.soc);
     if (r.temp != null) add(r.bt, `temp__${r.module}`, r.temp);
     seenModules.add(r.module);
@@ -1080,6 +1083,7 @@ async function timeseriesInner(req, res) {
       battOut: b ? round(b.battOut) : null,
       battChg: b ? round(b.battChg) : null,
       pv: b ? round(b.pv) : null,
+      battStoredKwh: storedByBucket.has(bt) ? Math.round(storedByBucket.get(bt) * 100) / 100 : null,
       ...Object.fromEntries(
         // Per-module series (2026-09-27): soc__<sn> / temp__<sn> per physical
         // module — dynamic, so every battery + expansion gets its own line.

@@ -6,14 +6,13 @@ import { pvExpectedAt, toPvExpectedRows } from "../graph/pvExpected.js";
 import QuadFlipTile from "../components/QuadFlipTile.jsx";
 import { CHART_COLORS } from "../components/chartTheme.js";
 
-// Simple view's three read-only charts (2026-09-28, user request): house
-// consumption by source (grid / solar / battery, stacked + home line),
-// total power production, battery charging/discharging. The SAME series
-// definitions as the Graph tab's first three charts — derivations shared
-// via graph/derive.js — but deliberately interaction-free: no zoom/pan.
-// 2026-09-29 (user request): each tile is a round-robin flipper — tap the
-// title (or the tile) to cycle 12h → 24h → 1w → 1h → 6h (6h added
-// 2026-10-02, user request).
+// Simple view's read-only charts: house consumption by source, total power
+// production, battery charging/discharging, and combined stored capacity.
+// The SAME power-series definitions as the Graph tab's first three charts —
+// derivations shared via graph/derive.js — but deliberately interaction-free:
+// no zoom/pan.
+// Every tile is a round-robin flipper. Power tiles cycle
+// 12h → 24h → 1w → 1h → 6h; capacity uses its own span list below.
 const DEFS = [
   {
     titleKey: "graph.title.home",
@@ -38,6 +37,13 @@ const DEFS = [
       { key: "battChgNeg", nameKey: "graph.series.charging", color: "#8a63d2", area: true },
     ],
   },
+  {
+    titleKey: "graph.title.battCapacity",
+    unit: "kWh",
+    series: [
+      { key: "battStoredKwh", nameKey: "graph.title.battCapacity", color: "#c084fc", area: true, width: 2 },
+    ],
+  },
 ];
 
 // Face order per the user's spec: 12h, 24h, 1w, 1h, 6h — round robin.
@@ -49,6 +55,13 @@ const SPANS = [
   { key: "graph.span.1h", ms: 3600 * 1000 },
   { key: "graph.span.6h", ms: 6 * 3600 * 1000 },
   { key: "graph.span.expected", ms: null },
+];
+
+const CAPACITY_SPANS = [
+  { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
+  { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
+  { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
+  { key: "graph.span.30d", ms: 30 * 24 * 3600 * 1000 },
 ];
 
 // Default face (2026-10-04, user request: "make the default graphs in the
@@ -102,7 +115,7 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
         backgroundColor: CHART_COLORS.tooltipBg,
         borderColor: CHART_COLORS.border,
         textStyle: { color: CHART_COLORS.text, fontSize: 12 },
-        valueFormatter: (v) => (v == null ? "—" : `${Math.round(v)} W`),
+        valueFormatter: (v) => (v == null ? "—" : def.unit === "kWh" ? `${v.toFixed(2)} kWh` : `${Math.round(v)} W`),
       },
       xAxis: {
         type: "time",
@@ -130,7 +143,11 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
         splitNumber: 3,
         min: tight?.min ?? null,
         max: tight?.max ?? null,
-        axisLabel: { color: CHART_COLORS.muted, fontSize: 11, formatter: (v) => `${Math.round(v)} W` },
+        axisLabel: {
+          color: CHART_COLORS.muted,
+          fontSize: 11,
+          formatter: (v) => (def.unit === "kWh" ? `${v.toFixed(1)} kWh` : `${Math.round(v)} W`),
+        },
         splitLine: { lineStyle: { color: CHART_COLORS.split } },
       },
       legend: { show: false }, // the title button carries the tile's identity
@@ -159,9 +176,14 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
 
 function SimpleChartTile({ def, expectedRows }) {
   const t = useT();
-  const [spanIdx, setSpanIdx] = useState(DEFAULT_SPAN_IDX); // first face: 6h
+  const isCapacity = def.titleKey === "graph.title.battCapacity";
+  const [spanIdx, setSpanIdx] = useState(isCapacity ? 0 : DEFAULT_SPAN_IDX);
   const [rows, setRows] = useState(null);
-  const spans = def.titleKey === "graph.title.production" ? SPANS : SPANS.filter((s) => s.ms != null);
+  const spans = isCapacity
+    ? CAPACITY_SPANS
+    : def.titleKey === "graph.title.production"
+      ? SPANS
+      : SPANS.filter((s) => s.ms != null);
   const currentSpan = spans[spanIdx];
   const expectedOnly = currentSpan.ms == null;
   const spanMs = expectedOnly ? 24 * 3600 * 1000 : currentSpan.ms;
