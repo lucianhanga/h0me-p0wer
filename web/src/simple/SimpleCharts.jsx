@@ -202,6 +202,7 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
   const isCapacity = def.titleKey === "graph.title.battCapacity";
   const [spanIdx, setSpanIdx] = useState(isCapacity ? 0 : DEFAULT_SPAN_IDX);
   const [rows, setRows] = useState(null);
+  const [seriesCapacityKwh, setSeriesCapacityKwh] = useState(null);
   const spans = isCapacity
     ? CAPACITY_SPANS
     : def.titleKey === "graph.title.production"
@@ -214,8 +215,13 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
   // WS push (2026-09-29 review: the dispose/init storm class the
   // TodayMiniChart fix established we must memoize for).
   const chartDef = useMemo(
-    () => ({ ...def, spanMs, ...(isCapacity ? capacityMeta : null) }),
-    [def, spanMs, isCapacity, capacityMeta],
+    () => ({
+      ...def,
+      spanMs,
+      ...(isCapacity ? capacityMeta : null),
+      ...(isCapacity && seriesCapacityKwh > 0 ? { capacityKwh: seriesCapacityKwh } : null),
+    }),
+    [def, spanMs, isCapacity, capacityMeta, seriesCapacityKwh],
   );
   useEffect(() => {
     let cancelled = false;
@@ -226,10 +232,13 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
       const to = Date.now();
       const from = expectedOnly ? new Date().setHours(0, 0, 0, 0) : to - spanMs;
       const viewMs = expectedOnly ? 24 * 3600 * 1000 : spanMs;
-      fetch(`/api/timeseries?from=${from}&to=${to}&points=600&view=${viewMs}`)
+      const bucket = isCapacity ? "&bucket=3600000" : "";
+      fetch(`/api/timeseries?from=${from}&to=${to}&points=600&view=${viewMs}${bucket}`)
         .then((r) => r.json())
         .then((p) => {
-          if (!cancelled && p?.ok) setRows(p.data);
+          if (cancelled || !p?.ok) return;
+          setRows(p.data);
+          if (isCapacity) setSeriesCapacityKwh(p.batteryCapacityKwh > 0 ? p.batteryCapacityKwh : null);
         })
         .catch(() => {});
     };

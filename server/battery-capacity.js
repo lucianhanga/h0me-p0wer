@@ -17,6 +17,10 @@ function moduleCapacitiesKwh(members) {
   return capacities;
 }
 
+export function systemModuleCapacityKwh(members) {
+  return [...moduleCapacitiesKwh(members).values()].reduce((sum, capacity) => sum + capacity, 0);
+}
+
 export function storedKwhByBucket(rows, members) {
   const capacities = moduleCapacitiesKwh(members);
   const stored = new Map();
