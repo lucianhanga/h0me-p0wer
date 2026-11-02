@@ -15,7 +15,7 @@ import { registerWelcomeRoute } from "./welcome.js";
 import { registerDayBriefRoute } from "./daybrief.js";
 import { registerRoiRoute } from "./roi.js";
 import { registerBatteryParamsRoute, deriveBatteryFlow, getBatteryLimits, systemCapacityKwh, BATT_GRID_SN, BATT_GRID_NAME } from "./battery-params.js";
-import { storedKwhByBucket } from "./battery-capacity.js";
+import { storedKwhByBucket, systemModuleCapacityKwh } from "./battery-capacity.js";
 import { registerStatsRoute } from "./stats.js";
 import { registerWatchRoute } from "./watch.js";
 import { requireAuth, wsTokenValid } from "./auth.js";
@@ -1200,7 +1200,14 @@ async function timeseriesInner(req, res) {
     }
   }
 
-  res.json({ ok: true, bucketMs, data, modules, historyV: getHistoryVersion() });
+  res.json({
+    ok: true,
+    bucketMs,
+    data,
+    modules,
+    batteryCapacityKwh: systemModuleCapacityKwh([...latestBatteries.values()]),
+    historyV: getHistoryVersion(),
+  });
 }
 
 // Outside temperature (Open-Meteo hourly, geocoded from HOME_ADDRESS in

@@ -7784,3 +7784,20 @@ Root causes, all proven against production data:
 - Verified helper fixtures (10.10 kWh · 61%, 0…16.6 axis, 11% = 1.83 kWh),
   a real-browser tooltip assertion, and a full-page screenshot showing both
   dotted lines and the full axis. Vite build and git diff --check pass.
+
+## Capacity scale mismatch fix + hourly buckets (2026-11-02, user report)
+
+- Production evidence: aggregate SOC stayed 48% while the new chart showed
+  39% then ~49%. Stored kWh used the physical MQTT expansion list, but the
+  tooltip/axis used the cloud expansionPacks-derived aggregate capacity;
+  those counts can disagree. 10.5 kWh / ~26.6 = 39%, while the same module
+  data on the physical 21.6 kWh scale is ~49%.
+- systemModuleCapacityKwh() now derives scale capacity from the SAME module
+  map as storedKwhByBucket. /api/timeseries returns it as batteryCapacityKwh;
+  SimpleCharts uses it for percentage, full-scale axis, and SOC-limit lines,
+  overriding the params aggregate (which remains the limits/fallback source).
+- Capacity requests now force bucket=3600000: hourly averages, never finer,
+  for all 12h/24h/7d/30d spans. Other Trends tiles keep their resolution.
+- Verified a deliberate params=26.6 / timeseries=21.6 mismatch: browser
+  tooltip reads 10.50 kWh · 49% (never 39%), request carries bucket=3600000,
+  and an isolated API smoke confirms bucketMs=3600000 and capacity metadata.
