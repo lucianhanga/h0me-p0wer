@@ -5,6 +5,7 @@ import { robustCap, rowValue, tightAxisBounds } from "../graph/derive.js";
 import { pvExpectedAt, toPvExpectedRows } from "../graph/pvExpected.js";
 import QuadFlipTile from "../components/QuadFlipTile.jsx";
 import { CHART_COLORS } from "../components/chartTheme.js";
+import { capacityValueLabel, capacityYAxis, socLimitKwh } from "./batteryCapacity.js";
 
 // Simple view's read-only charts: house consumption by source, total power
 // production, battery charging/discharging, and combined stored capacity.
@@ -72,6 +73,7 @@ const DEFAULT_SPAN_IDX = SPANS.findIndex((s) => s.key === "graph.span.6h");
 const REFRESH_MS = 60000;
 
 function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
+  const t = useT();
   const ref = useRef(null);
   useEffect(() => {
     const sourceRows = expectedOnly ? expectedRows : rows;
@@ -105,6 +107,24 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
     const posCap = robustCap(seriesData.flatMap((d) => d.map((p) => p[1])));
     const negCap = robustCap(seriesData.flatMap((d) => d.map((p) => (p[1] != null ? -p[1] : null))));
     const tight = tightAxisBounds(negCap ? -negCap.cap : dataMin, posCap ? posCap.cap : dataMax);
+    const yAxisBounds = def.unit === "kWh" ? capacityYAxis(def.capacityKwh, tight) : tight;
+    const capacityLimits = def.unit === "kWh" && def.capacityKwh > 0
+      ? [
+          { pct: def.ceilPct, key: "max", color: "#6bb8f5", position: "insideEndBottom" },
+          { pct: def.floorPct, key: "min", color: "#e5544b", position: "insideEndTop" },
+        ]
+          .map((limit) => ({
+            yAxis: socLimitKwh(def.capacityKwh, limit.pct),
+            lineStyle: { color: limit.color, type: "dotted", width: 1.5 },
+            label: {
+              color: limit.color,
+              fontSize: 10,
+              position: limit.position,
+              formatter: t(`graph.socLimit.${limit.key}`, { pct: limit.pct }),
+            },
+          }))
+          .filter((limit) => limit.yAxis != null)
+      : [];
     const chart = echarts.init(ref.current, null, { renderer: "canvas" });
     chart.setOption({
       animation: false,
@@ -115,7 +135,7 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
         backgroundColor: CHART_COLORS.tooltipBg,
         borderColor: CHART_COLORS.border,
         textStyle: { color: CHART_COLORS.text, fontSize: 12 },
-        valueFormatter: (v) => (v == null ? "—" : def.unit === "kWh" ? `${v.toFixed(2)} kWh` : `${Math.round(v)} W`),
+        valueFormatter: (v) => (def.unit === "kWh" ? capacityValueLabel(v, def.capacityKwh) : v == null ? "—" : `${Math.round(v)} W`),
       },
       xAxis: {
         type: "time",
@@ -141,8 +161,8 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
       yAxis: {
         type: "value",
         splitNumber: 3,
-        min: tight?.min ?? null,
-        max: tight?.max ?? null,
+        min: yAxisBounds?.min ?? null,
+        max: yAxisBounds?.max ?? null,
         axisLabel: {
           color: CHART_COLORS.muted,
           fontSize: 11,
@@ -162,6 +182,9 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
         areaStyle: s.stack || s.area ? { color: `${s.color}44` } : undefined,
         emphasis: { disabled: true },
         data: seriesData[si],
+        markLine: si === 0 && capacityLimits.length
+          ? { silent: true, symbol: "none", animation: false, data: capacityLimits }
+          : undefined,
       })),
     });
     const ro = new ResizeObserver(() => chart.resize());
@@ -170,11 +193,11 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
       ro.disconnect();
       chart.dispose();
     };
-  }, [def, rows, expectedOnly, expectedRows]);
+  }, [def, rows, expectedOnly, expectedRows, t]);
   return <div ref={ref} className="chart-box-sm" />;
 }
 
-function SimpleChartTile({ def, expectedRows }) {
+function SimpleChartTile({ def, expectedRows, capacityMeta }) {
   const t = useT();
   const isCapacity = def.titleKey === "graph.title.battCapacity";
   const [spanIdx, setSpanIdx] = useState(isCapacity ? 0 : DEFAULT_SPAN_IDX);
@@ -190,7 +213,10 @@ function SimpleChartTile({ def, expectedRows }) {
   // Memoized — a fresh {…def} object per render re-inited ECharts on every
   // WS push (2026-09-29 review: the dispose/init storm class the
   // TodayMiniChart fix established we must memoize for).
-  const chartDef = useMemo(() => ({ ...def, spanMs }), [def, spanMs]);
+  const chartDef = useMemo(
+    () => ({ ...def, spanMs, ...(isCapacity ? capacityMeta : null) }),
+    [def, spanMs, isCapacity, capacityMeta],
+  );
   useEffect(() => {
     let cancelled = false;
     // Clear on span change — the previous face's data must not render under
@@ -235,12 +261,30 @@ function SimpleChartTile({ def, expectedRows }) {
 export default function SimpleCharts() {
   const t = useT();
   const [expectedRows, setExpectedRows] = useState([]);
+  const [capacityMeta, setCapacityMeta] = useState(null);
   useEffect(() => {
     let cancelled = false;
     fetch("/api/pv/forecast")
       .then((r) => r.json())
       .then((payload) => {
         if (!cancelled && payload?.ok) setExpectedRows(toPvExpectedRows(payload));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/battery/params")
+      .then((r) => r.json())
+      .then((payload) => {
+        if (cancelled || !payload?.ok) return;
+        const primary = payload.data.batteries?.[0] ?? payload.data;
+        const config = primary.config ?? payload.data.config ?? {};
+        setCapacityMeta({
+          capacityKwh: primary.constants?.capacityKwh ?? null,
+          floorPct: config.dischargeLowerLimitPct ?? 10,
+          ceilPct: config.chargeUpperLimitPct ?? 100,
+        });
       })
       .catch(() => {});
     return () => { cancelled = true; };
@@ -258,7 +302,7 @@ export default function SimpleCharts() {
   return (
     <div className="simple-charts">
       {defs.map((def) => (
-        <SimpleChartTile key={def.titleKey} def={def} expectedRows={expectedRows} />
+        <SimpleChartTile key={def.titleKey} def={def} expectedRows={expectedRows} capacityMeta={capacityMeta} />
       ))}
     </div>
   );
