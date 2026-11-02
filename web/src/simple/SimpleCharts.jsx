@@ -42,7 +42,7 @@ const DEFS = [
     titleKey: "graph.title.battCapacity",
     unit: "kWh",
     series: [
-      { key: "battStoredKwh", nameKey: "graph.title.battCapacity", color: "#c084fc", type: "bar" },
+      { key: "battStoredKwh", nameKey: "graph.title.battCapacity", color: "#c084fc44", type: "bar" },
     ],
   },
 ];
