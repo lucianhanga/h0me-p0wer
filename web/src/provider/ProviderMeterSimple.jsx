@@ -14,7 +14,7 @@ export default function ProviderMeterSimple() {
     cacheTtlMs: 60000,
   });
   if (!provider?.available) return null;
-  const check = (accuracy ?? []).find((r) => r.available && r.key === "24h") ?? (accuracy ?? []).find((r) => r.available);
+  const check = (accuracy ?? []).find((r) => r.available && r.key === "tracked");
   const waiting = !check && (accuracy ?? []).some((r) => r.reason === "waiting-official-change");
   return (
     <div className="card provider-meter-simple">
