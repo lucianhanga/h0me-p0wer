@@ -1,8 +1,12 @@
 import { fetchJson, localDate } from "./welcome-sources.js";
 import {
+  ensureProviderMeterTracking,
   getFirstProviderMeterSample,
   getLatestProviderMeterSample,
+  getProviderAccuracyCheckpoints,
   getProviderMeterSamples,
+  getSnapshotRows,
+  saveProviderAccuracyCheckpoint,
   saveProviderMeterSample,
 } from "./db.js";
 import { integrateGridImportKwh } from "./energy-grid.js";
@@ -67,6 +71,7 @@ export class ProviderMeterPoller {
       powerSource: meterReported ? "meter" : derivedPowerW != null ? "derived" : "unavailable",
     };
     saveProviderMeterSample(sample);
+    syncProviderTracking(ts);
     this.latest = sample;
     return sample;
   }
@@ -89,10 +94,47 @@ export class ProviderMeterPoller {
   }
 }
 
+function trackingBaseline() {
+  const first = getFirstProviderMeterSample();
+  return first ? ensureProviderMeterTracking(first) : null;
+}
+
+function hasGen2Anchor(ts) {
+  return getSnapshotRows(ts - 60000, ts + 60000).some((r) => r.grid_total != null);
+}
+
+function syncProviderTracking(nowMs) {
+  const baseline = trackingBaseline();
+  if (!baseline) return;
+  let { latest } = getProviderAccuracyCheckpoints();
+  const rows = getProviderMeterSamples(latest?.ts ?? baseline.firstTs, nowMs);
+  const events = changeEvents(rows, latest);
+  if (!latest) {
+    const anchorIndex = events.findIndex((event) => hasGen2Anchor(event.ts));
+    if (anchorIndex < 0) return;
+    const anchor = events[anchorIndex];
+    latest = { ...anchor, trackedProviderKwh: 0, trackedGen2Kwh: 0 };
+    saveProviderAccuracyCheckpoint(latest);
+    events.splice(0, anchorIndex + 1);
+  }
+  for (const event of events) {
+    if (event.ts <= latest.ts || event.importKwh <= latest.importKwh) continue;
+    const gen2Delta = integrateGridImportKwh(latest.ts, event.ts, 3);
+    const checkpoint = {
+      ts: event.ts,
+      importKwh: event.importKwh,
+      trackedProviderKwh: r3(latest.trackedProviderKwh + event.importKwh - latest.importKwh),
+      trackedGen2Kwh: r3(latest.trackedGen2Kwh + gen2Delta),
+    };
+    saveProviderAccuracyCheckpoint(checkpoint);
+    latest = checkpoint;
+  }
+}
+
 export function getProviderState() {
   const latest = getLatestProviderMeterSample();
   if (!latest) return { available: false };
-  const first = getFirstProviderMeterSample();
+  const first = trackingBaseline();
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   const dayRows = getProviderMeterSamples(dayStart.getTime(), Date.now());
@@ -110,9 +152,9 @@ export function getProviderState() {
     derivedPowerW: latest.derivedPowerW,
     powerW,
     powerSource: latest.powerSource,
-    trackingSince: first?.ts ?? latest.ts,
-    trackedImportKwh: first ? r3(latest.importKwh - first.importKwh) : 0,
-    trackedExportKwh: first ? r3(latest.exportKwh - first.exportKwh) : 0,
+    trackingSince: first?.firstTs ?? latest.ts,
+    trackedImportKwh: first ? r3(latest.importKwh - first.firstImportKwh) : 0,
+    trackedExportKwh: first ? r3(latest.exportKwh - first.firstExportKwh) : 0,
     todayImportKwh: hasFullDay ? r3(latest.importKwh - dayRows[0].importKwh) : null,
     todayExportKwh: hasFullDay ? r3(latest.exportKwh - dayRows[0].exportKwh) : null,
     date: localDate(),
@@ -160,10 +202,12 @@ export function counterIncreaseBaseline(rows) {
 // windows chop fractional kWh at both ends and showed a meaningless
 // "4.000 vs 4.573 kWh" deviation; change-anchored windows compare the two
 // meters over exactly the same energy.
-function changeEvents(rows) {
+function changeEvents(rows, baseline = null) {
   const events = [];
-  for (let i = 1; i < rows.length; i++) {
-    if (rows[i].importKwh > rows[i - 1].importKwh) events.push(rows[i]);
+  let previous = baseline;
+  for (const row of rows) {
+    if (previous && row.ts > previous.ts && row.importKwh > previous.importKwh) events.push(row);
+    previous = row;
   }
   return events;
 }
@@ -180,6 +224,7 @@ function accuracyForSpan(key, from, to, providerImportKwh) {
 }
 
 export function accuracyWindows(nowMs = Date.now()) {
+  syncProviderTracking(nowMs);
   const first = getFirstProviderMeterSample();
   if (!first) {
     return ["lastChange", "24h", "tracked"].map((key) => ({
@@ -224,16 +269,21 @@ export function accuracyWindows(nowMs = Date.now()) {
     );
   })();
 
-  // Since tracking started: first observed official change → latest change
-  // (change-anchored on both ends — same reason as the 24h window above).
+  // Permanent checkpoints keep this cumulative comparison after the raw
+  // provider and Gen 2 samples used to build it have been pruned.
+  const { first: trackedFirst, latest: trackedLatest } = getProviderAccuracyCheckpoints();
   const trackedWin =
-    lastChange && prevChange
-      ? accuracyForSpan(
-          "tracked",
-          events[0].ts,
-          lastChange.ts,
-          r3(lastChange.importKwh - events[0].importKwh),
-        )
+    trackedFirst && trackedLatest && trackedLatest.ts > trackedFirst.ts
+      ? {
+          key: "tracked",
+          available: true,
+          from: trackedFirst.ts,
+          to: trackedLatest.ts,
+          ...accuracyDelta({
+            providerImportKwh: trackedLatest.trackedProviderKwh,
+            gen2ImportKwh: trackedLatest.trackedGen2Kwh,
+          }),
+        }
       : { key: "tracked", ...waiting };
 
   return [lastChangeWin, dayWin, trackedWin];

@@ -1443,3 +1443,74 @@ export function getFirstProviderMeterSample() {
 export function pruneProviderMeterSamples() {
   pruneProviderMeterStmt.run(Date.now() - 7 * 86400000);
 }
+
+// Long-term tracking is independent of the high-frequency sample retention.
+// One baseline preserves the odometer totals; one row per official counter
+// change preserves the cumulative Gen 2 comparison after raw snapshots age out.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS provider_meter_tracking (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    first_ts INTEGER NOT NULL,
+    first_import_kwh REAL NOT NULL,
+    first_export_kwh REAL NOT NULL
+  )
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS provider_meter_accuracy_checkpoints (
+    ts INTEGER PRIMARY KEY,
+    import_kwh REAL NOT NULL,
+    tracked_provider_kwh REAL NOT NULL,
+    tracked_gen2_kwh REAL NOT NULL
+  )
+`);
+
+const insertProviderTracking = db.prepare(`
+  INSERT OR IGNORE INTO provider_meter_tracking
+  (id, first_ts, first_import_kwh, first_export_kwh) VALUES (1, ?, ?, ?)
+`);
+const selectProviderTracking = db.prepare(`SELECT * FROM provider_meter_tracking WHERE id = 1`);
+const insertProviderAccuracyCheckpoint = db.prepare(`
+  INSERT OR REPLACE INTO provider_meter_accuracy_checkpoints
+  (ts, import_kwh, tracked_provider_kwh, tracked_gen2_kwh) VALUES (?, ?, ?, ?)
+`);
+const selectProviderAccuracyFirst = db.prepare(`
+  SELECT * FROM provider_meter_accuracy_checkpoints ORDER BY ts ASC LIMIT 1
+`);
+const selectProviderAccuracyLatest = db.prepare(`
+  SELECT * FROM provider_meter_accuracy_checkpoints ORDER BY ts DESC LIMIT 1
+`);
+
+export function ensureProviderMeterTracking(sample) {
+  insertProviderTracking.run(sample.ts, sample.importKwh, sample.exportKwh);
+  const r = selectProviderTracking.get();
+  return {
+    firstTs: r.first_ts,
+    firstImportKwh: r.first_import_kwh,
+    firstExportKwh: r.first_export_kwh,
+  };
+}
+
+const providerAccuracyRow = (r) => ({
+  ts: r.ts,
+  importKwh: r.import_kwh,
+  trackedProviderKwh: r.tracked_provider_kwh,
+  trackedGen2Kwh: r.tracked_gen2_kwh,
+});
+
+export function getProviderAccuracyCheckpoints() {
+  const first = selectProviderAccuracyFirst.get();
+  const latest = selectProviderAccuracyLatest.get();
+  return {
+    first: first ? providerAccuracyRow(first) : null,
+    latest: latest ? providerAccuracyRow(latest) : null,
+  };
+}
+
+export function saveProviderAccuracyCheckpoint(checkpoint) {
+  insertProviderAccuracyCheckpoint.run(
+    checkpoint.ts,
+    checkpoint.importKwh,
+    checkpoint.trackedProviderKwh,
+    checkpoint.trackedGen2Kwh,
+  );
+}

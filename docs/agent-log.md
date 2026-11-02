@@ -7715,3 +7715,24 @@ Root causes, all proven against production data:
   label (previously left-lane long labels could reach the hour column).
   Lane collision algorithm unchanged (verified collision-free with 5
   overlapping sessions).
+
+## Persistent Provider/Gen 2 tracking (2026-11-02, user report)
+
+- Production diagnosis: container recreation did NOT erase
+  provider_meter_samples (60k+ rows and the original baseline survived in
+  the named volume). The -100% tracked comparison came from recomputing
+  old spans after Gen 2 snapshots (48 h) had been pruned; provider samples
+  themselves have 7-day retention.
+- provider_meter_tracking now preserves the original odometer baseline
+  forever. provider_meter_accuracy_checkpoints permanently accumulates
+  each official change-to-change provider/Gen 2 result, so tracked accuracy
+  survives restarts and raw-sample pruning without retaining high-frequency
+  history. Migration anchors only where Gen 2 samples exist; already-lost
+  history stays unavailable instead of persisting a false 0 kWh / -100%.
+- ProviderMeterSimple now selects ONLY the tracked accuracy row, never the
+  24 h row or an arbitrary available fallback.
+- Verified red/green with separate Node processes on a temporary SQLite DB:
+  baseline + tracked values survive restart/pruning, repeated sync is
+  idempotent, and the next counter change continues from the checkpoint.
+  Headless Chrome with distinct 24 h/tracked fixtures confirmed the simple
+  view renders only tracked. Vite build and node --check pass.
