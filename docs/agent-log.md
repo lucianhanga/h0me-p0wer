@@ -7770,3 +7770,17 @@ Root causes, all proven against production data:
 - Verified capacity conversion fixtures (including REST-only semantics), Vite
   build/server syntax, and a real-timing headless-Chrome CDP run that clicked
   the tile through 12h/24h/7d/30d and checked every requested view window.
+
+## Battery capacity: percentage + full scale + SOC limits (2026-11-02, user request)
+
+- The combined-capacity tooltip now shows kWh AND percentage of total system
+  capacity (e.g. 10.10 kWh · 61%). Its y-axis is ALWAYS the full 0…system
+  capacity scale (currently 0…16.6 kWh), not the power charts' tight bounds.
+- /api/battery/params supplies total capacity plus the account's discharge
+  floor / charge ceiling. SimpleCharts converts those SOC percentages to kWh
+  and draws dotted red/blue limit lines with the existing translated labels.
+- web/src/simple/batteryCapacity.js holds the formatting/axis/limit helpers;
+  other Trends tiles keep their existing units and tight-axis behavior.
+- Verified helper fixtures (10.10 kWh · 61%, 0…16.6 axis, 11% = 1.83 kWh),
+  a real-browser tooltip assertion, and a full-page screenshot showing both
+  dotted lines and the full axis. Vite build and git diff --check pass.
