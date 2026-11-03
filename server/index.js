@@ -98,7 +98,7 @@ import {
   clearActivity,
   getHistoryVersion,
 } from "./db.js";
-import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
+import { batteryCloudPowerRange, dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 // Root package.json version — piggybacked on every WS live push so a stale
@@ -910,24 +910,17 @@ async function timeseriesInner(req, res) {
     }
 
     // Battery cloud fallback: day-trend anchors where live 5-min battery
-    // snapshots haven't synced yet (e.g. right after server start).
-    // ALL battery SNs (2026-09-26 swap): the new SN holds all-zero backfill
-    // artifacts for pre-swap days while the old SN holds the real discharge
-    // data — the route used to read only the live SN, so the Graph tab lost
-    // pre-swap battery history entirely. Prefer-nonzero merge: the two
-    // physical batteries never ran simultaneously, so nonzero never
-    // conflicts; zeros only fill genuinely empty buckets.
-    for (const sn of batterySns()) {
-      for (const r of getCloudDayPower(sn, fromDate, toDate)) {
-        if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
-        if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
-        const bt = Math.floor(r.ts / bucketMs) * bucketMs;
-        const existing = acc.get(bt)?.batt;
-        if (!existing || (existing.s === 0 && r.power !== 0)) {
-          add(bt, "batt", r.power);
-          add(bt, "battOut", Math.max(r.power, 0)); // signed trend: discharge+
-          add(bt, "battChg", Math.max(-r.power, 0)); // charge is negative power
-        }
+    // snapshots haven't synced yet (e.g. right after server start). The shared
+    // reader drops exact site-total duplicates reported under multiple unit SNs.
+    for (const r of batteryCloudPowerRange(batterySns(), fromDate, toDate)) {
+      if (r.power == null || r.ts < anchorFrom || r.ts > to) continue;
+      if (r.ts + CLOUD_INTERVAL_MS > Date.now()) continue; // open interval
+      const bt = Math.floor(r.ts / bucketMs) * bucketMs;
+      const existing = acc.get(bt)?.batt;
+      if (!existing || (existing.s === 0 && r.power !== 0)) {
+        add(bt, "batt", r.power);
+        add(bt, "battOut", Math.max(r.power, 0)); // signed trend: discharge+
+        add(bt, "battChg", Math.max(-r.power, 0)); // charge is negative power
       }
     }
   }

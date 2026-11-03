@@ -1,4 +1,4 @@
-import { getCloudTrend, getPvDaily } from "./db.js";
+import { getCloudDayPower, getCloudTrend, getPvDaily } from "./db.js";
 
 // Single-day energy lookups, factored out of index.js/roi.js where this
 // same operation had drifted into four independent implementations (see
@@ -9,6 +9,42 @@ import { getCloudTrend, getPvDaily } from "./db.js";
 // against raw rows), but there's no reason to keep three copies of the
 // fix and one without it.
 
+function samePowerSeries(a, b) {
+  if (!a.length || a.length !== b.length) return false;
+  const byTs = new Map(b.map((r) => [r.ts, r.power]));
+  return a.every((r) => byTs.has(r.ts) && byTs.get(r.ts) === r.power);
+}
+
+export function batteryCloudDayPower(battSns, dateStr) {
+  const sns = (Array.isArray(battSns) ? battSns : [battSns]).filter(Boolean);
+  const unique = [];
+  for (const sn of sns) {
+    const rows = getCloudDayPower(sn, dateStr, dateStr);
+    if (rows.length && unique.some((other) => samePowerSeries(other, rows))) continue;
+    unique.push(rows);
+  }
+  // The dock can return the SAME site-total series under each unit SN. Drop
+  // only exact full-day duplicates; genuinely different unit series still sum.
+  const byTs = new Map();
+  for (const rows of unique) {
+    for (const r of rows) {
+      if (r.power == null) continue;
+      byTs.set(r.ts, { ts: r.ts, power: (byTs.get(r.ts)?.power ?? 0) + r.power });
+    }
+  }
+  return [...byTs.values()].sort((a, b) => a.ts - b.ts);
+}
+
+export function batteryCloudPowerRange(battSns, fromDate, toDate) {
+  const rows = [];
+  for (let day = new Date(`${fromDate}T00:00:00Z`); ; day.setUTCDate(day.getUTCDate() + 1)) {
+    const date = day.toISOString().slice(0, 10);
+    if (date > toDate) break;
+    rows.push(...batteryCloudDayPower(battSns, date));
+  }
+  return rows;
+}
+
 // Battery day-trend (20-min signed power; discharge +, charge −) summed
 // into kWh for one finished date. The cloud series is CELLS-only (no PV
 // pass-through inside — verified 2026-09-15) and, on this account,
@@ -17,29 +53,18 @@ import { getCloudTrend, getPvDaily } from "./db.js";
 // per-day charge amounts come from `dayPv()`'s `toBattery` instead (see
 // its own comment for why).
 export function dayBattery(battSns, dateStr) {
-  // battSns: one SN or an array. History spans the 2026-09-26 battery swap
-  // (E1600 Plus → Pro): pre-swap days live under the old SN, post-swap under
-  // the new one — they never overlap in time (physical swap), so summing
-  // both SNs' rows per day is physically correct.
-  const sns = (Array.isArray(battSns) ? battSns : [battSns]).filter(Boolean);
-  if (!sns.length) return { dischargedKwh: 0, chargedKwh: 0, hasRows: false };
+  const rows = batteryCloudDayPower(battSns, dateStr);
   let dischargedKwh = 0;
   let chargedKwh = 0;
-  let hasRows = false;
-  for (const sn of sns) {
-    const rows = getCloudTrend(sn, "day", dateStr).rows;
-    if (rows.length) hasRows = true;
-    for (const r of rows) {
-      if (r.power == null) continue;
-      const kwh = (r.power * (20 / 60)) / 1000;
-      if (kwh >= 0) dischargedKwh += kwh;
-      else chargedKwh += -kwh;
-    }
+  for (const r of rows) {
+    const kwh = (r.power * (20 / 60)) / 1000;
+    if (kwh >= 0) dischargedKwh += kwh;
+    else chargedKwh += -kwh;
   }
   return {
     dischargedKwh: Math.round(dischargedKwh * 100) / 100,
     chargedKwh: Math.round(chargedKwh * 100) / 100,
-    hasRows,
+    hasRows: rows.length > 0,
   };
 }
 
