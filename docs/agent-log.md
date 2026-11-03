@@ -7826,3 +7826,23 @@ Root causes, all proven against production data:
   hourly buckets, spans, and SOC-limit lines are unchanged.
 - Verified the softer rendering with a full-page headless-Chrome screenshot
   and a clean Vite build.
+
+## Duplicate dock battery energy in historical Totals (2026-11-03, user report)
+
+- Simple Totals said 12.53 kWh for 2026-11-02 while Consume said 7.35. All
+  seven checked past days showed the same systematic gap. Initial suspicion
+  that Anker home_usage alone underreported was disproved: both battery SNs
+  return the SAME site-total day series (73/73 identical 20-min rows), and
+  dayBattery summed 4.96 + 4.96 = 9.92 kWh. Plug cloud daily kWh matched
+  local sample integration within 0.01, ruling out plug timing/inflation.
+- energy-day.js's batteryCloudDayPower drops only EXACT full-day duplicate
+  series; genuinely different unit series still sum. batteryCloudPowerRange
+  applies it to the main timeseries. Stats day bars, current-day profile and
+  gap backfill use it too; dayBattery automatically fixes ROI and all Totals.
+- Corrected seven-day Totals now closely match Consume (2026-11-02: 7.57 vs
+  7.35 kWh; other differences -0.09…+0.50). Rest is ~1.53 kWh, close to the
+  existing 1.31, not the 6.49 that using the double-counted total would cause.
+- NO database recalculation was needed: raw cloud rows stay untouched and no
+  persisted table stores battery-discharge totals. All historical responses
+  are recomputed at read time. Verified exact-duplicate and independent-unit
+  fixtures, production seven-day comparisons, Vite build and server syntax.

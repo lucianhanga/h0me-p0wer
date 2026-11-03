@@ -24,7 +24,7 @@ import {
   getPlugSamples,
 } from "./db.js";
 import { savedEur } from "./savings.js";
-import { dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
+import { batteryCloudDayPower, dayBattery, dayGridImportKwh, dayPv } from "./energy-day.js";
 import { getTariff } from "./env.js";
 import { plugGroupForName, PLUG_GROUPS } from "./plug-groups.js";
 import { BATT_GRID_SN } from "./battery-params.js";
@@ -206,10 +206,8 @@ export function registerStatsRoute(app, deps) {
     }
     if (battSns.length) {
       const todayStr = localDate(new Date(dayStartMs));
-      // All battery SNs (post-2026-09-26 swap there are two; the old one only
-      // matters if today IS the swap day) — same-bucket rows don't collide in
-      // practice, and putInto's has() guard keeps the first value either way.
-      for (const r of battSns.flatMap((s) => getCloudDayPower(s, todayStr, todayStr))) {
+      // Deduplicated across unit SNs (the dock may repeat site-total rows).
+      for (const r of batteryCloudDayPower(battSns, todayStr)) {
         if (r.power == null || r.ts < dayStartMs || r.ts > now) continue;
         if (r.ts + 20 * 60 * 1000 > now) continue;
         const bt = Math.floor(r.ts / BUCKET) * BUCKET;
@@ -326,7 +324,7 @@ export function registerStatsRoute(app, deps) {
         recoveredMs += battEnergy.gaps.reduce((a, g) => a + (g.endMs - g.startMs), 0);
       }
       if (battSns.length) {
-        const cloudBattRows = battSns.flatMap((s) => getCloudDayPower(s, todayDateStr, todayDateStr));
+        const cloudBattRows = batteryCloudDayPower(battSns, todayDateStr);
         let gapDis = 0;
         let gapChg = 0;
         for (const r of cloudBattRows) {
@@ -649,7 +647,7 @@ export function registerStatsRoute(app, deps) {
         }
       }
       const gridH = hourlyKwhFromRows([...byTs.values()]);
-      const battH = battSns.length ? hourlyKwhFromRows(battSns.flatMap((s) => getCloudDayPower(s, dateStr, dateStr))) : new Array(24).fill(0);
+      const battH = battSns.length ? hourlyKwhFromRows(batteryCloudDayPower(battSns, dateStr)) : new Array(24).fill(0);
       const pvProdH = hourlyKwhFromRows(getCloudPvDayPower(dateStr, dateStr));
       const pvProdTotal = pvProdH.reduce((a, v) => a + v, 0);
       const pvHomeTotal = pvKwhDay(dateStr);
