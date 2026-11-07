@@ -421,7 +421,7 @@ export const ro = {
       charging: "Încărcare",
       outsideTemp: "Exterior",
     },
-    span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d", expected: "așteptat" },
+    span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "3d": "3d", "7d": "7d", "30d": "30d", full: "tot", expected: "așteptat" },
     tempLimit: { cold: "limită frig {t} °C", hot: "limită căldură {t} °C" },
     socLimit: { max: "prag încărcare {pct}%", min: "prag descărcare {pct}%" },
     phases: "L1·L2·L3",

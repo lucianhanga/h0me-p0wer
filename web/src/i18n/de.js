@@ -425,7 +425,7 @@ export const de = {
       charging: "Laden",
       outsideTemp: "Außen",
     },
-    span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "7d": "7d", "30d": "30d", expected: "erwartet" },
+    span: { "1h": "1h", "6h": "6h", "12h": "12h", "24h": "24h", "3d": "3d", "7d": "7d", "30d": "30d", full: "gesamt", expected: "erwartet" },
     tempLimit: { cold: "Kältegrenze {t} °C", hot: "Hitzegrenze {t} °C" },
     socLimit: { max: "Ladegrenze {pct}%", min: "Entladegrenze {pct}%" },
     phases: "L1·L2·L3",

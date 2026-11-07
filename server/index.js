@@ -52,6 +52,7 @@ import {
   getBatteryHistory,
   getBatteryBuckets,
   getModuleBuckets,
+  getModuleHistoryStart,
   getLatestModuleSocBefore,
   getPvStringKwhForDay,
   saveCloudPvTrend,
@@ -769,7 +770,10 @@ app.get("/api/timeseries", (req, res) => {
 async function timeseriesInner(req, res) {
   const span = parseSpan(req, res);
   if (!span) return;
-  const { from, to } = span;
+  const { to } = span;
+  const from = req.query.capacity === "full"
+    ? getModuleHistoryStart() ?? (to - 24 * 3600 * 1000)
+    : span.from;
   const points = Math.min(Math.max(Number(req.query.points ?? 800), 50), 2000);
   // Round the bucket up to a whole poll-interval step; never finer than the
   // actual sampling rate. `view` (ms) is the VISIBLE window: buckets are
