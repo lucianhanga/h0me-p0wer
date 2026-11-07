@@ -13,7 +13,7 @@ import { capacityValueLabel, capacityYAxis, socLimitKwh } from "./batteryCapacit
 // derivations shared via graph/derive.js — but deliberately interaction-free:
 // no zoom/pan.
 // Every tile is a round-robin flipper. Power tiles cycle
-// 12h → 24h → 1w → 1h → 6h; capacity uses its own span list below.
+// 12h → 24h → 3d → 7d → 1h → 6h; capacity uses its own span list below.
 const DEFS = [
   {
     titleKey: "graph.title.home",
@@ -150,7 +150,7 @@ function ChartCanvas({ def, rows, expectedOnly = false, expectedRows = [] }) {
           hideOverlap: true,
           formatter: (ts) => {
             const d = new Date(ts);
-            // Day+time labels once the window spans more than a day (7d face).
+            // Day+time labels once the window spans more than a day.
             return def.spanMs > 24 * 3600 * 1000
               ? d.toLocaleDateString([], { day: "numeric", month: "short" }) +
                   " " +
@@ -278,13 +278,17 @@ export default function SimpleCharts() {
   const [capacityMeta, setCapacityMeta] = useState(null);
   useEffect(() => {
     let cancelled = false;
+    let loading = false;
     const load = () => {
+      if (loading) return;
+      loading = true;
       fetch("/api/pv/forecast")
         .then((r) => r.json())
         .then((payload) => {
           if (!cancelled && payload?.ok) setExpectedRows(toPvExpectedRows(payload));
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => { loading = false; });
     };
     load();
     const timer = setInterval(load, REFRESH_MS);

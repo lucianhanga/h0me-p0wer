@@ -7854,11 +7854,13 @@ Root causes, all proven against production data:
   Both now refresh the forecast every 60 s, so the blue dashed line reaches
   the new local day without a reload and also picks up intraday revisions.
 - The advanced loader's force path bypasses only its rows memoization;
-  fetchOnce still deduplicates concurrent requests. Failed refreshes retain
-  the last good forecast and both implementations clear their timers.
+  fetchOnce still deduplicates concurrent requests. The simple loader skips a
+  poll while its previous request is pending. Failed refreshes retain the last
+  good forecast and both implementations clear their timers.
 - Verified with the real React/ECharts components in headless Chrome, mocked
   current-day responses and manually advanced timers: red before, green after
-  for both views, including last-good retention and unmount cleanup.
+  for both views, including last-good retention, unmount cleanup, deferred
+  request overlap prevention, and advanced expected-face zoom rollover.
 
 ## Simple Trends 3d + full capacity history (2026-11-07, user request)
 
