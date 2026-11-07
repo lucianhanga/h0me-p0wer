@@ -7846,3 +7846,30 @@ Root causes, all proven against production data:
   persisted table stores battery-discharge totals. All historical responses
   are recomputed at read time. Verified exact-duplicate and independent-unit
   fixtures, production seven-day comparisons, Vite build and server syntax.
+
+## PV forecast day rollover without browser reload (2026-11-07, user report)
+
+- Simple Power Production fetched /api/pv/forecast only on mount; Advanced →
+  Graph → Power Production likewise cached its first expectedRows forever.
+  Both now refresh the forecast every 60 s, so the blue dashed line reaches
+  the new local day without a reload and also picks up intraday revisions.
+- The advanced loader's force path bypasses only its rows memoization;
+  fetchOnce still deduplicates concurrent requests. Failed refreshes retain
+  the last good forecast and both implementations clear their timers.
+- Verified with the real React/ECharts components in headless Chrome, mocked
+  current-day responses and manually advanced timers: red before, green after
+  for both views, including last-good retention and unmount cleanup.
+
+## Simple Trends 3d + full capacity history (2026-11-07, user request)
+
+- All three power tiles add 3d between 24h and 7d. Battery capacity keeps 24h
+  as its shortest face and rotates 24h → 3d → 7d → 30d → full; the full label
+  is localized like the other span labels.
+- /api/timeseries?capacity=full resolves from=0 to the earliest non-null
+  module-SOC timestamp (24h fallback when empty), avoiding a 1970 scan. Full
+  capacity remains hourly and covers all retained history (currently 93 days).
+- Verified red/green real-component flip checks for every tile, exact 72-hour
+  request windows, no sub-24h capacity face, and the full request contract.
+  Real API returned 710 hourly rows beginning with the first SOC bucket;
+  built-app browser checks rendered production 3d and capacity full without
+  exceptions. Vite build, server syntax and git diff --check pass.

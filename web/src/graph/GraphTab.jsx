@@ -400,9 +400,9 @@ export default function GraphTab() {
       let expectedOnly = false;
       let disposed = false;
 
-      function loadExpectedRows() {
+      function loadExpectedRows(force = false) {
         if (def.titleKey !== "graph.title.production") return Promise.resolve([]);
-        if (expectedRows.length) return Promise.resolve(expectedRows);
+        if (!force && expectedRows.length) return Promise.resolve(expectedRows);
         if (!expectedPromise) {
           expectedPromise = fetchOnce("/api/pv/forecast")
             .then((payload) => {
@@ -420,6 +420,13 @@ export default function GraphTab() {
           if (!disposed && expectedRows.length) applyRows(rowsRef.rows);
         });
       }
+      const expectedTimer = def.titleKey === "graph.title.production"
+        ? setInterval(() => {
+            loadExpectedRows(true).then(() => {
+              if (!disposed && expectedRows.length) applyRows(rowsRef.rows);
+            });
+          }, 60000)
+        : null;
 
       function applyRows(rows) {
         // The "Grid range" min/max envelope series was REMOVED entirely
@@ -773,6 +780,7 @@ export default function GraphTab() {
         dispose() {
           disposed = true;
           clearInterval(liveTimer);
+          clearInterval(expectedTimer);
           clearTimeout(fetchTimer);
           document.removeEventListener("visibilitychange", onVisible);
           window.removeEventListener("focus", onVisible);

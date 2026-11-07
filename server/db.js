@@ -479,7 +479,7 @@ export function getBattGridChargeBucketed(fromMs, toMs, bucketMs) {
 // 040a is realtime-only) — pruning it at the 48 h live-sample retention
 // destroyed the only copy and capped the Graph tab's module charts at 2
 // days (user report 2026-10-10: "30-day view shows just 2 days"). Own
-// retention: 93 days (3× the largest graph span), with a 60 s write
+// retention: 93 days for the 30d and full-history views, with a 60 s write
 // throttle — MQTT telemetry arrives every 3-5 s, which untamed is ~25 M
 // rows/year; at 1/min it's ~0.5 M/quarter and SOC/temp move far slower
 // than that anyway.
@@ -533,6 +533,9 @@ const selectModuleRows = db.prepare(`
   SELECT ts, module, soc, temperature_c FROM module_snapshots
   WHERE ts >= ? AND ts <= ? ORDER BY ts ASC
 `);
+const selectModuleHistoryStart = db.prepare(`
+  SELECT MIN(ts) AS ts FROM module_snapshots WHERE soc IS NOT NULL
+`);
 const selectLatestModuleSocBefore = db.prepare(`
   SELECT soc FROM module_snapshots
   WHERE module = ? AND ts < ? AND soc IS NOT NULL ORDER BY ts DESC LIMIT 1
@@ -544,6 +547,10 @@ export function getLatestModuleSocBefore(module, beforeMs) {
 
 export function getModuleHistory(fromMs, toMs) {
   return selectModuleRows.all(fromMs, toMs);
+}
+
+export function getModuleHistoryStart() {
+  return selectModuleHistoryStart.get().ts ?? null;
 }
 
 // --- Cloud-live grid samples (scen_info grid_info every 10 s) --------------

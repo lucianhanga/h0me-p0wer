@@ -47,11 +47,12 @@ const DEFS = [
   },
 ];
 
-// Face order per the user's spec: 12h, 24h, 1w, 1h, 6h — round robin.
+// Face order per the user's spec: 12h, 24h, 3d, 1w, 1h, 6h — round robin.
 // The extra "expected" face (weather forecast) exists only for the production tile.
 const SPANS = [
   { key: "graph.span.12h", ms: 12 * 3600 * 1000 },
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
+  { key: "graph.span.3d", ms: 3 * 24 * 3600 * 1000 },
   { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
   { key: "graph.span.1h", ms: 3600 * 1000 },
   { key: "graph.span.6h", ms: 6 * 3600 * 1000 },
@@ -60,8 +61,10 @@ const SPANS = [
 
 const CAPACITY_SPANS = [
   { key: "graph.span.24h", ms: 24 * 3600 * 1000 },
+  { key: "graph.span.3d", ms: 3 * 24 * 3600 * 1000 },
   { key: "graph.span.7d", ms: 7 * 24 * 3600 * 1000 },
   { key: "graph.span.30d", ms: 30 * 24 * 3600 * 1000 },
+  { key: "graph.span.full", ms: null, full: true },
 ];
 
 // Default face (2026-10-04, user request: "make the default graphs in the
@@ -209,8 +212,9 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
       ? SPANS
       : SPANS.filter((s) => s.ms != null);
   const currentSpan = spans[spanIdx];
-  const expectedOnly = currentSpan.ms == null;
-  const spanMs = expectedOnly ? 24 * 3600 * 1000 : currentSpan.ms;
+  const expectedOnly = currentSpan.key === "graph.span.expected";
+  const fullHistory = currentSpan.full === true;
+  const spanMs = expectedOnly ? 24 * 3600 * 1000 : currentSpan.ms ?? Infinity;
   // Memoized — a fresh {…def} object per render re-inited ECharts on every
   // WS push (2026-09-29 review: the dispose/init storm class the
   // TodayMiniChart fix established we must memoize for).
@@ -230,10 +234,11 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
     setRows(null);
     const load = () => {
       const to = Date.now();
-      const from = expectedOnly ? new Date().setHours(0, 0, 0, 0) : to - spanMs;
-      const viewMs = expectedOnly ? 24 * 3600 * 1000 : spanMs;
+      const from = expectedOnly ? new Date().setHours(0, 0, 0, 0) : fullHistory ? 0 : to - spanMs;
+      const viewMs = expectedOnly ? 24 * 3600 * 1000 : fullHistory ? 0 : spanMs;
       const bucket = isCapacity ? "&bucket=3600000" : "";
-      fetch(`/api/timeseries?from=${from}&to=${to}&points=600&view=${viewMs}${bucket}`)
+      const capacity = fullHistory ? "&capacity=full" : "";
+      fetch(`/api/timeseries?from=${from}&to=${to}&points=600&view=${viewMs}${bucket}${capacity}`)
         .then((r) => r.json())
         .then((p) => {
           if (cancelled || !p?.ok) return;
@@ -248,7 +253,7 @@ function SimpleChartTile({ def, expectedRows, capacityMeta }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [spanMs, expectedOnly]);
+  }, [spanMs, expectedOnly, fullHistory]);
   const hasData = expectedOnly ? expectedRows.length > 0 : rows?.length > 0;
   return (
     <section className="simple-chart">
@@ -273,13 +278,20 @@ export default function SimpleCharts() {
   const [capacityMeta, setCapacityMeta] = useState(null);
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/pv/forecast")
-      .then((r) => r.json())
-      .then((payload) => {
-        if (!cancelled && payload?.ok) setExpectedRows(toPvExpectedRows(payload));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
+    const load = () => {
+      fetch("/api/pv/forecast")
+        .then((r) => r.json())
+        .then((payload) => {
+          if (!cancelled && payload?.ok) setExpectedRows(toPvExpectedRows(payload));
+        })
+        .catch(() => {});
+    };
+    load();
+    const timer = setInterval(load, REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
   }, []);
   useEffect(() => {
     let cancelled = false;
