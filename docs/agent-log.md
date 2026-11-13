@@ -7896,3 +7896,19 @@ Root causes, all proven against production data:
   member series for Rest-of-home math, exactly like cooking; checked that no
   bucket exposes both aggregate and member values. Vite build passed.
 - Production was inspected read-only and NOT deployed.
+
+
+## Anker network inventory webpage and reboot handoff (2026-11-13, user request)
+
+- Added `docs/anker-device-inventory.html`, a standalone responsive snapshot
+  of all 23 SOLIX and 3 Eufy devices with model, IP, and Wi-Fi MAC. SOLIX
+  entries were cross-checked across Anker cloud, ARP, and router DNS; Eufy
+  entries across DNS and ARP. Sofa and sofa2 are highlighted as one group.
+- Semantic tables use sticky desktop headers and transform into labeled cards
+  through container queries. Verified all 26 rows, desktop rendering, and true
+  390 px mobile emulation with no horizontal overflow; the Eufy mobile label
+  correctly says Type. No runtime dependencies or external assets.
+- Preserved the 2026-11-04 and 2026-11-13 resume notes as project handoff
+  documentation. The newer note records the merged sofa PR, runtime restart
+  commands, webpage status, and the fact that production was not deployed.
+- Version bumped to 1.5.337 for this documentation-only follow-up.
