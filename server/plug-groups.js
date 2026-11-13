@@ -1,15 +1,15 @@
-// Named plug groups (2026-10-16, user request — "add together all the
-// cooking, cooking2, ... into one entry, like house light"): plugs whose
-// (already display-stripped) name starts with a group's prefix collapse
-// into ONE aggregate consumer on every plug surface — the same treatment
-// the HmIP "house light" aggregate got (hmip.js). Unlike HmIP there is no
-// synthetic storage: live watts are summed at read time, the members keep
-// their own plug_samples/plug_daily rows, and the read paths (stats.js
-// consumers split, /api/plugs/timeseries?sn=agg-*) sum the members — so
-// the aggregate has full history and never double-counts "rest of home".
+// Named plug groups ("cooking*", "sofa*"): plugs whose (already
+// display-stripped) name starts with a group's prefix collapse into ONE
+// aggregate consumer on every plug surface — the same treatment the HmIP
+// "house light" aggregate got (hmip.js). Unlike HmIP there is no synthetic
+// storage: live watts are summed at read time, the members keep their own
+// plug_samples/plug_daily rows, and the read paths (stats.js consumers
+// split, /api/plugs/timeseries?sn=agg-*) sum the members — so the aggregate
+// has full history and never double-counts "rest of home".
 
 export const PLUG_GROUPS = [
   { sn: "agg-cooking", name: "cooking", prefix: "cooking" },
+  { sn: "agg-sofa", name: "sofa", prefix: "sofa" },
 ];
 
 export function plugGroupForName(name) {
