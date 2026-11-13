@@ -107,8 +107,9 @@ EPIPE noise on every client disconnect).
   (`onAccountPlugs`).
 - **Named plug groups (since 2026-10-16)**: `server/plug-groups.js`
   collapses plugs whose stripped display name starts with a group prefix
-  ("cooking*") into ONE aggregate consumer (`agg-cooking`) on every plug
-  surface — no synthetic storage; live watts/kWh/bars/curves are summed
+  ("cooking*", "sofa*") into ONE aggregate consumer (`agg-cooking`,
+  `agg-sofa`) on every plug surface — no synthetic storage; live
+  watts/kWh/bars/curves are summed
   from the members' real rows at read time (`mergedPlugs()`,
   /api/stats/consumers, /api/plugs/timeseries?sn=agg-*). Flip face:
   `/api/plugs/group/:sn/members` (hybrid kWh: plug_daily past the 7-day

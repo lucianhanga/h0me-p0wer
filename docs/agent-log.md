@@ -7875,3 +7875,24 @@ Root causes, all proven against production data:
   Real API returned 710 hourly rows beginning with the first SOC bucket;
   built-app browser checks rendered production 3d and capacity full without
   exceptions. Vite build, server syntax and git diff --check pass.
+
+
+## Sofa smart plugs as one named group (2026-11-13, user request)
+
+- Read-only production detection confirmed both account-level plugs before
+  implementation: `sofa` (AYTQNA0G23306528) and the new `sofa2`
+  (AYTQNA0G23304403), both online with live watts and recent plug_samples
+  history. Display-name stripping turns the raw `h-solar-sofa*` names into
+  the prefixes the existing named-group code expects.
+- Added `{ sn: "agg-sofa", name: "sofa", prefix: "sofa" }` to
+  `PLUG_GROUPS`; no frontend, storage, or aggregation-algorithm change. The
+  existing read-time paths now provide one flippable sofa card, summed live
+  watts/today kWh/history/consumer bars, and both members on the flip face.
+- Inline grouping assertions failed before the entry and passed after,
+  including exact 97 + 15.7 = 112.7 W aggregation, cooking regression, and
+  unrelated-plug independence. Real local API checks passed for /api/plugs,
+  the two-member endpoint, populated agg-sofa history, and one sofa row in
+  /api/stats/consumers. The unfiltered timeseries intentionally retains the
+  member series for Rest-of-home math, exactly like cooking; checked that no
+  bucket exposes both aggregate and member values. Vite build passed.
+- Production was inspected read-only and NOT deployed.
