@@ -8089,3 +8089,19 @@ Root causes, all proven against production data:
 - Regression fixtures cover min-duration tracks, DST ticks and label truncation.
   Real React checks cover sequential A/B/long names, three short-session tracks,
   localized title, text summaries, aria state, 390 px width and zero exceptions.
+
+
+## Simple Devices minimal daily strips on both faces (2026-11-15, user selected option C)
+
+- Replaced the front's per-session device labels and the back's vertical
+  columns with one shared color legend and horizontal mini-lanes on both faces.
+  Today and each of the last seven days now use the same 24-hour presentation:
+  day/title first, elapsed-time hour ticks, then 9px colored session bars.
+- Sequential non-overlapping sessions share lanes without label collisions;
+  overlapping sessions still use separate tracks. Text summaries preserve full
+  session details for assistive technology and SVG tooltips preserve all values.
+- Back no longer needs the vertical-column minimum-height workaround; normal
+  timestamp track assignment is sufficient for duration-width bars.
+- Browser RED→GREEN: shared five-device legend, zero per-row labels, 9px bars,
+  seven stacked newest-first days, text summaries, aria flip state, no overflow
+  or browser exceptions. Vite build and diff check passed.

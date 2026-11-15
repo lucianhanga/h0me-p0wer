@@ -30,10 +30,6 @@ export function dayHourFraction(hour, dayStart) {
   return (tick - dayStart) / (dayEnd - dayStart);
 }
 
-export function shortDeviceName(name) {
-  return name.length > 16 ? `${name.slice(0, 15)}…` : name;
-}
-
 export function recentDayStarts(nowMs, count) {
   const days = [];
   let cursor = dayStartMs(nowMs);

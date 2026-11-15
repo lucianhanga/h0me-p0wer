@@ -4123,3 +4123,17 @@ pre {
   border: 0 !important;
   white-space: nowrap !important;
 }
+
+
+.simple-devices-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  margin: 0.2rem 0 0.5rem;
+  color: #8b98a5;
+  font-size: 0.68rem;
+}
+
+.simple-devices-legend-item { display: inline-flex; align-items: center; gap: 0.25rem; }
+.simple-devices-legend-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; }
+.simple-devices-lane { fill: #1b2a3a; }
