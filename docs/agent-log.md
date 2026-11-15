@@ -7953,3 +7953,38 @@ Root causes, all proven against production data:
 - Regression checks cover canonical group keys and a 00:05/54-minute-bucket
   request. Real 30d API output contains no raw cooking member keys or overlaps,
   retains 654 populated agg-cooking buckets, and backfills the midnight edge.
+
+
+## Devices parallel tracks, dishwasher continuity, newest-first days (2026-11-15, user request)
+
+- Advanced Devices previously drew every session block on one center track;
+  only the labels had collision handling. New `sessionTracks.js` greedily
+  assigns overlapping intervals to separate tracks centered around the hour
+  axis (two for two parallel sessions, more only when real concurrency needs
+  them), reusing the first free track. Label collision handling remains.
+- Spüler/spueler/dishwasher now use 45 minutes below END_W before ending;
+  all other appliances keep 20. The previous 20-minute detector emitted a
+  displayed session end 20 minutes into a pause, so the user's 20–25-minute
+  inter-episode gaps really require roughly 40–45 minutes of tolerance, not
+  merely 25. The same per-pattern `endGraceMs()` drives live tracking and
+  historical extraction. EN/DE/RO notes describe both timeouts.
+- Day cards are reversed to newest local day first. Added a root SVG title
+  for each day's session chart.
+- Verification: red/green track assignment (parallel/reuse/third/empty) and
+  tracker grace fixtures (25-minute displayed gap, 45-minute cutoff, other
+  appliances unchanged). Production data confirmed repeated split spüler
+  pairs; local DB had no historical spüler samples, so no invalid exact-count
+  assertion was used. Built advanced Devices showed today first and parallel
+  washer/cooking bars at different x positions with zero browser exceptions.
+  Vite build and server syntax passed.
+
+
+## Devices multi-track label anchors (2026-11-15, PR #517 review)
+
+- Review caught that three simultaneous tracks expanded outward while label
+  anchors stayed at CX ± 18, putting the outer session's text over its bar.
+  `sessionTrackX()` and `sessionLabelAnchor()` now derive anchors from the
+  outermost tracks (including the existing 18-unit bar/gap spacing) instead.
+- Geometry fixtures cover 1–4 tracks. A real React/CDP check with three
+  overlapping sessions at 390 px verified every device label clears its bar
+  and produced zero browser exceptions. Vite build and git diff --check pass.

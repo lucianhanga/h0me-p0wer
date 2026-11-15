@@ -16,7 +16,7 @@ export const en = {
     span7: "7 days",
     empty: "No big-appliance sessions in this window.",
     emptyDay: "No big appliances ran.",
-    note: "Sessions come from the smart-plug power history (7 days) — a session starts at ≥ 100 W and ends only after 20 minutes below 30 W, so program pauses never split a wash or drying cycle.",
+    note: "Sessions come from the smart-plug power history (7 days) — a session starts at ≥ 100 W and ends after 20 minutes below 30 W, or 45 minutes for dishwashers, so program pauses do not split a cycle.",
   },
   plugs: {
     rest: "Rest of home",
