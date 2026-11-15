@@ -12,6 +12,35 @@ export function sessionGeometryMinutes(session, nowMs) {
   return end.getHours() * 60 + end.getMinutes() + end.getSeconds() / 60;
 }
 
+export function dayStartMs(ts) {
+  const date = new Date(ts);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+export function nextDayStartMs(ts) {
+  const date = new Date(ts);
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime();
+}
+
+export function recentDayStarts(nowMs, count) {
+  const days = [];
+  let cursor = dayStartMs(nowMs);
+  for (let i = 0; i < count; i++) {
+    days.push(cursor);
+    const date = new Date(cursor);
+    cursor = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1).getTime();
+  }
+  return days;
+}
+
+export function sessionDayFractions(session, dayStart, nowMs) {
+  const dayEnd = nextDayStartMs(dayStart);
+  const start = Math.max(session.start, dayStart);
+  const end = Math.min(sessionEndMs(session, nowMs), dayEnd);
+  return { start: (start - dayStart) / (dayEnd - dayStart), end: (end - dayStart) / (dayEnd - dayStart) };
+}
+
 export function sessionTrackX(track, count, center) {
   return center + (track - (count - 1) / 2) * 18;
 }

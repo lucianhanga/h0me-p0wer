@@ -220,7 +220,8 @@ production screenshot, check the deployed version:
   (never `site_list[0]`). Production `.env`:
   `METER_IP=192.168.1.15` (meter-2), `PV_PEAK_KWP=6.0`, `STRATEGY_PIN`,
   `BIND_IP=127.0.0.1` (app reachable only via the Cloudflare tunnel).
-  Plug surfaces: Devices today (simple view), Devices timeline (full view),
+  Plug surfaces: Devices flip tile (simple view — today's horizontal bars /
+  7d thin vertical columns by day), Devices timeline (full view),
   Consume tab (full view), Consume section (simple view) + Consume rows
   (Dashboard) — on /api/big-consumers/sessions, /api/stats/consumers, and
   /api/plugs/timeseries.

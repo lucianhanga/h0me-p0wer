@@ -167,9 +167,8 @@ export default function SimpleHome() {
     <div className="simple-home">
       {/* AI day briefing, first section (2026-10-03, user request). */}
       <DayBrief />
-      {/* Running now and today's compact device summaries; both hide when idle. */}
+      {/* "Running now" big-consumer report; renders nothing when idle. */}
       <RunningNow />
-      <SimpleDevicesToday />
       <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <div className="simple-flow">
         <FlowView flow={flow} />
@@ -459,6 +458,7 @@ export default function SimpleHome() {
         </div>
         </>
       )}
+      <SimpleDevicesToday />
       <SectionTitle>{t("simple.charts")}</SectionTitle>
       <SimpleCharts />
       <PvStrings flow={flow} />

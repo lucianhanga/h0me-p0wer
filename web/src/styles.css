@@ -4093,26 +4093,20 @@ pre {
 }
 
 
-.simple-devices-today {
+.simple-devices-tile {
   width: 100%;
   max-width: 460px;
   margin: 0 auto 0.75rem;
-  padding: 0;
-  list-style: none;
 }
 
-.simple-device-row {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.45rem 0.15rem;
-  border-bottom: 1px solid #26313b;
-}
-
-.simple-device-row:last-child { border-bottom: 0; }
-.simple-device-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.simple-device-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
-.simple-device-name { font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
-.simple-device-status { color: #8b98a5; font-size: 0.75rem; overflow-wrap: anywhere; }
-.simple-device-status.is-running { color: #5fdd7f; }
-.simple-device-kwh { margin-left: auto; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.simple-devices-card { padding: 0.65rem 0.7rem; }
+.simple-devices-face-title { margin-bottom: 0.35rem; font-size: 0.85rem; font-weight: 650; }
+.simple-devices-chart { display: block; width: 100%; height: auto; }
+.simple-devices-hour { fill: #6b7684; font-size: 8px; }
+.simple-devices-name { font-size: 10px; font-weight: 600; }
+.simple-devices-empty { margin: 0.4rem 0; font-size: 0.8rem; }
+.simple-devices-week { display: flex; flex-direction: column; gap: 0.65rem; }
+.simple-devices-week-day { padding-bottom: 0.45rem; border-bottom: 1px solid #26313b; }
+.simple-devices-week-day:last-child { padding-bottom: 0; border-bottom: 0; }
+.simple-devices-week-label { margin-bottom: 0.2rem; font-size: 0.78rem; }
+.simple-devices-week-empty { font-size: 0.75rem; }
