@@ -16,6 +16,9 @@ export const de = {
     span7: "7 Tage",
     empty: "Keine Großverbraucher-Sitzungen in diesem Zeitraum.",
     emptyDay: "Keine Großverbraucher aktiv.",
+    today: "Geräte heute",
+    running: "läuft seit {minutes} Min.",
+    ended: "beendet {time}",
     note: "Sitzungen kommen aus der Leistungshistorie der Steckdosen (7 Tage) — Start ab ≥ 100 W, Ende nach 20 Minuten unter 30 W, bei Geschirrspülern nach 45 Minuten, damit Programmpausen keinen Waschgang teilen.",
   },
   plugs: {

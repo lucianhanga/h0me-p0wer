@@ -8015,3 +8015,21 @@ Root causes, all proven against production data:
 - Regression fixtures cover 23:50→00:10, current-day geometry, finished ends,
   and two ongoing sessions with staggered sample timestamps. Vite build and
   git diff --check pass.
+
+
+## Simple-view Devices today (2026-11-15, user request)
+
+- New `SimpleDevicesToday` section beside Running now: one compact row per
+  appliance, running first, with current duration or latest end time and total
+  kWh for the current local day. It hides completely on inactive days and does
+  not reproduce the advanced timeline.
+- `simpleDevicesToday.js` aggregates repeated sessions per device, uses
+  `sessionEndMs()` for ongoing durations, and sorts running devices before
+  recent activity. Local-day URL rolls at midnight; polling is 60 s.
+- Semantic `<ul role="list">` rows reuse plug colors and localized
+  Devices today/running/ended labels in EN/DE/RO. Mobile CSS is a quiet single
+  column with no charts or extra controls.
+- Verification: red/green aggregation and duration fixtures; real React 390 px
+  check with ongoing dryer, repeated cooking and spüler sessions confirmed
+  running first, one row per appliance, 0.50 kWh cooking total, no timeline SVG,
+  no overflow, and zero browser exceptions. Vite build and diff check passed.

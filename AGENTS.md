@@ -220,8 +220,9 @@ production screenshot, check the deployed version:
   (never `site_list[0]`). Production `.env`:
   `METER_IP=192.168.1.15` (meter-2), `PV_PEAK_KWP=6.0`, `STRATEGY_PIN`,
   `BIND_IP=127.0.0.1` (app reachable only via the Cloudflare tunnel).
-  Plug surfaces: Consume tab (full view), Consume section (simple view) +
-  Consume rows (Dashboard) — all on /api/stats/consumers +
+  Plug surfaces: Devices today (simple view), Devices timeline (full view),
+  Consume tab (full view), Consume section (simple view) + Consume rows
+  (Dashboard) — on /api/big-consumers/sessions, /api/stats/consumers, and
   /api/plugs/timeseries.
 - **No automated tests anywhere** — verification is manual dry-run scripts,
   the standalone simulation harness pattern (fake Date.now + stateful mock

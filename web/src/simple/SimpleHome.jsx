@@ -12,6 +12,7 @@ import { useT } from "../i18n/LanguageProvider.jsx";
 import SimpleCharts from "./SimpleCharts.jsx";
 import DayBrief from "./DayBrief.jsx";
 import RunningNow from "./RunningNow.jsx";
+import SimpleDevicesToday from "./SimpleDevicesToday.jsx";
 import PvStrings from "./PvStrings.jsx";
 import ProviderMeterSimple from "../provider/ProviderMeterSimple.jsx";
 import ConsumersSection from "./ConsumersSection.jsx";
@@ -169,6 +170,7 @@ export default function SimpleHome() {
       {/* "Running now" big-consumer report — the tail of the first section
           (2026-10-22, user request); renders nothing when idle. */}
       <RunningNow />
+      <SimpleDevicesToday />
       <SectionTitle>{t("live.powerFlow")}</SectionTitle>
       <div className="simple-flow">
         <FlowView flow={flow} />

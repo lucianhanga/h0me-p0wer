@@ -4091,3 +4091,28 @@ pre {
   font-weight: 600;
   margin-bottom: 2px;
 }
+
+
+.simple-devices-today {
+  width: 100%;
+  max-width: 460px;
+  margin: 0 auto 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+
+.simple-device-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.15rem;
+  border-bottom: 1px solid #26313b;
+}
+
+.simple-device-row:last-child { border-bottom: 0; }
+.simple-device-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.simple-device-main { display: flex; flex-direction: column; min-width: 0; }
+.simple-device-name { font-size: 0.9rem; font-weight: 600; }
+.simple-device-status { color: #8b98a5; font-size: 0.75rem; }
+.simple-device-status.is-running { color: #5fdd7f; }
+.simple-device-kwh { margin-left: auto; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
