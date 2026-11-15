@@ -127,6 +127,8 @@ EPIPE noise on every client disconnect).
   `home_usage`'s smart_plug_info, kept forever. Consume's
   `/api/plugs/timeseries` fills completed days beyond sample retention with
   flat daily-average watts from `plug_daily`; surviving samples always win.
+  Unfiltered named-group samples use the same `agg-*` key as the fallback, so
+  members and aggregates cannot double-count at the retention/prune boundary.
 
 ### `/api/timeseries` merge rules (the chart's contract)
 1. Bucket size from the **visible** window (`view` param), rounded up to 5 s,

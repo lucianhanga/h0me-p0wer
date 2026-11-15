@@ -1,5 +1,9 @@
 import { plugGroupForName, plugGroupForSn } from "./plug-groups.js";
 
+export function canonicalPlugSn(sn, names) {
+  return plugGroupForName(names.get(sn) ?? "")?.sn ?? sn;
+}
+
 export function dailyAveragePlugBuckets({ rows, names, from, to, bucketMs, beforeMs, onlySn = null }) {
   const onlyGroup = onlySn ? plugGroupForSn(onlySn) : null;
   const totals = new Map();
@@ -17,7 +21,7 @@ export function dailyAveragePlugBuckets({ rows, names, from, to, bucketMs, befor
       if (row.sn !== onlySn) continue;
       sn = onlySn;
     } else {
-      sn = group?.sn ?? row.sn;
+      sn = canonicalPlugSn(row.sn, names);
     }
     const key = `${row.date}\0${sn}`;
     totals.set(key, (totals.get(key) ?? 0) + kwh);

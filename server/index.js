@@ -30,7 +30,7 @@ import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
 import { MeterConsumers } from "./meter-consumers.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
-import { dailyAveragePlugBuckets } from "./plug-daily-history.js";
+import { canonicalPlugSn, dailyAveragePlugBuckets } from "./plug-daily-history.js";
 import { estimatedAvgWattsForSpan, estimatedCategories, estimatedKwhForSpan, findEstimatedConsumer } from "./estimated-consumers.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { getPvForecast } from "./pv-forecast.js";
@@ -1629,28 +1629,28 @@ app.get("/api/plugs/timeseries", (req, res) => {
       ? getPlugSamplesBucketedForSn(onlySn, from, to, bucketMs)
       : getPlugSamplesBucketed(from, to, bucketMs);
   }
+  const plugNames = getAllPlugNames();
+  const outputFrom = Math.floor(from / bucketMs) * bucketMs;
   for (const r of bucketed) {
-    const rSn = onlySn ?? r.sn;
-    // Member rows must NOT join the unfiltered sn set (2026-10-18): the
-    // Rest card sums pr.plugs for home − Σplugs, and counting BOTH a
-    // composite (hmip-house-light / meter-multi-heating) AND its members
-    // would subtract those watts twice from rest-of-home. Members still
-    // have their own sample rows for the flip-face kWh integration.
-    if (!onlySn && (rSn.startsWith("hmip-") || rSn.startsWith("meter-multi-l"))) {
+    // Composite member rows feed only the flip faces, never Rest-of-home.
+    if (!onlySn && (r.sn.startsWith("hmip-") || r.sn.startsWith("meter-multi-l"))) {
       continue;
     }
+    // Named-group samples and their daily fallback share one canonical key,
+    // so they cannot both contribute at the retention/prune boundary.
+    const rSn = onlySn ?? canonicalPlugSn(r.sn, plugNames);
     sns.add(rSn);
     if (!acc.has(r.bt)) acc.set(r.bt, new Map());
-    acc.get(r.bt).set(rSn, Math.round(r.w));
+    acc.get(r.bt).set(rSn, (acc.get(r.bt).get(rSn) ?? 0) + r.w);
   }
   // Beyond the seven-day sample retention, use each completed local day's real
   // kWh as a flat daily-average watts value. Any surviving sample wins.
   if (!onlyEstimated) {
-    const dailyRows = getPlugDaily(localDate(new Date(from)));
+    const dailyRows = getPlugDaily(localDate(new Date(outputFrom)));
     const fallback = dailyAveragePlugBuckets({
       rows: dailyRows,
-      names: getAllPlugNames(),
-      from,
+      names: plugNames,
+      from: outputFrom,
       to,
       bucketMs,
       beforeMs: Date.now() - PLUG_SAMPLE_RETENTION_MS,
@@ -1660,7 +1660,7 @@ app.get("/api/plugs/timeseries", (req, res) => {
       if (acc.get(r.bt)?.has(r.sn)) continue;
       sns.add(r.sn);
       if (!acc.has(r.bt)) acc.set(r.bt, new Map());
-      acc.get(r.bt).set(r.sn, Math.round(r.w));
+      acc.get(r.bt).set(r.sn, r.w);
     }
   }
   // Unfiltered (Rest card) only: merge the battery grid-charge series so
@@ -1668,20 +1668,22 @@ app.get("/api/plugs/timeseries", (req, res) => {
   if (!onlySn) {
     for (const r of getBattGridChargeBucketed(from, to, bucketMs)) {
       if (!acc.has(r.bt)) acc.set(r.bt, new Map());
-      acc.get(r.bt).set(BATT_GRID_SN, Math.round(r.w));
+      acc.get(r.bt).set(BATT_GRID_SN, r.w);
     }
   }
   const estimated = onlyEstimated ? [onlyEstimated] : estimatedCategories();
   const estimatedBySn = new Map(estimated.map((c) => [c.sn, c]));
   const rows = [];
-  for (let bt = Math.floor(from / bucketMs) * bucketMs; bt < to; bt += bucketMs) {
+  for (let bt = outputFrom; bt < to; bt += bucketMs) {
     const row = { t: bt };
     const m = acc.get(bt);
     for (const sn of sns) {
       const estimatedConsumer = estimatedBySn.get(sn);
       row[`plug__${sn}`] = estimatedConsumer
         ? Math.round(estimatedAvgWattsForSpan(estimatedConsumer, bt, Math.min(bt + bucketMs, to)) * 100) / 100
-        : (m?.get(sn) ?? null);
+        : m?.get(sn) != null
+          ? Math.round(m.get(sn))
+          : null;
     }
     rows.push(row);
   }

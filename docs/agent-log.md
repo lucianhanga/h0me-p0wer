@@ -7936,3 +7936,20 @@ Root causes, all proven against production data:
   computed there without group/member double counting. Built-app advanced
   Consume selected 30d and rendered the full month with zero browser exceptions.
   Server syntax, Vite build and git diff --check passed.
+
+
+## Consume daily-fallback review hardening (2026-11-15, PR #516 review)
+
+- Review found that unfiltered named-group samples used raw member SNs while
+  daily fallback used `agg-*`, so an hourly-prune boundary bucket could contain
+  both and understate Rest-of-home. Unfiltered samples are now canonicalized
+  through `canonicalPlugSn()` and summed under the same aggregate key before
+  rounding; fallback precedence therefore works in every bucket.
+- Review also found a one-bucket gap when a request began just after local
+  midnight: dense output starts at floor(from/bucketMs), potentially on the
+  previous local day, but daily lookup started at localDate(from). The route
+  now computes `outputFrom` once and uses it for the daily query, fallback
+  overlap, and dense output.
+- Regression checks cover canonical group keys and a 00:05/54-minute-bucket
+  request. Real 30d API output contains no raw cooking member keys or overlaps,
+  retains 654 populated agg-cooking buckets, and backfills the midnight edge.
