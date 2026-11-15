@@ -8001,3 +8001,17 @@ Root causes, all proven against production data:
 - Verified with a 19-minute ongoing-session fixture and a mocked real React
   dryer session: last hour label was current time + 30 minutes (not 23:00),
   duration was 19 minutes, and there were zero browser exceptions.
+
+
+## Ongoing-session midnight and parallel-boundary hardening (2026-11-15, PR #518 review)
+
+- Review found that an ongoing session started yesterday used today's minutes
+  on its start-day card, inverting the scale. `sessionGeometryMinutes()` now
+  clamps an ongoing session to 1440 on previous-day cards while duration still
+  uses absolute current time; today's cards continue to end at now.
+- `assignSessionTracks()` now takes the render timestamp and uses
+  `sessionEndMs()` for interval assignment, so staggered ongoing sessions
+  cannot overlap just because one member's last sample is stale.
+- Regression fixtures cover 23:50→00:10, current-day geometry, finished ends,
+  and two ongoing sessions with staggered sample timestamps. Vite build and
+  git diff --check pass.

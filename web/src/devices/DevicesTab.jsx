@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { PLUG_COLORS } from "../plugs/PlugsTab.jsx";
-import { assignSessionTracks, sessionEndMs, sessionLabelAnchor, sessionTrackX } from "./sessionTracks.js";
+import { assignSessionTracks, sessionEndMs, sessionGeometryMinutes, sessionLabelAnchor, sessionTrackX } from "./sessionTracks.js";
 
 // Devices tab (2026-10-23, user request — advanced view): usage-session
 // history of the big consumers as a vertical timeline (prototype pick
@@ -48,17 +48,17 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
   const nowMs = Date.now();
   const endOf = (s) => sessionEndMs(s, nowMs);
   const minS = sessions.length ? Math.min(...sessions.map((s) => minutesOf(s.start))) - 45 : 0;
-  const maxE = sessions.length ? Math.max(...sessions.map((s) => minutesOf(endOf(s)))) + 30 : 0;
+  const maxE = sessions.length ? Math.max(...sessions.map((s) => sessionGeometryMinutes(s, nowMs))) + 30 : 0;
   const H = Math.max(200, (maxE - minS) * 1.1);
   const y = (m) => 26 + ((m - minS) / (maxE - minS)) * (H - 40);
-  const { trackOf, count: trackCount } = assignSessionTracks(sessions);
+  const { trackOf, count: trackCount } = assignSessionTracks(sessions, nowMs);
   const trackX = (track) => sessionTrackX(track, trackCount, CX);
   const lanes = [{ bottom: -1e9 }, { bottom: -1e9 }]; // 0 = right, 1 = left
   const placed = [...sessions]
     .sort((a, b) => a.start - b.start)
     .map((s) => {
       const track = trackOf.get(s);
-      const midY = (y(minutesOf(s.start)) + y(minutesOf(endOf(s)))) / 2;
+      const midY = (y(minutesOf(s.start)) + y(sessionGeometryMinutes(s, nowMs))) / 2;
       let top = midY - LANE_LABEL_H / 2;
       let lane = track % 2;
       if (lanes[lane].bottom + LANE_GAP > top) {
@@ -103,7 +103,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
           <line x1={CX} x2={CX} y1={24} y2={H - 12} stroke="#444c56" strokeWidth={4} strokeLinecap="round" />
           {placed.map(({ s, top, lane, track }) => {
             const y1 = y(minutesOf(s.start));
-            const y2 = y(minutesOf(endOf(s)));
+            const y2 = y(sessionGeometryMinutes(s, nowMs));
             const color = colorOf.get(s.device);
             const tx = sessionLabelAnchor(lane, trackCount, CX);
             const anchor = lane === 0 ? "start" : "end";
