@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
@@ -7,17 +7,19 @@ import { summarizeTodaySessions } from "./simpleDevicesToday.js";
 
 const fmtTime = (ts) => new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-export default function SimpleDevicesToday() {
+function SimpleDevicesTodayContent({ fromMs, toMs }) {
   const t = useT();
-  const fromDate = new Date();
-  fromDate.setHours(0, 0, 0, 0);
-  const toDate = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate() + 1);
-  const { data } = usePolledResource(`/api/big-consumers/sessions?from=${fromDate.getTime()}&to=${toDate.getTime()}`, {
+  const [nowMs, setNowMs] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowMs(Date.now()), 60000);
+    return () => clearInterval(timer);
+  }, []);
+  const { data } = usePolledResource(`/api/big-consumers/sessions?from=${fromMs}&to=${toMs}`, {
     intervalMs: 60000,
     keepLastGoodOnError: true,
     cacheTtlMs: 60000,
   });
-  const devices = useMemo(() => summarizeTodaySessions(data?.sessions ?? [], Date.now()), [data]);
+  const devices = useMemo(() => summarizeTodaySessions(data?.sessions ?? [], nowMs), [data, nowMs]);
   if (!devices.length) return null;
 
   return (
@@ -41,4 +43,11 @@ export default function SimpleDevicesToday() {
       </ul>
     </>
   );
+}
+
+export default function SimpleDevicesToday() {
+  const fromDate = new Date();
+  fromDate.setHours(0, 0, 0, 0);
+  const toDate = new Date(fromDate.getFullYear(), fromDate.getMonth(), fromDate.getDate() + 1);
+  return <SimpleDevicesTodayContent key={fromDate.getTime()} fromMs={fromDate.getTime()} toMs={toDate.getTime()} />;
 }

@@ -204,14 +204,14 @@ export function extractSessions(fromMs, toMs, patterns = bigConsumerPatterns()) 
     if (!byPattern.has(pattern)) byPattern.set(pattern, new Set());
     byPattern.get(pattern).add(sn);
   }
+  const sampleFromMs = Math.max(0, fromMs - 7 * 86400000);
   const sessions = [];
   const colorIdx = getPlugColorIdx();
   for (const [pattern, sns] of byPattern) {
     const rows = [];
-    // getPlugSamplesForSn returns bare {ts, watts} — tag each row with its
-    // member sn so the combined timeline can sum members correctly and the
-    // session gets a display name.
-    for (const sn of sns) for (const r of getPlugSamplesForSn(sn, fromMs, toMs)) rows.push({ ts: r.ts, watts: r.watts, sn });
+    // Warm up from before the requested window so an overnight session keeps
+    // its real start. Energy, peak, and average are still clipped to the window.
+    for (const sn of sns) for (const r of getPlugSamplesForSn(sn, sampleFromMs, toMs)) rows.push({ ts: r.ts, watts: r.watts, sn });
     rows.sort((a, b) => a.ts - b.ts);
     const displayName = (sn) => {
       const n = names.get(sn) ?? sn;
@@ -223,7 +223,10 @@ export function extractSessions(fromMs, toMs, patterns = bigConsumerPatterns()) 
     const lastW = new Map(); // sn -> last watts (member plugs interleave)
     let cur = null; // open session
     const flush = (endTs) => {
-      const durH = (endTs - cur.startTs) / 3600000;
+      if (endTs <= fromMs || cur.startTs >= toMs) return;
+      const activeFrom = Math.max(cur.startTs, fromMs);
+      const activeTo = Math.min(endTs, toMs);
+      const durH = (activeTo - activeFrom) / 3600000;
       const kwh = Math.round(cur.wh / 10) / 100; // Wh → kWh, 2 decimals
       sessions.push({
         device: cur.device,
@@ -243,15 +246,17 @@ export function extractSessions(fromMs, toMs, patterns = bigConsumerPatterns()) 
       for (const v of lastW.values()) sumW += v;
       if (!cur) {
         if (sumW >= START_W) {
-          cur = { device: displayName(r.sn), repSn: r.sn, startTs: r.ts, belowSince: null, peakW: sumW, wh: 0, prevTs: r.ts, prevW: sumW };
+          cur = { device: displayName(r.sn), repSn: r.sn, startTs: r.ts, belowSince: null, peakW: 0, wh: 0, prevTs: r.ts, prevW: sumW };
         }
         continue;
       }
-      const dtH = Math.min(r.ts - cur.prevTs, 15 * 60 * 1000) / 3600000;
+      const integrationFrom = Math.max(cur.prevTs, fromMs);
+      const integrationTo = Math.min(r.ts, toMs);
+      const dtH = integrationFrom < integrationTo ? Math.min(integrationTo - integrationFrom, 15 * 60 * 1000) / 3600000 : 0;
       cur.wh += ((cur.prevW + sumW) / 2) * dtH;
       cur.prevTs = r.ts;
       cur.prevW = sumW;
-      cur.peakW = Math.max(cur.peakW, sumW);
+      if (r.ts >= fromMs) cur.peakW = Math.max(cur.peakW, sumW);
       if (sumW >= START_W) {
         cur.belowSince = null;
       } else if (sumW < END_W) {

@@ -4111,8 +4111,8 @@ pre {
 
 .simple-device-row:last-child { border-bottom: 0; }
 .simple-device-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.simple-device-main { display: flex; flex-direction: column; min-width: 0; }
-.simple-device-name { font-size: 0.9rem; font-weight: 600; }
-.simple-device-status { color: #8b98a5; font-size: 0.75rem; }
+.simple-device-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.simple-device-name { font-size: 0.9rem; font-weight: 600; overflow-wrap: anywhere; }
+.simple-device-status { color: #8b98a5; font-size: 0.75rem; overflow-wrap: anywhere; }
 .simple-device-status.is-running { color: #5fdd7f; }
 .simple-device-kwh { margin-left: auto; font-size: 0.85rem; font-variant-numeric: tabular-nums; white-space: nowrap; }

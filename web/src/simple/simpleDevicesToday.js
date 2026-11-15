@@ -24,6 +24,6 @@ export function summarizeTodaySessions(sessions, nowMs) {
       durationMin: Math.max(1, Math.round((sessionEndMs(latest, nowMs) - latest.start) / 60000)),
       latestStart: latest.start,
     }))
-    .sort((a, b) => Number(b.running) - Number(a.running) || b.latestStart - a.latestStart)
+    .sort((a, b) => Number(b.running) - Number(a.running) || b.activityTs - a.activityTs || b.latestStart - a.latestStart)
     .map(({ latestStart, ...summary }) => summary);
 }

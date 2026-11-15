@@ -8033,3 +8033,22 @@ Root causes, all proven against production data:
   check with ongoing dryer, repeated cooking and spüler sessions confirmed
   running first, one row per appliance, 0.50 kWh cooking total, no timeline SVG,
   no overflow, and zero browser exceptions. Vite build and diff check passed.
+
+
+## Simple Devices overnight and review hardening (2026-11-15, PR #519 review)
+
+- `extractSessions()` now warms up from seven days before the requested window
+  (the full sample-retention reach), retaining the real start of overnight
+  sessions. Returned energy, peak, and average are clipped to the request:
+  integration uses only the overlap and duration uses the clipped interval.
+  A temporary-SQLite fixture proves ongoing and completed 23:50 sessions keep
+  their actual starts while only current-day kWh is returned.
+- Simple finished devices now sort by `activityTs` descending after running
+  rows, not by latest start. Longer-but-earlier sessions therefore order by
+  their actual recent end.
+- A minute tick updates ongoing durations during failed polls; the content
+  component is keyed by local day so midnight remounts cannot retain yesterday's
+  rows. Main name/status columns flex and wrap anywhere for long names.
+- Updated the Running now integration and sessions-endpoint comments. Final
+  React check at 390 px covers recent-end ordering, repeated cooking, and an
+  80-character name with zero overflow or browser exceptions.
