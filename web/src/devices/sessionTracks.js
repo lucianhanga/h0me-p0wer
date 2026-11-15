@@ -1,3 +1,7 @@
+export function sessionEndMs(session, nowMs) {
+  return session.ongoing ? nowMs : session.end;
+}
+
 export function sessionTrackX(track, count, center) {
   return center + (track - (count - 1) / 2) * 18;
 }

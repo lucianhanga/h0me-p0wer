@@ -7988,3 +7988,16 @@ Root causes, all proven against production data:
 - Geometry fixtures cover 1–4 tracks. A real React/CDP check with three
   overlapping sessions at 390 px verified every device label clears its bar
   and produced zero browser exceptions. Vite build and git diff --check pass.
+
+
+## Ongoing Devices sessions stop at current time (2026-11-15, user report)
+
+- Advanced Devices hardcoded ongoing sessions to minute 1440 for chart height,
+  bar end, and label midpoint, so a dryer that had just started appeared to run
+  until midnight. `sessionEndMs(session, nowMs)` now returns current time for
+  ongoing sessions and the recorded end for finished ones.
+- One per-render timestamp drives chart bounds, bar geometry, label midpoint,
+  tooltip duration, and visible duration, keeping all ongoing values aligned.
+- Verified with a 19-minute ongoing-session fixture and a mocked real React
+  dryer session: last hour label was current time + 30 minutes (not 23:00),
+  duration was 19 minutes, and there were zero browser exceptions.
