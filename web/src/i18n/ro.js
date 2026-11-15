@@ -16,7 +16,7 @@ export const ro = {
     span7: "7 zile",
     empty: "Nicio sesiune a consumatorilor mari în acest interval.",
     emptyDay: "Niciun consumator mare activ.",
-    note: "Sesiunile provin din istoricul de putere al prizelor (7 zile) — încep la ≥ 100 W și se termină abia după 20 de minute sub 30 W, astfel pauzele de program nu divid niciodată un ciclu de spălare sau uscare.",
+    note: "Sesiunile provin din istoricul de putere al prizelor (7 zile) — încep la ≥ 100 W și se termină după 20 de minute sub 30 W, sau 45 de minute pentru mașina de spălat vase, astfel pauzele de program nu divid un ciclu.",
   },
   plugs: {
     rest: "Restul casei",

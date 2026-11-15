@@ -2,14 +2,15 @@ import { useMemo, useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { PLUG_COLORS } from "../plugs/PlugsTab.jsx";
+import { assignSessionTracks } from "./sessionTracks.js";
 
 // Devices tab (2026-10-23, user request — advanced view): usage-session
 // history of the big consumers as a vertical timeline (prototype pick
 // "M2", extended to ALL screens — phone and desktop render identically).
-// Per day, time flows down a CENTERED line; sessions are blocks on it
-// with a 3-line label (name / times·duration·kWh / avg·peak) in
-// alternating side lanes that never collide (preferred lane blocked →
-// other lane → slide below). Hour labels sit ON the line with a
+// Per day, time flows down a CENTERED line; overlapping sessions get their
+// own tracks around it, with 3-line labels in side lanes that never collide
+// (preferred lane blocked → other lane → slide below). Days are newest first.
+// Hour labels sit ON the line with a
 // card-colored punch-through so lane text never touches them. Full
 // values also in the hover tooltip. Sessions come from
 // /api/big-consumers/sessions, which replays plug_samples through the
@@ -48,13 +49,16 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
   const maxE = sessions.length ? Math.max(...sessions.map((s) => (s.ongoing ? 1440 : minutesOf(s.end)))) + 30 : 0;
   const H = Math.max(200, (maxE - minS) * 1.1);
   const y = (m) => 26 + ((m - minS) / (maxE - minS)) * (H - 40);
+  const { trackOf, count: trackCount } = assignSessionTracks(sessions);
+  const trackX = (track) => CX + (track - (trackCount - 1) / 2) * 18;
   const lanes = [{ bottom: -1e9 }, { bottom: -1e9 }]; // 0 = right, 1 = left
   const placed = [...sessions]
     .sort((a, b) => a.start - b.start)
-    .map((s, i) => {
+    .map((s) => {
+      const track = trackOf.get(s);
       const midY = (y(minutesOf(s.start)) + y(s.ongoing ? 1440 : minutesOf(s.end))) / 2;
       let top = midY - LANE_LABEL_H / 2;
-      let lane = i % 2;
+      let lane = track % 2;
       if (lanes[lane].bottom + LANE_GAP > top) {
         const other = 1 - lane;
         if (lanes[other].bottom + LANE_GAP <= top) lane = other;
@@ -64,7 +68,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
         }
       }
       lanes[lane].bottom = top + LANE_LABEL_H;
-      return { s, top, lane };
+      return { s, top, lane, track };
     });
   const tipOf = (s) =>
     [
@@ -78,6 +82,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
       {!sessions.length && <p className="muted" style={{ margin: "2px 0", fontSize: 12 }}>{emptyLabel}</p>}
       {sessions.length > 0 && (
         <svg width="100%" viewBox={`0 0 ${MW} ${H}`} role="img">
+          <title>{dayLabelText}</title>
           {Array.from(
             { length: Math.floor(maxE / 60) - Math.ceil(minS / 60) + 1 },
             (_, k) => Math.ceil(minS / 60) + k,
@@ -94,7 +99,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
             </g>
           ))}
           <line x1={CX} x2={CX} y1={24} y2={H - 12} stroke="#444c56" strokeWidth={4} strokeLinecap="round" />
-          {placed.map(({ s, top, lane }) => {
+          {placed.map(({ s, top, lane, track }) => {
             const y1 = y(minutesOf(s.start));
             const y2 = y(s.ongoing ? 1440 : minutesOf(s.end));
             const color = colorOf.get(s.device);
@@ -103,7 +108,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
             const title = tipOf(s);
             return (
               <g key={s.start}>
-                <rect x={CX - 8} y={y1} width={16} height={Math.max(6, y2 - y1)} rx={7} fill={color} opacity={0.92}>
+                <rect x={trackX(track) - 6} y={y1} width={12} height={Math.max(6, y2 - y1)} rx={6} fill={color} opacity={0.92}>
                   <title>{title}</title>
                 </rect>
                 <text x={tx} y={top + 9} textAnchor={anchor} fill={color} fontSize={11.5} fontWeight={600}>
@@ -148,13 +153,13 @@ export default function DevicesTab() {
     return m;
   }, [sessions]);
 
-  // One strip per LOCAL day in the window, oldest first.
+  // One strip per LOCAL day in the window, most recent first.
   const days = useMemo(() => {
     const out = [];
     const first = new Date(from);
     first.setHours(0, 0, 0, 0);
     for (let d = first.getTime(); d < to; d += DAY_MS) out.push(dayKey(d));
-    return out.map((key) => ({
+    return out.reverse().map((key) => ({
       key,
       sessions: sessions.filter((s) => dayKey(s.start) === key),
     }));

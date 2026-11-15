@@ -8,7 +8,7 @@
 //
 // Appliance cycles start-pause-restart (a washer idles at ~5 W between
 // phases for many minutes), so "ended" requires the draw to stay below
-// END_W for END_GRACE_MS — a short dip never closes a session.
+// END_W for endGraceMs(pattern) — 20 minutes normally, 45 for dishwashers.
 
 import { fetchJson } from "./welcome-sources.js";
 import { getAllPlugNames, getPlugSamplesForSn, getPlugColorIdx } from "./db.js";
@@ -20,6 +20,11 @@ const END_GRACE_MS = 20 * 60 * 1000; // pause tolerance before "ended"
 const MIN_AI_GAP_MS = 60 * 1000; // transition bursts collapse into one call
 
 const DEFAULT_PATTERNS = ["waschmaschine", "trockner", "spüler", "spueler", "cooking", "dishwasher", "washer", "dryer"];
+const DISHWASHER_PATTERNS = new Set(["spüler", "spueler", "dishwasher"]);
+
+export function endGraceMs(pattern) {
+  return DISHWASHER_PATTERNS.has(pattern) ? 45 * 60 * 1000 : END_GRACE_MS;
+}
 
 export function bigConsumerPatterns(env = process.env) {
   const raw = env.BIG_CONSUMERS;
@@ -68,7 +73,7 @@ export class BigConsumerTracker {
         // period closes the session (washer between phases, cooker lid
         // open, dishwasher waiting on water temperature).
         st.belowSince ??= nowMs;
-        if (nowMs - st.belowSince >= END_GRACE_MS) {
+        if (nowMs - st.belowSince >= endGraceMs(pattern)) {
           st.active = false;
           this.onTransition("end", pattern);
         }
@@ -186,7 +191,7 @@ export class BigConsumerReporter {
 // --- Usage-session history (2026-10-23, user request — advanced-view
 // "Devices" tab): replays plug_samples through the SAME pause-tolerant
 // state machine as the live tracker (start ≥ START_W, end only after
-// END_W held for END_GRACE_MS) and returns per session: start/end, avg
+// END_W held for endGraceMs(pattern)) and returns per session: start/end, avg
 // power, peak power and consumed energy (trapezoid over the raw samples,
 // 15-min gap clamp like plugDayKwhFromSamples). Patterns group member
 // plugs exactly like the live tracker ("cooking" = cooking + cooking2).
@@ -251,7 +256,7 @@ export function extractSessions(fromMs, toMs, patterns = bigConsumerPatterns()) 
         cur.belowSince = null;
       } else if (sumW < END_W) {
         cur.belowSince ??= r.ts;
-        if (r.ts - cur.belowSince >= END_GRACE_MS) {
+        if (r.ts - cur.belowSince >= endGraceMs(pattern)) {
           flush(r.ts);
           cur = null;
         }
