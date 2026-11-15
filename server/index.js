@@ -3586,8 +3586,8 @@ app.get("/api/big-consumers", (req, res) => {
   });
 });
 
-// Usage-session history for the advanced view's Devices tab (Gantt).
-// plug_samples holds 7 days of intraday detail — that is the reach.
+// Usage-session history for the advanced Devices timeline and the simple
+// view's Devices today list. plug_samples holds 7 days of intraday detail.
 app.get("/api/big-consumers/sessions", (req, res) => {
   const span = parseSpan(req, res);
   if (!span) return;

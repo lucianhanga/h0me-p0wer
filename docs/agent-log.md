@@ -8015,3 +8015,40 @@ Root causes, all proven against production data:
 - Regression fixtures cover 23:50→00:10, current-day geometry, finished ends,
   and two ongoing sessions with staggered sample timestamps. Vite build and
   git diff --check pass.
+
+
+## Simple-view Devices today (2026-11-15, user request)
+
+- New `SimpleDevicesToday` section beside Running now: one compact row per
+  appliance, running first, with current duration or latest end time and total
+  kWh for the current local day. It hides completely on inactive days and does
+  not reproduce the advanced timeline.
+- `simpleDevicesToday.js` aggregates repeated sessions per device, uses
+  `sessionEndMs()` for ongoing durations, and sorts running devices before
+  recent activity. Local-day URL rolls at midnight; polling is 60 s.
+- Semantic `<ul role="list">` rows reuse plug colors and localized
+  Devices today/running/ended labels in EN/DE/RO. Mobile CSS is a quiet single
+  column with no charts or extra controls.
+- Verification: red/green aggregation and duration fixtures; real React 390 px
+  check with ongoing dryer, repeated cooking and spüler sessions confirmed
+  running first, one row per appliance, 0.50 kWh cooking total, no timeline SVG,
+  no overflow, and zero browser exceptions. Vite build and diff check passed.
+
+
+## Simple Devices overnight and review hardening (2026-11-15, PR #519 review)
+
+- `extractSessions()` now warms up from seven days before the requested window
+  (the full sample-retention reach), retaining the real start of overnight
+  sessions. Returned energy, peak, and average are clipped to the request:
+  integration uses only the overlap and duration uses the clipped interval.
+  A temporary-SQLite fixture proves ongoing and completed 23:50 sessions keep
+  their actual starts while only current-day kWh is returned.
+- Simple finished devices now sort by `activityTs` descending after running
+  rows, not by latest start. Longer-but-earlier sessions therefore order by
+  their actual recent end.
+- A minute tick updates ongoing durations during failed polls; the content
+  component is keyed by local day so midnight remounts cannot retain yesterday's
+  rows. Main name/status columns flex and wrap anywhere for long names.
+- Updated the Running now integration and sessions-endpoint comments. Final
+  React check at 390 px covers recent-end ordering, repeated cooking, and an
+  80-character name with zero overflow or browser exceptions.
