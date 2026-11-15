@@ -16,10 +16,9 @@ import { restOfHomeSeries } from "../graph/restOfHome.js";
 // Smart plugs tab (2026-10-06): one card per A17X8 plug with a power chart,
 // plus a derived "rest of home" chart (home − Σ plugs, floored at 0 — plug
 // and meter sample cadences differ by seconds, so small negatives at load
-// edges are skew artifacts, not data). Per-plug intraday history is LOCAL
-// ONLY (plug_samples, accumulated by the 10 s scene poll): the Anker cloud
-// exposes per-plug daily kWh but no power trend, so the curves fill in from
-// deploy day.
+// edges are skew artifacts, not data). Per-plug intraday history comes from
+// LOCAL plug_samples for seven days; older completed days use stored daily
+// kWh as flat daily-average watts because the Anker cloud has no power trend.
 //
 // Charts behave like the Graph tab's (same resolution choices, 2026-10-06
 // user request): per-card span buttons (SHORTCUTS shared with GraphTab),

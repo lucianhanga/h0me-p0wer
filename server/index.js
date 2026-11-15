@@ -30,6 +30,7 @@ import { ConfigWatchdog } from "./config-watchdog.js";
 import { HmipPoller } from "./hmip.js";
 import { MeterConsumers } from "./meter-consumers.js";
 import { applyPlugGroups, plugGroupForName, plugGroupForSn, PLUG_GROUPS } from "./plug-groups.js";
+import { dailyAveragePlugBuckets } from "./plug-daily-history.js";
 import { estimatedAvgWattsForSpan, estimatedCategories, estimatedKwhForSpan, findEstimatedConsumer } from "./estimated-consumers.js";
 import { backupEnabled, backupNow, listBackups, lastBackupInfo, restoreFromBackup, startBackupScheduler, retentionTiers } from "./backup.js";
 import { getPvForecast } from "./pv-forecast.js";
@@ -89,6 +90,7 @@ import {
   pruneProviderMeterSamples,
   savePlugDaily,
   getPlugDaily,
+  getAllPlugNames,
   plugDayKwhFromSamples,
   upsertPlugDailyRow,
   battGridChargeKwh,
@@ -1571,10 +1573,10 @@ app.get("/api/meter-multi/members", (req, res) => {
   respondMembers(res, from, to, devices);
 });
 
-// Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to),
-// nulls where no samples (server off). No interpolation — at the 10 s
-// sample cadence every chart-sized bucket either has samples or the gap is
-// real. The frontend aligns these with /api/timeseries (same `bucket`
+// Bucketed per-plug watts: rows {t, plug__<sn>} dense over [from, to).
+// Within the 7-day sample retention, nulls are real sampling gaps; completed
+// older days fall back to daily-average watts from stored kWh. The frontend
+// aligns these with /api/timeseries (same `bucket`
 // param) to derive "rest of home" = home − Σ plugs client-side.
 app.get("/api/plugs/timeseries", (req, res) => {
   const span = parseSpan(req, res);
@@ -1640,6 +1642,26 @@ app.get("/api/plugs/timeseries", (req, res) => {
     sns.add(rSn);
     if (!acc.has(r.bt)) acc.set(r.bt, new Map());
     acc.get(r.bt).set(rSn, Math.round(r.w));
+  }
+  // Beyond the seven-day sample retention, use each completed local day's real
+  // kWh as a flat daily-average watts value. Any surviving sample wins.
+  if (!onlyEstimated) {
+    const dailyRows = getPlugDaily(localDate(new Date(from)));
+    const fallback = dailyAveragePlugBuckets({
+      rows: dailyRows,
+      names: getAllPlugNames(),
+      from,
+      to,
+      bucketMs,
+      beforeMs: Date.now() - PLUG_SAMPLE_RETENTION_MS,
+      onlySn,
+    });
+    for (const r of fallback) {
+      if (acc.get(r.bt)?.has(r.sn)) continue;
+      sns.add(r.sn);
+      if (!acc.has(r.bt)) acc.set(r.bt, new Map());
+      acc.get(r.bt).set(r.sn, Math.round(r.w));
+    }
   }
   // Unfiltered (Rest card) only: merge the battery grid-charge series so
   // home − Σplugs also subtracts what the solarbanks pulled from the grid.

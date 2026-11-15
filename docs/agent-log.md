@@ -7912,3 +7912,27 @@ Root causes, all proven against production data:
   documentation. The newer note records the merged sofa PR, runtime restart
   commands, webpage status, and the fact that production was not deployed.
 - Version bumped to 1.5.337 for this documentation-only follow-up.
+
+
+## Consume 30d daily-average fallback (2026-11-14, user report)
+
+- Symptom: advanced Consume per-plug charts showed only the last seven days;
+  the older part of 30d was empty. Reproduced on production v1.5.336: a 30d
+  agg-cooking request returned 189 populated buckets beginning seven days ago,
+  while /api/stats/consumers had daily kWh throughout the month.
+- Root cause: /api/plugs/timeseries read only plug_samples, which is pruned to
+  seven days. plug_daily already keeps long-term daily energy. Anker exposes
+  no historical intraday plug power, so the missing shapes cannot be recovered.
+- New `server/plug-daily-history.js` converts COMPLETED local days beyond the
+  retention edge to flat daily-average watts, dividing by the actual local day
+  length (23/24/25 h). Named-group members sum their daily kWh first; null days
+  stay missing and 0-kWh days stay 0. /api/plugs/timeseries merges these only
+  where no sampled value exists, for individual cards, groups, and Rest-of-home
+  inputs. Recent samples and all pre-retention outage gaps remain unchanged.
+- Updated the Consume note in EN/DE/RO to identify older flat values as daily
+  averages. No database migration or retention change.
+- Verification: red/green fixtures for cutoff, zero/null, groups, filtering and
+  DST; real local 30d response grew to 592 older daily-average buckets and Rest
+  computed there without group/member double counting. Built-app advanced
+  Consume selected 30d and rendered the full month with zero browser exceptions.
+  Server syntax, Vite build and git diff --check passed.

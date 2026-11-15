@@ -124,7 +124,9 @@ EPIPE noise on every client disconnect).
   "HH:MM:SS"; absolute ts = `new Date(period_start + "T" + label)`.
 - `plug_samples`: per-plug watts at the scene-poll cadence (7 s baseline,
   ~2.5 s watched), 7-day retention. `plug_daily`: per-plug daily kWh from
-  `home_usage`'s smart_plug_info, kept forever.
+  `home_usage`'s smart_plug_info, kept forever. Consume's
+  `/api/plugs/timeseries` fills completed days beyond sample retention with
+  flat daily-average watts from `plug_daily`; surviving samples always win.
 
 ### `/api/timeseries` merge rules (the chart's contract)
 1. Bucket size from the **visible** window (`view` param), rounded up to 5 s,

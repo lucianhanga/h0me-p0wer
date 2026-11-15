@@ -26,7 +26,7 @@ export const ro = {
     empty: "Nicio priză inteligentă găsită încă pe acest cont.",
     house: "Toată casa",
     devicesTitle: "{n} dispozitive",
-    note: "Istoricul puterii prizelor se înregistrează local de acum încolo — cloud-ul Anker păstrează doar totaluri zilnice, așa că curbele se umplu în timp.",
+    note: "Curbele de putere folosesc mostre locale din ultimele 7 zile; istoricul mai vechi arată medii zilnice constante din kWh zilnici stocați.",
   },
   common: {
     updated: "actualizat {time}",
