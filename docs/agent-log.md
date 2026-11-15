@@ -7977,3 +7977,14 @@ Root causes, all proven against production data:
   assertion was used. Built advanced Devices showed today first and parallel
   washer/cooking bars at different x positions with zero browser exceptions.
   Vite build and server syntax passed.
+
+
+## Devices multi-track label anchors (2026-11-15, PR #517 review)
+
+- Review caught that three simultaneous tracks expanded outward while label
+  anchors stayed at CX ± 18, putting the outer session's text over its bar.
+  `sessionTrackX()` and `sessionLabelAnchor()` now derive anchors from the
+  outermost tracks (including the existing 18-unit bar/gap spacing) instead.
+- Geometry fixtures cover 1–4 tracks. A real React/CDP check with three
+  overlapping sessions at 390 px verified every device label clears its bar
+  and produced zero browser exceptions. Vite build and git diff --check pass.

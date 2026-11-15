@@ -1,3 +1,12 @@
+export function sessionTrackX(track, count, center) {
+  return center + (track - (count - 1) / 2) * 18;
+}
+
+export function sessionLabelAnchor(lane, count, center) {
+  const outerTrack = lane === 0 ? count - 1 : 0;
+  return sessionTrackX(outerTrack, count, center) + (lane === 0 ? 18 : -18);
+}
+
 export function assignSessionTracks(sessions) {
   const trackOf = new Map();
   const ends = [];

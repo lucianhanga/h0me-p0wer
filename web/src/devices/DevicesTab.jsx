@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import { PLUG_COLORS } from "../plugs/PlugsTab.jsx";
-import { assignSessionTracks } from "./sessionTracks.js";
+import { assignSessionTracks, sessionLabelAnchor, sessionTrackX } from "./sessionTracks.js";
 
 // Devices tab (2026-10-23, user request — advanced view): usage-session
 // history of the big consumers as a vertical timeline (prototype pick
@@ -50,7 +50,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
   const H = Math.max(200, (maxE - minS) * 1.1);
   const y = (m) => 26 + ((m - minS) / (maxE - minS)) * (H - 40);
   const { trackOf, count: trackCount } = assignSessionTracks(sessions);
-  const trackX = (track) => CX + (track - (trackCount - 1) / 2) * 18;
+  const trackX = (track) => sessionTrackX(track, trackCount, CX);
   const lanes = [{ bottom: -1e9 }, { bottom: -1e9 }]; // 0 = right, 1 = left
   const placed = [...sessions]
     .sort((a, b) => a.start - b.start)
@@ -103,7 +103,7 @@ function DayTimeline({ dayLabelText, sessions, colorOf, emptyLabel }) {
             const y1 = y(minutesOf(s.start));
             const y2 = y(s.ongoing ? 1440 : minutesOf(s.end));
             const color = colorOf.get(s.device);
-            const tx = lane === 0 ? CX + 18 : CX - 18;
+            const tx = sessionLabelAnchor(lane, trackCount, CX);
             const anchor = lane === 0 ? "start" : "end";
             const title = tipOf(s);
             return (
