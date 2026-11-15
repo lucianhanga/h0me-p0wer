@@ -8071,3 +8071,21 @@ Root causes, all proven against production data:
   check: distinct front tracks, seven stacked day labels newest first, 6px back
   columns, no overflow or browser exceptions. Front/back screenshots verified
   after letting the simple page's battery layout stabilize. Vite build passed.
+
+
+## Simple flip-timeline review fixes (2026-11-15, PR #520 review)
+
+- Front labels now render once per device per track, so sequential different
+  appliances no longer overprint; repeated devices do not duplicate labels.
+  Long names shorten to 15 characters + ellipsis with the full name in a
+  tooltip. Text summaries expose every session outside SVG tooltips.
+- Week track assignment accepts a 4-hour minimum rendered interval so repeated
+  20–45-minute sessions cannot paint over one another on reused tracks.
+  `dayHourFraction()` positions ticks by actual elapsed local-day time, which
+  handles 23/25-hour DST days instead of assuming midnight + n/24.
+- Localized today SVG title, visually hidden textual session details,
+  `aria-pressed` on FlipTile, and aria-hidden on the non-visible face. Updated
+  the sessions-endpoint comment to the flip-timeline surface.
+- Regression fixtures cover min-duration tracks, DST ticks and label truncation.
+  Real React checks cover sequential A/B/long names, three short-session tracks,
+  localized title, text summaries, aria state, 390 px width and zero exceptions.

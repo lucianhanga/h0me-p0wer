@@ -4110,3 +4110,16 @@ pre {
 .simple-devices-week-day:last-child { padding-bottom: 0; border-bottom: 0; }
 .simple-devices-week-label { margin-bottom: 0.2rem; font-size: 0.78rem; }
 .simple-devices-week-empty { font-size: 0.75rem; }
+
+
+.visually-hidden {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
