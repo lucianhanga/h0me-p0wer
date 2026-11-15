@@ -8089,3 +8089,36 @@ Root causes, all proven against production data:
 - Regression fixtures cover min-duration tracks, DST ticks and label truncation.
   Real React checks cover sequential A/B/long names, three short-session tracks,
   localized title, text summaries, aria state, 390 px width and zero exceptions.
+
+
+## Simple Devices minimal daily strips on both faces (2026-11-15, user selected option C)
+
+- Replaced the front's per-session device labels and the back's vertical
+  columns with one shared color legend and horizontal mini-lanes on both faces.
+  Today and each of the last seven days now use the same 24-hour presentation:
+  day/title first, elapsed-time hour ticks, then 9px colored session bars.
+- Sequential non-overlapping sessions share lanes without label collisions;
+  overlapping sessions still use separate tracks. Text summaries preserve full
+  session details for assistive technology and SVG tooltips preserve all values.
+- Back no longer needs the vertical-column minimum-height workaround; normal
+  timestamp track assignment is sufficient for duration-width bars.
+- Browser RED→GREEN: shared five-device legend, zero per-row labels, 9px bars,
+  seven stacked newest-first days, text summaries, aria flip state, no overflow
+  or browser exceptions. Vite build and diff check passed.
+
+
+## Daily-strip paint order, stable colors, running emphasis (2026-11-15, PR #521 review + user request)
+
+- Review found that each reused lane painted an opaque background over the
+  previous session's bar. Lanes now render once per track in a first pass and
+  every session bar renders afterward, so sequential bars stay visible.
+- One device-to-color map now covers every legend and every bar, including
+  null colorIdx values and repeat sessions across days. Legend names use a
+  dedicated constrained/wrapping element and full-name tooltip; removed the
+  obsolete per-row label rule.
+- Running appliances now sort first in the shared legend and on every day's
+  timeline, with a localized Running now indicator. This keeps option C while
+  making current activity immediately visible.
+- Browser checks cover two sequential A bars with identical stable fill,
+  running-first legend, lane paint order, 9px back bars, 80-character names,
+  390 px width, and zero browser exceptions. Vite build and diff check passed.

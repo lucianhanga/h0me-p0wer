@@ -30,10 +30,6 @@ export function dayHourFraction(hour, dayStart) {
   return (tick - dayStart) / (dayEnd - dayStart);
 }
 
-export function shortDeviceName(name) {
-  return name.length > 16 ? `${name.slice(0, 15)}…` : name;
-}
-
 export function recentDayStarts(nowMs, count) {
   const days = [];
   let cursor = dayStartMs(nowMs);
@@ -50,6 +46,10 @@ export function sessionDayFractions(session, dayStart, nowMs) {
   const start = Math.max(session.start, dayStart);
   const end = Math.min(sessionEndMs(session, nowMs), dayEnd);
   return { start: (start - dayStart) / (dayEnd - dayStart), end: (end - dayStart) / (dayEnd - dayStart) };
+}
+
+export function runningFirst(sessions) {
+  return [...sessions].sort((a, b) => Number(b.ongoing) - Number(a.ongoing) || a.start - b.start);
 }
 
 export function sessionTrackX(track, count, center) {
