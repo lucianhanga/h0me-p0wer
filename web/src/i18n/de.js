@@ -26,7 +26,7 @@ export const de = {
     empty: "Noch keine Smart Plugs auf diesem Konto gefunden.",
     house: "Ganzes Haus",
     devicesTitle: "{n} Geräte",
-    note: "Der Verlauf der Steckdosen-Leistung wird ab jetzt lokal aufgezeichnet — die Anker-Cloud speichert nur Tageswerte, die Kurven füllen sich also mit der Zeit.",
+    note: "Leistungsverläufe nutzen lokale Messwerte der letzten 7 Tage; ältere Daten zeigen flache Tagesdurchschnitte aus den gespeicherten Tages-kWh.",
   },
   common: {
     updated: "aktualisiert {time}",
