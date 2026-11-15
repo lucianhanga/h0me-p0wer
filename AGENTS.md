@@ -221,7 +221,8 @@ production screenshot, check the deployed version:
   `METER_IP=192.168.1.15` (meter-2), `PV_PEAK_KWP=6.0`, `STRATEGY_PIN`,
   `BIND_IP=127.0.0.1` (app reachable only via the Cloudflare tunnel).
   Plug surfaces: Devices flip tile (simple view — shared-legend minimal
-  horizontal daily strips for today and the last 7 days), Devices timeline (full view),
+  horizontal daily strips for today and the last 7 days, running devices first),
+  Devices timeline (full view),
   Consume tab (full view), Consume section (simple view) + Consume rows
   (Dashboard) — on /api/big-consumers/sessions, /api/stats/consumers, and
   /api/plugs/timeseries.

@@ -4103,7 +4103,6 @@ pre {
 .simple-devices-face-title { margin-bottom: 0.35rem; font-size: 0.85rem; font-weight: 650; }
 .simple-devices-chart { display: block; width: 100%; height: auto; }
 .simple-devices-hour { fill: #6b7684; font-size: 8px; }
-.simple-devices-name { font-size: 10px; font-weight: 600; }
 .simple-devices-empty { margin: 0.4rem 0; font-size: 0.8rem; }
 .simple-devices-week { display: flex; flex-direction: column; gap: 0.65rem; }
 .simple-devices-week-day { padding-bottom: 0.45rem; border-bottom: 1px solid #26313b; }
@@ -4134,6 +4133,9 @@ pre {
   font-size: 0.68rem;
 }
 
-.simple-devices-legend-item { display: inline-flex; align-items: center; gap: 0.25rem; }
+.simple-devices-legend-item { display: inline-flex; align-items: center; gap: 0.25rem; max-width: 100%; min-width: 0; }
+.simple-devices-legend-item.is-running { color: #e8ecef; font-weight: 650; }
+.simple-devices-legend-name { min-width: 0; overflow-wrap: anywhere; }
+.simple-devices-running { color: #5fdd7f; font-size: 0.62rem; font-weight: 500; }
 .simple-devices-legend-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; }
 .simple-devices-lane { fill: #1b2a3a; }

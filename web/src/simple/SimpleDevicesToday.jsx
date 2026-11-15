@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePolledResource } from "../usePolledResource.js";
 import { useT } from "../i18n/LanguageProvider.jsx";
 import SectionTitle from "../components/SectionTitle.jsx";
 import FlipTile from "../components/FlipTile.jsx";
 import { PLUG_COLORS } from "../plugs/PlugsTab.jsx";
-import { assignSessionTracks, dayHourFraction, dayStartMs, nextDayStartMs, recentDayStarts, sessionDayFractions, sessionEndMs } from "../devices/sessionTracks.js";
+import { assignSessionTracks, dayHourFraction, dayStartMs, nextDayStartMs, recentDayStarts, runningFirst, sessionDayFractions, sessionEndMs } from "../devices/sessionTracks.js";
 
 const W = 460;
 const HOURS = [0, 6, 12, 18, 24];
@@ -13,7 +13,6 @@ const fmtDur = (a, b) => {
   const minutes = Math.max(1, Math.round((b - a) / 60000));
   return minutes >= 60 ? `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m` : `${minutes} min`;
 };
-const colorOf = (session, i) => PLUG_COLORS[(session.colorIdx ?? i) % PLUG_COLORS.length];
 const tipOf = (session, nowMs) => [
   session.device,
   `${fmtTime(session.start)} – ${session.ongoing ? "…" : fmtTime(session.end)} (${fmtDur(session.start, sessionEndMs(session, nowMs))})`,
@@ -32,30 +31,35 @@ function SessionTextSummary({ sessions, nowMs }) {
   );
 }
 
-function DeviceLegend({ sessions }) {
+function DeviceLegend({ sessions, colorOf, runningLabel }) {
   const devices = new Map();
-  for (const session of sessions) {
-    if (!devices.has(session.device)) devices.set(session.device, colorOf(session, devices.size));
+  const running = new Set(sessions.filter((session) => session.ongoing).map((session) => session.device));
+  for (const session of runningFirst(sessions)) {
+    if (!devices.has(session.device)) devices.set(session.device, colorOf(session.device));
   }
   return (
     <div className="simple-devices-legend">
-      {[...devices].map(([device, color]) => (
-        <span className="simple-devices-legend-item" key={device}>
-          <span className="simple-devices-legend-dot" style={{ background: color }} aria-hidden="true" />
-          {device}
-        </span>
-      ))}
+      {[...devices].map(([device, color]) => {
+        const isRunning = running.has(device);
+        return (
+          <span className={`simple-devices-legend-item${isRunning ? " is-running" : ""}`} key={device}>
+            <span className="simple-devices-legend-dot" style={{ background: color }} aria-hidden="true" />
+            <span className="simple-devices-legend-name" title={device}>{device}</span>
+            {isRunning && <span className="simple-devices-running"> · {runningLabel}</span>}
+          </span>
+        );
+      })}
     </div>
   );
 }
 
-function TodayTimeline({ sessions, nowMs, emptyLabel, title }) {
+function TodayTimeline({ sessions, nowMs, emptyLabel, title, colorOf, runningLabel }) {
   const dayStart = dayStartMs(nowMs);
   const today = sessions.filter((s) => overlapsDay(s, dayStart, nowMs));
   const { trackOf, count } = assignSessionTracks(today, nowMs);
   return (
     <>
-      <DeviceLegend sessions={today} />
+      <DeviceLegend sessions={today} colorOf={colorOf} runningLabel={runningLabel} />
       {!today.length ? <p className="muted simple-devices-empty">{emptyLabel}</p> : (
         <>
           <svg className="simple-devices-chart" viewBox={`0 0 ${W} ${32 + count * 17}`} role="img">
@@ -65,18 +69,17 @@ function TodayTimeline({ sessions, nowMs, emptyLabel, title }) {
                 {String(hour).padStart(2, "0")}:00
               </text>
             ))}
-            {today.map((session, i) => {
+            {Array.from({ length: count }, (_, track) => (
+              <rect className="simple-devices-lane" key={track} x={0} y={22 + track * 17} width={W} height={13} rx={3} />
+            ))}
+            {runningFirst(today).map((session) => {
               const track = trackOf.get(session);
               const { start, end } = sessionDayFractions(session, dayStart, nowMs);
-              const color = colorOf(session, i);
-              const y = 22 + track * 17;
+              const color = colorOf(session.device);
               return (
-                <g key={`${session.device}-${session.start}`}>
-                  <rect className="simple-devices-lane" x={0} y={y} width={W} height={13} rx={3} />
-                  <rect x={start * W} y={y + 2} width={Math.max(2, (end - start) * W)} height={9} rx={3} fill={color}>
-                    <title>{tipOf(session, nowMs)}</title>
-                  </rect>
-                </g>
+                <rect key={`${session.device}-${session.start}`} x={start * W} y={24 + track * 17} width={Math.max(2, (end - start) * W)} height={9} rx={3} fill={color}>
+                  <title>{tipOf(session, nowMs)}</title>
+                </rect>
               );
             })}
           </svg>
@@ -87,10 +90,10 @@ function TodayTimeline({ sessions, nowMs, emptyLabel, title }) {
   );
 }
 
-function WeekTimeline({ sessions, nowMs, emptyLabel }) {
+function WeekTimeline({ sessions, nowMs, emptyLabel, colorOf, runningLabel }) {
   return (
     <>
-      <DeviceLegend sessions={sessions} />
+      <DeviceLegend sessions={sessions} colorOf={colorOf} runningLabel={runningLabel} />
       <div className="simple-devices-week">
         {recentDayStarts(nowMs, 7).map((dayStart) => {
           const daySessions = sessions.filter((s) => overlapsDay(s, dayStart, nowMs));
@@ -110,18 +113,17 @@ function WeekTimeline({ sessions, nowMs, emptyLabel }) {
                       const x = dayHourFraction(hour, dayStart) * W;
                       return <text key={hour} className="simple-devices-hour" x={x} y={12} textAnchor={hour === 0 ? "start" : hour === 24 ? "end" : "middle"}>{String(hour).padStart(2, "0")}:00</text>;
                     })}
-                    {daySessions.map((session, i) => {
+                    {Array.from({ length: count }, (_, track) => (
+                      <rect className="simple-devices-lane" key={track} x={0} y={20 + track * 13} width={W} height={13} rx={3} />
+                    ))}
+                    {runningFirst(daySessions).map((session) => {
                       const track = trackOf.get(session);
                       const { start, end } = sessionDayFractions(session, dayStart, nowMs);
-                      const color = colorOf(session, i);
-                      const y = 20 + track * 13;
+                      const color = colorOf(session.device);
                       return (
-                        <g key={`${session.device}-${session.start}`}>
-                          <rect className="simple-devices-lane" x={0} y={y} width={W} height={13} rx={3} />
-                          <rect x={start * W} y={y + 2} width={Math.max(2, (end - start) * W)} height={9} rx={3} fill={color}>
-                            <title>{tipOf(session, nowMs)}</title>
-                          </rect>
-                        </g>
+                        <rect key={`${session.device}-${session.start}`} x={start * W} y={22 + track * 13} width={Math.max(2, (end - start) * W)} height={9} rx={3} fill={color}>
+                          <title>{tipOf(session, nowMs)}</title>
+                        </rect>
                       );
                     })}
                   </svg>
@@ -149,6 +151,13 @@ function SimpleDevicesTodayContent({ fromMs, toMs }) {
     cacheTtlMs: 60000,
   });
   const sessions = data?.sessions ?? [];
+  const colorOf = useMemo(() => {
+    const colors = new Map();
+    for (const session of sessions) {
+      if (!colors.has(session.device)) colors.set(session.device, PLUG_COLORS[(session.colorIdx ?? colors.size) % PLUG_COLORS.length]);
+    }
+    return (device) => colors.get(device);
+  }, [sessions]);
   if (!sessions.length) return null;
   return (
     <>
@@ -158,13 +167,13 @@ function SimpleDevicesTodayContent({ fromMs, toMs }) {
         back={(flipped) => flipped ? (
           <div className="card simple-devices-card">
             <div className="simple-devices-face-title">{t("devices.week")}</div>
-            <WeekTimeline sessions={sessions} nowMs={nowMs} emptyLabel={t("devices.emptyDay")} />
+            <WeekTimeline sessions={sessions} nowMs={nowMs} emptyLabel={t("devices.emptyDay")} colorOf={colorOf} runningLabel={t("simple.runningNow")} />
           </div>
         ) : null}
       >
         <div className="card simple-devices-card">
           <div className="simple-devices-face-title">{t("devices.today")}</div>
-          <TodayTimeline sessions={sessions} nowMs={nowMs} emptyLabel={t("devices.emptyDay")} title={t("devices.today")} />
+          <TodayTimeline sessions={sessions} nowMs={nowMs} emptyLabel={t("devices.emptyDay")} title={t("devices.today")} colorOf={colorOf} runningLabel={t("simple.runningNow")} />
         </div>
       </FlipTile>
     </>

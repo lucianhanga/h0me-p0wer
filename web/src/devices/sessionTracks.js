@@ -48,6 +48,10 @@ export function sessionDayFractions(session, dayStart, nowMs) {
   return { start: (start - dayStart) / (dayEnd - dayStart), end: (end - dayStart) / (dayEnd - dayStart) };
 }
 
+export function runningFirst(sessions) {
+  return [...sessions].sort((a, b) => Number(b.ongoing) - Number(a.ongoing) || a.start - b.start);
+}
+
 export function sessionTrackX(track, count, center) {
   return center + (track - (count - 1) / 2) * 18;
 }
