@@ -3587,7 +3587,7 @@ app.get("/api/big-consumers", (req, res) => {
 });
 
 // Usage-session history for the advanced Devices timeline and the simple
-// view's Devices today list. plug_samples holds 7 days of intraday detail.
+// view's flip timelines. plug_samples holds 7 days of intraday detail.
 app.get("/api/big-consumers/sessions", (req, res) => {
   const span = parseSpan(req, res);
   if (!span) return;

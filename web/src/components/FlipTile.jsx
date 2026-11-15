@@ -28,6 +28,7 @@ const FlipTile = forwardRef(function FlipTile({ children, back = null, className
         toggle();
       }}
       role="button"
+      aria-pressed={flipped}
       tabIndex={0}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
@@ -37,12 +38,12 @@ const FlipTile = forwardRef(function FlipTile({ children, back = null, className
       }}
     >
       <div className="flip-inner">
-        <div className="flip-face flip-front">{children}</div>
+        <div className="flip-face flip-front" aria-hidden={flipped}>{children}</div>
         {/* back as a render function receives `flipped` (2026-10-12): the
             aggregate card's back face must only poll while visible — both
             faces stay MOUNTED through the CSS flip, so an always-on poll
             there would run forever, hidden. */}
-        <div className="flip-face flip-back">{typeof back === "function" ? back(flipped) : back}</div>
+        <div className="flip-face flip-back" aria-hidden={!flipped}>{typeof back === "function" ? back(flipped) : back}</div>
       </div>
     </div>
   );

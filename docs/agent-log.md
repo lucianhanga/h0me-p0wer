@@ -8052,3 +8052,40 @@ Root causes, all proven against production data:
 - Updated the Running now integration and sessions-endpoint comments. Final
   React check at 390 px covers recent-end ordering, repeated cooking, and an
   80-character name with zero overflow or browser exceptions.
+
+
+## Simple Devices flip timeline under batteries (2026-11-15, user request)
+
+- Moved Devices today out of the introductory Running now area into one flip
+  tile directly under the battery stacks. Front = current-day horizontal
+  session bars on separate tracks with device labels and hour axis; back =
+  seven local days newest first, each with thin vertical session columns.
+- Shared `sessionDayFractions()` clips overnight sessions to each displayed
+  local day with actual 23/24/25-hour lengths; `recentDayStarts()` supplies
+  newest-first days. Existing effective-end track assignment prevents overlap.
+- Back content renders only while flipped so its greater height does not leave
+  a large blank area on today's compact face. Full session details stay in SVG
+  tooltips and each chart has a root title. Removed the obsolete list-summary
+  helper and old row styles.
+- Verification: overnight/DST/week-order fixtures and real React 390 px flip
+  check: distinct front tracks, seven stacked day labels newest first, 6px back
+  columns, no overflow or browser exceptions. Front/back screenshots verified
+  after letting the simple page's battery layout stabilize. Vite build passed.
+
+
+## Simple flip-timeline review fixes (2026-11-15, PR #520 review)
+
+- Front labels now render once per device per track, so sequential different
+  appliances no longer overprint; repeated devices do not duplicate labels.
+  Long names shorten to 15 characters + ellipsis with the full name in a
+  tooltip. Text summaries expose every session outside SVG tooltips.
+- Week track assignment accepts a 4-hour minimum rendered interval so repeated
+  20–45-minute sessions cannot paint over one another on reused tracks.
+  `dayHourFraction()` positions ticks by actual elapsed local-day time, which
+  handles 23/25-hour DST days instead of assuming midnight + n/24.
+- Localized today SVG title, visually hidden textual session details,
+  `aria-pressed` on FlipTile, and aria-hidden on the non-visible face. Updated
+  the sessions-endpoint comment to the flip-timeline surface.
+- Regression fixtures cover min-duration tracks, DST ticks and label truncation.
+  Real React checks cover sequential A/B/long names, three short-session tracks,
+  localized title, text summaries, aria state, 390 px width and zero exceptions.
